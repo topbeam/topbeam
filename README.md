@@ -46,8 +46,9 @@ node /tam/yol/ocean-cli/dist/cli.js sync
 Paket npm'e `ocean-code` adıyla yayınlandığında şu komutlar çalışacak:
 
 ```bash
-npx ocean-code init      # yayın öncesi çalışmaz
-npm i -g ocean-code      # `ocean` komutunu global kurar
+npx ocean-code init            # yayın öncesi çalışmaz
+npx -p ocean-code ocean init   # aynısının kesin biçimi (paket ≠ komut adı)
+npm i -g ocean-code            # `ocean` komutunu global kurar
 ```
 
 Gereksinim: Node >= 20. Çalışma zamanı bağımlılığı yok (tek dosya bundle).
