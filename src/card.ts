@@ -8,7 +8,8 @@
  *
  * ÖNCELİK SIRASI (RULE_ORDER, ilk eşleşen kazanır):
  *  1. kirik-test   — test çıktısında başarısız/hata kaydı. Kırık test dururken
- *                    üstüne konan her iş şüphelidir → her şeyin önünde.
+ *                    üstüne konan her iş şüphelidir → her şeyin önünde. AMA
+ *                    kayıt SONRADAN yeşillendiyse manşete çıkmaz (aşağı bak).
  *  2. kritik-dosya — doğrulanmamış iş ödeme/kimlik/şema/yapılandırma dosyasına
  *                    dokunmuş: sessiz hatanın en pahalı olduğu yer.
  *  3. kayip-riski  — çok dosyalı küme, git kaydında izi yok: en çok emek, en az kanıt.
@@ -36,7 +37,13 @@
  * - Çalışmayacak komut ÖNERİLMEZ: git deposu olmayan dizinde 'git status'
  *   göstermek sahte affordance'tır (kullanıcıyı hata mesajına yollar) →
  *   o dalda hareket insan onayına döner (CardOptions.isGitRepo === false).
+ * - KART KENDİ LOG'UYLA ÇELİŞMEZ: aynı test komutu daha SONRA 0 başarısız
+ *   sonuç verdiyse, eski kırık koşum manşete çıkarılmaz. Kayıt silinmez
+ *   (log'da durur) — yalnız "sıradaki hareket" olmaktan düşer.
+ * - Gerekçe cümlesinde bir test sayısı geçiyorsa HANGİ KOMUTA ait olduğu da
+ *   yazar (yanlış atıf şüphesinin panzehiri); komut kayıttan gelir, uydurulmaz.
  */
+import { commandSegments, isTestLikeCommand } from './collect/claude.ts';
 import type { Card, CardRule, Claim, ClaimSignals, CardEvidence, NextAction } from './types.ts';
 
 // ── dış tipler ───────────────────────────────────────────────────────────────
@@ -106,6 +113,12 @@ export const HEURISTIC = {
    * (çalıştırılınca başka şey yapar). Sınırı aşarsa komut hiç verilmez.
    */
   komutMax: 120,
+  /**
+   * Gerekçe cümlesine ATIF olarak konabilecek komutun üst sınırı. Cümlenin
+   * içine giren komut kısa olmalı — uzun kabuk zinciri gerekçeyi okunmaz yapar,
+   * o durumda atıf hiç verilmez (komut zaten claim metninde ve kanıt satırında).
+   */
+  komutEtiketMax: 48,
 } as const;
 
 /** Kural öncelik sırası — testler bu sırayı kilitler. */
@@ -278,11 +291,15 @@ function evidenceLines(claim: Claim): CardEvidence {
 /**
  * Karta konulabilir komut mu? Boş, çok satırlı ya da sınırı aşan kabuk
  * zincirleri elenir — kırpılmış/uygunsuz komut butonu sahte affordance olur.
+ *
+ * '…' TAŞIYAN KOMUT DA ELENİR: bu işaret metnin kırpıldığını ya da proje dışı
+ * bir yolun maskelendiğini ('~/…') söyler. Kopyalanınca çalışmayacak bir komutu
+ * butona koymak, kullanıcıyı hata mesajına yollamaktır.
  */
 function kopyalanabilirKomut(cmd: string | undefined): string | undefined {
   if (cmd === undefined) return undefined;
   const c = cmd.trim();
-  if (c === '' || c.length > HEURISTIC.komutMax || c.includes('\n')) return undefined;
+  if (c === '' || c.length > HEURISTIC.komutMax || c.includes('\n') || c.includes('…')) return undefined;
   return c;
 }
 
@@ -385,20 +402,222 @@ function kirikTestSinyali(claim: Claim): { failed?: number; exit?: number } | nu
   return null;
 }
 
+// ── kırık testin ömrü: sonradan yeşillendi mi? ───────────────────────────────
+
+/**
+ * Claim'in kayıtlı KOMUT metni (test-output kanıtı öncelikli; yoksa ilk ref).
+ * truth.ts test claim'lerine komutu ref olarak yazar — burada uydurulmaz.
+ */
+function komutRef(claim: Claim): string | undefined {
+  return (
+    claim.evidence.find((e) => e.kind === 'test-output' && e.ref !== undefined)?.ref ??
+    claim.evidence.find((e) => e.ref !== undefined)?.ref
+  );
+}
+
+/**
+ * Tek argümanı karşılaştırma biçimine indirger: tırnak düşer, yol içeren
+ * argüman SON İKİ parçasına iner. Böylece aynı koşumun mutlak/göreli/başka
+ * kökten yazımları eşleşir ('/Users/x/proj/src/a.test.ts' ≡ 'src/a.test.ts')
+ * ama farklı dosyalar ayrı kalır ('test/a.test.ts' ≢ 'src/a.test.ts') —
+ * yalnız son parçaya inseydi aynı adlı iki dosya çakışırdı.
+ * 'key=değer' biçiminde yalnız değer tarafı sadeleşir (bayrak adı korunur).
+ */
+const YOL_KUYRUK = 2;
+
+function argSadelestir(tok: string): string {
+  const eq = tok.indexOf('=');
+  if (eq > 0) return `${tok.slice(0, eq)}=${argSadelestir(tok.slice(eq + 1))}`;
+  const t = tok.replace(/^["']+/, '').replace(/["']+$/, '');
+  if (!t.includes('/')) return t;
+  const parts = t.split('/').filter((p) => p !== '' && p !== '.' && p !== '..' && p !== '~');
+  if (parts.length === 0) return t;
+  return parts.slice(-YOL_KUYRUK).join('/');
+}
+
+/**
+ * Komut metnini KARŞILAŞTIRMA anahtarına indirger — yalnız "aynı koşum mu?"
+ * sorusu için; gösterimde komut AYNEN kalır (dürüstlük: kullanıcıya değiştirilmiş
+ * komut gösterilmez).
+ * - boşluk farkları tekilleşir, küçük harfe iner
+ * - baştaki 'cd <yol> &&' zinciri düşer (aynı komut, başka dizinden koşulmuş)
+ * - yol argümanları son parçalarına iner (proje kökü farkı eşleşmeyi bozmaz)
+ * - 'npm run test' ≡ 'npm test' ≡ 'npm t' (aynı kapı, üç yazım)
+ * Deterministik: aynı metin → aynı anahtar, ağ/LLM yok.
+ */
+export function normalizeCommand(cmd: string): string {
+  let c = cmd.trim().replace(/\s+/g, ' ');
+  let onceki = '';
+  while (c !== onceki) {
+    onceki = c;
+    c = c.replace(/^(?:cd|pushd)\s+(?:"[^"]*"|'[^']*'|\S+)\s*(?:&&|;)\s*/i, '');
+  }
+  c = c
+    .split(' ')
+    .map(argSadelestir)
+    .filter((t) => t !== '')
+    .join(' ')
+    .toLowerCase();
+  c = c.replace(/^(npm|pnpm|yarn|bun) run /, '$1 ');
+  c = c.replace(/^npm t$/, 'npm test');
+  return c;
+}
+
+/**
+ * Bir koşumun kimliği: NEREDE (varsa açık `cd` hedefi) + NE (zincirdeki gerçek
+ * test parçaları). Çıktı filtreleri (| grep, | head, 2>&1) kimliğe girmez —
+ * aynı testi başka bir grep'le süzmek başka bir koşum yapmaz.
+ */
+interface Kosum {
+  /** Açık `cd` hedefi (son iki parça). Yoksa null = dizin bilinmiyor. */
+  scope: string | null;
+  /** Test çekirdeği — test parçası yoksa komutun tamamının normali. */
+  core: string;
+}
+
+/** Zincirdeki SON `cd/pushd` hedefi — komutun gerçekten koştuğu dizin. */
+function cdHedefi(cmd: string): string | null {
+  const re = /(?:^|&&|\|\||;|\|)\s*(?:cd|pushd)\s+(?:"([^"]*)"|'([^']*)'|(\S+))/g;
+  let son: string | null = null;
+  let m: RegExpExecArray | null = re.exec(cmd);
+  while (m !== null) {
+    const t = m[1] ?? m[2] ?? m[3];
+    if (t !== undefined && t !== '' && t !== '-') son = argSadelestir(t).toLowerCase();
+    m = re.exec(cmd);
+  }
+  return son;
+}
+
+/** Yönlendirmeleri (2>&1, >/dev/null, < girdi) düşür — kimliğin parçası değiller. */
+function yonlendirmeSil(seg: string): string {
+  return seg.replace(/\d?>>?\s*&?\d?\S*/g, ' ').replace(/<\s*\S+/g, ' ');
+}
+
+/**
+ * Komuttan koşum kimliği çıkar.
+ *
+ * commandSegments/isTestLikeCommand collect katmanından gelir — "test komutu
+ * nedir" sorusunun TEK gerçek kaynağı orası; burada ikinci bir liste tutmak
+ * iki tanımın ayrışmasına yol açardı.
+ */
+export function parseKosum(cmd: string): Kosum | null {
+  const c = cmd.trim().replace(/\s+/g, ' ');
+  if (c === '') return null;
+  const testParcalari = commandSegments(c)
+    .filter((seg) => isTestLikeCommand(seg))
+    .map((seg) => normalizeCommand(yonlendirmeSil(seg)))
+    .filter((seg) => seg !== '');
+  const core = testParcalari.length > 0 ? testParcalari.join(' && ') : normalizeCommand(c);
+  if (core === '') return null;
+  return { scope: cdHedefi(c), core };
+}
+
+/**
+ * İki komut AYNI koşum mu? Çekirdek aynı olmalı; dizin ise yalnız İKİ tarafta
+ * da açıkça yazılmışsa karşılaştırılır (biri yazmamışsa dizin bilinmiyordur —
+ * uydurulmaz). Farklı alt-projelerde açıkça koşulan aynı komut eşleşmez.
+ */
+export function sameTestRun(a: string, b: string): boolean {
+  const ka = parseKosum(a);
+  const kb = parseKosum(b);
+  if (ka === null || kb === null) return false;
+  if (ka.core !== kb.core) return false;
+  return ka.scope === null || kb.scope === null || ka.scope === kb.scope;
+}
+
+/** Claim'in koşum kimliği — komut kaydı yoksa yok (eşleştirme yapılamaz). */
+function kosumAnahtari(claim: Claim): Kosum | null {
+  const ref = komutRef(claim);
+  return ref === undefined ? null : parseKosum(ref);
+}
+
+/** a zamanı b'den KESİN sonra mı? Okunamazsa metin sırasına düşer (deterministik). */
+function sonraMi(a: string, b: string): boolean {
+  const ta = Date.parse(a);
+  const tb = Date.parse(b);
+  if (!Number.isNaN(ta) && !Number.isNaN(tb)) return ta > tb;
+  return a > b;
+}
+
+/** Claim, "aynı komut sonradan temiz geçti" kanıtı mı? (0 başarısız + geçen test var, hata çıkışı yok) */
+function yesilKosum(claim: Claim): boolean {
+  const s = sig(claim);
+  return (
+    s.failedTests === 0 &&
+    s.passedTests !== undefined &&
+    s.passedTests > 0 &&
+    !(s.nonZeroExit !== undefined && s.nonZeroExit > 0)
+  );
+}
+
+/**
+ * Kırık test kaydı SONRADAN yeşillendi mi?
+ *
+ * Dogfood dersi (üye jürisi): kart, kendi log'unda yeşillendiği görünen bir
+ * testi manşete çıkarıyordu — kart kendi kanıtıyla çelişiyordu. Kural: aynı
+ * koşumun DAHA SONRAKİ bir kaydı 0 başarısız + >0 geçen sonuç verdiyse bu
+ * kırık kayıt geçmiştir, manşetten düşer.
+ *
+ * Muhafazakâr taraf: komut kaydı yoksa ya da eşleşmiyorsa DÜŞMEZ (kırık
+ * kalır) — yanlış "temizlendi" demektense fazladan uyarmak yeğdir.
+ *
+ * BİLİNEN SINIR (dürüstçe): tek Ocean kökü altında birkaç alt-proje varsa ve
+ * iki oturum da dizini AÇIKÇA yazmadan aynı komutu ('npm test') koştuysa,
+ * kayıtlar aynı koşum sayılır. Kayıt silinmez — log'da ikisi de durur.
+ */
+function sonradanYesillendi(claim: Claim, all: readonly Claim[]): boolean {
+  const key = kosumAnahtari(claim);
+  if (key === null) return false;
+  for (const c of all) {
+    if (c.id === claim.id) continue;
+    if (!sonraMi(c.createdAt, claim.createdAt)) continue;
+    if (!yesilKosum(c)) continue;
+    const other = kosumAnahtari(c);
+    if (other === null || other.core !== key.core) continue;
+    if (other.scope !== null && key.scope !== null && other.scope !== key.scope) continue;
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Gerekçe cümlesine konabilecek komut ATFI: kısa, tek satır ve MUTLAK YOL
+ * içermeyen komut. Sayının hangi koşuma ait olduğu böyle görünür; uzun ya da
+ * yol sızdıran komutlarda atıf verilmez (kart manşeti dizin ağacı göstermez).
+ */
+function komutAtfi(claim: Claim): string | undefined {
+  const raw = komutRef(claim);
+  if (raw === undefined) return undefined;
+  const c = raw.trim().replace(/\s+/g, ' ');
+  if (c === '' || c.length > HEURISTIC.komutEtiketMax) return undefined;
+  if (/(^|\s)[~/]/.test(c)) return undefined; // mutlak yol / ev dizini → sızıntı
+  // Cümle içinde '%' yüzde-ilerleme, '!' alarm gibi okunur → o komut atıf olarak
+  // verilmez (komut zaten claim metninde ve kanıt satırında aynen duruyor).
+  if (/[%!]/.test(c)) return undefined;
+  return c;
+}
+
 /** 1. KIRIK TEST — seviyeden bağımsız, insan onaylı olmayan her claim aday. */
 function kuralKirikTest(ctx: Ctx): Secim | null {
   const adaylar = newestFirst(
-    ctx.all.filter((c) => c.level !== 'insan-onayi' && kirikTestSinyali(c) !== null),
+    ctx.all.filter(
+      (c) =>
+        c.level !== 'insan-onayi' &&
+        kirikTestSinyali(c) !== null &&
+        !sonradanYesillendi(c, ctx.all),
+    ),
   );
   const claim = adaylar[0];
   if (claim === undefined) return null;
   const s = kirikTestSinyali(claim);
   const failed = s?.failed;
+  const atif = komutAtfi(claim);
+  const atifOn = atif !== undefined ? `${atif}: ` : '';
 
   const why =
     failed !== undefined
-      ? `Kayıtlarda kırık test var (${failed} başarısız) — kırık test dururken üstüne konan iş de şüpheli, o yüzden bu her şeyin önünde.`
-      : `Test komutu sıfır-dışı çıkışla bitti (exit ${s?.exit}) — kırık koşum sinyali, doğrulanmamış işlerin önüne geçer.`;
+      ? `Kayıtlarda kırık test var (${atifOn}${failed} başarısız) — kırık test dururken üstüne konan iş de şüpheli, o yüzden bu her şeyin önünde.`
+      : `Test komutu sıfır-dışı çıkışla bitti (${atifOn}exit ${s?.exit}) — kırık koşum sinyali, doğrulanmamış işlerin önüne geçer.`;
   const unknown =
     failed !== undefined
       ? 'Testin şu an hâlâ kırık olup olmadığı bilinmiyor — bu sonuç son kayıtlı koşumdan.'

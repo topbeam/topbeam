@@ -11,6 +11,7 @@ import {
   buildCard,
   claimKritik,
   kritikTur,
+  normalizeCommand,
   pathTokens,
   scriptsFromPackageJson,
   verifyCommand,
@@ -306,6 +307,147 @@ test('kirik-test: geçen test kırık sayılmaz + varsayılan exit 0 sinyali yok
   const card = buildCard([yesil], { now: NOW });
   assert.notEqual(card.rule, 'kirik-test');
   assert.equal(card.rule, 'insan-onayi-bekliyor'); // kanıtlı, onay bekliyor
+});
+
+// ── kırık testin ömrü: sonradan yeşillendi mi? (kart kendi log'uyla çelişmez) ──
+
+/** Aynı komutun temiz geçen SONRAKİ koşumu. */
+function yesilClaim(id: string, over: Partial<Claim> = {}): Claim {
+  return claim(id, {
+    kind: 'test',
+    level: 'test-kaniti',
+    text: '19 test geçti, 0 başarısız (npm test).',
+    evidence: [{ kind: 'test-output', summary: 'ℹ pass 19', ref: 'npm test' }],
+    signals: { failedTests: 0, passedTests: 19 },
+    createdAt: '2026-07-28T11:00:00.000Z',
+    ...over,
+  });
+}
+
+test('(a) kırık test SONRADAN yeşillendi → manşetten düşer, sıradaki kurala geçilir', () => {
+  const kirik = testClaim('test-s1-0', { createdAt: '2026-07-28T08:00:00.000Z' });
+  const yesil = yesilClaim('test-s1-1'); // aynı komut (npm test), 3 saat sonra
+  const acik = claim('dosya-transcript-s2', { createdAt: '2026-07-28T09:00:00.000Z', sessionId: 's2' });
+
+  const card = buildCard([kirik, yesil, acik], { now: NOW });
+
+  assert.notEqual(card.rule, 'kirik-test'); // kart kendi log'uyla çelişmez
+  assert.equal(card.rule, 'en-yeni');
+  assert.equal(card.id, 'dosya-transcript-s2');
+  // Kayıt SİLİNMEZ — yalnız manşetten düşer (claim listede duruyor).
+  assert.ok([kirik, yesil, acik].some((c) => c.id === 'test-s1-0'));
+});
+
+test('(b) sonradan BAŞKA komut yeşillendi → kırık test manşette KALIR', () => {
+  const kirik = testClaim('test-s1-0', { createdAt: '2026-07-28T08:00:00.000Z' });
+  const baskaYesil = yesilClaim('test-s1-1', {
+    text: '4 test geçti, 0 başarısız (npx vitest run).',
+    evidence: [{ kind: 'test-output', summary: 'ℹ pass 4', ref: 'npx vitest run' }],
+    signals: { failedTests: 0, passedTests: 4 },
+  });
+
+  const card = buildCard([kirik, baskaYesil], { now: NOW });
+  assert.equal(card.rule, 'kirik-test');
+  assert.equal(card.id, 'test-s1-0');
+});
+
+test('(c) kırık testten SONRA hiçbir şey yok → manşette kalır', () => {
+  const kirik = testClaim('test-s1-0', { createdAt: '2026-07-28T08:00:00.000Z' });
+  assert.equal(buildCard([kirik], { now: NOW }).rule, 'kirik-test');
+
+  // Yeşil koşum kırıktan ÖNCE ise de düşürmez (sıra önemli).
+  const oncekiYesil = yesilClaim('test-s1-1', { createdAt: '2026-07-28T07:00:00.000Z' });
+  assert.equal(buildCard([kirik, oncekiYesil], { now: NOW }).rule, 'kirik-test');
+});
+
+test('yeşillenme eşleşmesi boşluk/yol/yazım farklarına dayanıklı (normalizeCommand)', () => {
+  // Aynı koşumun farklı yazımları TEK anahtara iner.
+  assert.equal(normalizeCommand('  npm   run   test '), 'npm test');
+  assert.equal(normalizeCommand('npm t'), 'npm test');
+  assert.equal(
+    normalizeCommand('cd "/Users/ekin/Desktop/Ekin Nasip/ocean-cli" && node --test src/card.test.ts'),
+    normalizeCommand('node --test /Users/ekin/proje/src/card.test.ts'),
+  );
+  assert.equal(normalizeCommand('pnpm run test'), 'pnpm test');
+  // Farklı koşum farklı anahtar kalır (yanlış eşleşme yok).
+  assert.notEqual(normalizeCommand('npm test'), normalizeCommand('npm run build'));
+  assert.notEqual(normalizeCommand('node --test src/a.test.ts'), normalizeCommand('node --test src/b.test.ts'));
+  // Aynı ADLI ama farklı dizindeki dosya çakışmaz (son iki parça korunur).
+  assert.notEqual(normalizeCommand('node --test src/a.test.ts'), normalizeCommand('node --test test/a.test.ts'));
+
+  // Uçtan uca: proje kökü farklı yazılmış aynı komut yeşillenmeyi kapatır.
+  const kirik = testClaim('test-s1-0', {
+    createdAt: '2026-07-28T08:00:00.000Z',
+    evidence: [{ kind: 'test-output', summary: 'ℹ fail 2', ref: 'node --test src/card.test.ts' }],
+  });
+  const yesil = yesilClaim('test-s1-1', {
+    evidence: [
+      { kind: 'test-output', summary: 'ℹ pass 19', ref: 'cd /Users/ekin/proje && node --test "src/card.test.ts"' },
+    ],
+  });
+  assert.notEqual(buildCard([kirik, yesil], { now: NOW }).rule, 'kirik-test');
+});
+
+test('yeşillenme kanıtı SIKI: hata çıkışlı ya da sayısız koşum kırığı temizlemez', () => {
+  const kirik = testClaim('test-s1-0', { createdAt: '2026-07-28T08:00:00.000Z' });
+
+  // 0 başarısız ama komut exit 1 ile bitmiş → temiz koşum sayılmaz.
+  const supheli = yesilClaim('test-s1-1', { signals: { failedTests: 0, passedTests: 19, nonZeroExit: 1 } });
+  assert.equal(buildCard([kirik, supheli], { now: NOW }).rule, 'kirik-test');
+
+  // Sayı okunamamış koşum (passedTests yok) → temiz koşum sayılmaz.
+  const sayisiz = yesilClaim('test-s1-2', { signals: { failedTests: 0 } });
+  assert.equal(buildCard([kirik, sayisiz], { now: NOW }).rule, 'kirik-test');
+
+  // Komut kaydı olmayan kırık claim eşleştirilemez → muhafazakâr: kırık kalır.
+  const komutsuz = testClaim('test-s1-3', {
+    createdAt: '2026-07-28T08:00:00.000Z',
+    evidence: [{ kind: 'test-output', summary: 'ℹ fail 2' }],
+  });
+  assert.equal(buildCard([komutsuz, yesilClaim('test-s1-4')], { now: NOW }).rule, 'kirik-test');
+});
+
+test('yeşillenme kontrolü DETERMİNİSTİK: girdi sırası kartı değiştirmez', () => {
+  const claims = [
+    testClaim('test-s1-0', { createdAt: '2026-07-28T08:00:00.000Z' }),
+    yesilClaim('test-s1-1'),
+    claim('dosya-transcript-s2', { createdAt: '2026-07-28T09:00:00.000Z', sessionId: 's2' }),
+  ];
+  const a = buildCard(claims, { now: NOW });
+  const b = buildCard([...claims].reverse(), { now: NOW });
+  assert.deepEqual(a, b);
+  assert.deepEqual(buildCard(claims, { now: NOW }), a); // aynı girdi → aynı kart
+});
+
+test('birden çok kırık kayıt: yalnız yeşillenen düşer, öteki manşete geçer', () => {
+  const kirikA = testClaim('test-s1-0', {
+    createdAt: '2026-07-28T08:00:00.000Z',
+    evidence: [{ kind: 'test-output', summary: 'ℹ fail 2', ref: 'npx vitest run' }],
+    signals: { failedTests: 2, passedTests: 5 },
+  });
+  const kirikB = testClaim('test-s1-1', { createdAt: '2026-07-28T09:00:00.000Z' }); // npm test
+  const yesilB = yesilClaim('test-s1-2'); // npm test yeşillendi
+
+  const card = buildCard([kirikA, kirikB, yesilB], { now: NOW });
+  assert.equal(card.rule, 'kirik-test');
+  assert.equal(card.id, 'test-s1-0'); // yeşillenmeyen kırık manşete geçti
+});
+
+test('test sayısı ATIFLI: gerekçe hangi komutun sonucu olduğunu söyler', () => {
+  const kirik = testClaim('test-s1-0');
+  const why = buildCard([kirik], { now: NOW }).why;
+  assert.ok(why.includes('npm test'), 'gerekçe komutu adıyla anmalı');
+  assert.ok(why.includes('2 başarısız'));
+
+  // Mutlak yol taşıyan komut atıf olarak VERİLMEZ (kapsam sızıntısı yok).
+  const yolsuz = testClaim('test-s1-1', {
+    evidence: [
+      { kind: 'test-output', summary: 'ℹ fail 2', ref: 'node --test /Users/ekin/Desktop/proje/src/a.test.ts' },
+    ],
+  });
+  const why2 = buildCard([yolsuz], { now: NOW }).why;
+  assert.equal(why2.includes('/Users/'), false);
+  assert.ok(why2.includes('2 başarısız'));
 });
 
 test('kirik-test: insan onaylı kırık test kartı ele geçirmez (karar verilmiş iş)', () => {
