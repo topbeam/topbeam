@@ -450,7 +450,7 @@ export function normalizeCommand(cmd: string): string {
   let onceki = '';
   while (c !== onceki) {
     onceki = c;
-    c = c.replace(/^(?:cd|pushd)\s+(?:"[^"]*"|'[^']*'|\S+)\s*(?:&&|;)\s*/i, '');
+    c = c.replace(/^(?:cd|pushd)\s+(?:"[^"]*"|'[^']*'|[^\s"'])+\s*(?:&&|;)\s*/i, '');
   }
   c = c
     .split(' ')
@@ -475,14 +475,19 @@ interface Kosum {
   core: string;
 }
 
-/** Zincirdeki SON `cd/pushd` hedefi — komutun gerçekten koştuğu dizin. */
+/**
+ * Zincirdeki SON `cd/pushd` hedefi — komutun gerçekten koştuğu dizin.
+ * Hedef parça parça tırnaklı olabilir (`cd ~/Desktop/"Ekin Nasip"/proje`);
+ * tırnaklar hedefin İÇİNDEN de düşer, yoksa aynı dizinin iki yazımı iki ayrı
+ * kapsam sanılırdı.
+ */
 function cdHedefi(cmd: string): string | null {
-  const re = /(?:^|&&|\|\||;|\|)\s*(?:cd|pushd)\s+(?:"([^"]*)"|'([^']*)'|(\S+))/g;
+  const re = /(?:^|&&|\|\||;|\||\n)\s*(?:cd|pushd)\s+((?:"[^"]*"|'[^']*'|[^\s"'])+)/g;
   let son: string | null = null;
-  let m: RegExpExecArray | null = re.exec(cmd);
+  let m = re.exec(cmd);
   while (m !== null) {
-    const t = m[1] ?? m[2] ?? m[3];
-    if (t !== undefined && t !== '' && t !== '-') son = argSadelestir(t).toLowerCase();
+    const t = (m[1] ?? '').replace(/["']/g, '');
+    if (t !== '' && t !== '-') son = argSadelestir(t).toLowerCase();
     m = re.exec(cmd);
   }
   return son;
@@ -499,17 +504,21 @@ function yonlendirmeSil(seg: string): string {
  * commandSegments/isTestLikeCommand collect katmanından gelir — "test komutu
  * nedir" sorusunun TEK gerçek kaynağı orası; burada ikinci bir liste tutmak
  * iki tanımın ayrışmasına yol açardı.
+ *
+ * DİKKAT: bölme HAM metin üzerinde yapılır — çok satırlı kabuk bloklarında
+ * SATIR SONU bir komut ayracıdır; önce boşlukları tekilleştirseydik ayraç
+ * silinir, koca blok tek "komut" sanılırdı (dogfood'da görülen hata).
  */
 export function parseKosum(cmd: string): Kosum | null {
-  const c = cmd.trim().replace(/\s+/g, ' ');
-  if (c === '') return null;
-  const testParcalari = commandSegments(c)
+  const ham = cmd.trim();
+  if (ham === '') return null;
+  const testParcalari = commandSegments(ham)
     .filter((seg) => isTestLikeCommand(seg))
     .map((seg) => normalizeCommand(yonlendirmeSil(seg)))
     .filter((seg) => seg !== '');
-  const core = testParcalari.length > 0 ? testParcalari.join(' && ') : normalizeCommand(c);
+  const core = testParcalari.length > 0 ? testParcalari.join(' && ') : normalizeCommand(ham);
   if (core === '') return null;
-  return { scope: cdHedefi(c), core };
+  return { scope: cdHedefi(ham), core };
 }
 
 /**

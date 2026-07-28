@@ -12,7 +12,9 @@ import {
   claimKritik,
   kritikTur,
   normalizeCommand,
+  parseKosum,
   pathTokens,
+  sameTestRun,
   scriptsFromPackageJson,
   verifyCommand,
 } from './card.ts';
@@ -386,6 +388,30 @@ test('yeşillenme eşleşmesi boşluk/yol/yazım farklarına dayanıklı (normal
     ],
   });
   assert.notEqual(buildCard([kirik, yesil], { now: NOW }).rule, 'kirik-test');
+});
+
+test('koşum kimliği: çıktı filtresi koşumu değiştirmez, dizin ve satır sonu ayracı korunur', () => {
+  // Aynı test, başka grep/head süzgeci → AYNI koşum (kimliğe filtre girmez).
+  assert.ok(
+    sameTestRun(
+      'cd "/Users/ekin/Desktop/Ekin Nasip/proje" && npm test 2>&1 | grep -A20 "✖" | head -40',
+      'perl -0pi -e "s/a/b/" x.test.ts && npm test 2>&1 | grep -E "tests |pass |fail"',
+    ),
+  );
+  // Aynı dizin, iki ayrı yazım (tırnak parça parça) → yine aynı koşum.
+  assert.ok(
+    sameTestRun(
+      'cd ~/Desktop/"Ekin Nasip"/proje && npm test',
+      'cd "/Users/ekin/Desktop/Ekin Nasip/proje" && npm test 2>&1 | tail -3',
+    ),
+  );
+  // AÇIKÇA farklı alt-projede koşulan aynı komut → ayrı koşum (yanlış temizleme yok).
+  assert.equal(sameTestRun('cd kok/buildpassport && npm test', 'cd kok/ocean-cli && npm test'), false);
+  // Çok satırlı blokta satır sonu komut ayracıdır (tek dev komut sanılmaz).
+  assert.equal(parseKosum('cd kok/proje\nnode --test scripts/test.mjs 2>&1 | tail -5')?.core, 'node --test scripts/test.mjs');
+  assert.equal(parseKosum('cd kok/proje\nnode --test scripts/test.mjs')?.scope, 'kok/proje');
+  // Test parçası yoksa kimlik komutun tamamıdır (geri sarma).
+  assert.equal(parseKosum('node scripts/build.mjs')?.core, 'node scripts/build.mjs');
 });
 
 test('yeşillenme kanıtı SIKI: hata çıkışlı ya da sayısız koşum kırığı temizlemez', () => {
