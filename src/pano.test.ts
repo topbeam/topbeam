@@ -5,7 +5,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { newOceanState, type Claim, type OceanState } from './types.ts';
+import { newOceanState, type Claim, type OceanState, type ScopeNotes } from './types.ts';
 import { buildCard } from './card.ts';
 import { renderPano, esc } from './pano.ts';
 
@@ -144,7 +144,43 @@ test('pasaport: doğrulanmamış birimde verify komutu + kayıt sayısı görün
   assert.ok(html.includes('1/3 kayıt insan onaylı'));
   // onaylanmış maddede tekrar "verify" çağrısı GÖSTERİLMEZ (yapılacak iş yok):
   // pasaportta iki madde var, yalnız biri komut taşır.
-  assert.equal(html.match(/class="pid mono"/g)?.length, 1);
+  assert.equal(html.match(/class="cmdrow pcmd"/g)?.length, 1);
+});
+
+test('pasaport: her açık madde KOPYALANABİLİR — çıplak id elle seçilmez', () => {
+  const st = stateFixture();
+  st.passport = ['birim-04e1b826', 'birim-9c31aa07', 'birim-77d0be14'].map((id) => ({
+    id,
+    title: `2026-07-28 · 3 dosya · 1 test koşumu (${id})`,
+    status: 'not_verified' as const,
+    claimIds: [`${id}-a`, `${id}-b`],
+    level: 'dogrulanmadi' as const,
+  }));
+  const html = renderPano(st);
+
+  // Kartla AYNI desen: her satırda kopyalanabilir komut + Kopyala butonu.
+  assert.equal(html.match(/class="cmdrow pcmd"/g)?.length, 3);
+  for (const id of ['birim-04e1b826', 'birim-9c31aa07', 'birim-77d0be14']) {
+    assert.ok(html.includes(`data-cmd="ocean verify ${id}"`), `${id}: kopyalanabilir komut yok`);
+  }
+  // Erişilebilirlik: her satırın butonu var ve adı AYIRT EDİCİ
+  // (11 satırda 11 aynı "Kopyala" ekran okuyucuda kullanılamaz).
+  const etiketler = html.match(/aria-label="Doğrulama komutunu kopyala — [^"]+"/g) ?? [];
+  assert.equal(etiketler.length, 3);
+  assert.equal(new Set(etiketler).size, 3, 'aria-label satır satır ayırt edici olmalı');
+  assert.equal((html.match(/onclick="oceanKopyala\(this\)"/g) ?? []).length >= 3, true);
+});
+
+test('pasaport: onaylı maddede komut yok (yapılacak iş yok) + reduced-motion saygılı', () => {
+  const st = stateFixture();
+  for (const p of st.passport) {
+    p.status = 'completed';
+    p.level = 'insan-onayi';
+  }
+  const html = renderPano(st);
+  assert.equal(html.includes('class="cmdrow pcmd"'), false);
+  assert.ok(html.includes('@media(prefers-reduced-motion:reduce)'));
+  assert.ok(html.includes(':focus-visible'), 'klavye odağı görünür olmalı');
 });
 
 test('escape: kötü niyetli claim metni HTML/JS enjekte edemez', () => {
@@ -194,4 +230,92 @@ test('sakin dil: motivasyon/alarm sözleri yok', () => {
 
 test('esc: beş temel karakteri çevirir', () => {
   assert.equal(esc(`<a href="x" & 'y'>`), '&lt;a href=&quot;x&quot; &amp; &#39;y&#39;&gt;');
+});
+
+// ── kapsam bloğu + dürüst sayılar ────────────────────────────────────────────
+
+function scopeFixture(over: Partial<ScopeNotes> = {}): ScopeNotes {
+  return {
+    disKapsamDuzenleme: 1139,
+    atlananOturum: 0,
+    kontrolKomutu: 37,
+    kisaltilanYol: 4,
+    gitYok: false,
+    log: {
+      hamToplam: 2507,
+      hamKanit: 70,
+      hamBeyan: 2437,
+      ilgisizBeyan: 1900,
+      tekillestirilen: 53,
+      kirpilan: 100,
+      tutulan: 454,
+    },
+    notlar: ['Log 500 satırla sınırlandı (bu adıma 554 satır girmişti).'],
+    ...over,
+  };
+}
+
+test('capNote "toplam N" DEMEZ: tutulan ve ham ayrı ayrı, doğru adla yazılır', () => {
+  const st = stateFixture();
+  st.scope = scopeFixture();
+  for (let i = 0; i < 130; i++) {
+    st.log.push({ ts: `2026-07-28T10:00:${String(i % 60).padStart(2, '0')}Z`, text: `Beyan: iş ${i}`, source: 'claude-beyan' });
+  }
+  const html = renderPano(st);
+  // eski yalan biçim ortadan kalktı
+  assert.equal(/\(toplam \d+\)/.test(html), false, '"(toplam N)" ifadesi kalmamalı');
+  assert.ok(html.includes('panoda tutulan 131 satırdan'));
+  assert.ok(html.includes('Ham kayıtta 2437 beyan satırı vardı'));
+});
+
+test('kapsam bloğu KARTIN HEMEN ALTINDA ve log\'dan ÖNCE', () => {
+  const st = stateFixture();
+  st.scope = scopeFixture();
+  const html = renderPano(st);
+  const kart = html.indexOf('Sıradaki tek hareket');
+  const kapsam = html.indexOf('Bu panonun kapsamı');
+  const log = html.indexOf('Log history');
+  assert.ok(kart > -1 && kapsam > -1 && log > -1);
+  assert.ok(kart < kapsam, 'kapsam bloğu kartın altında olmalı');
+  assert.ok(kapsam < log, 'kapsam bloğu log\'dan önce olmalı');
+});
+
+test('kapsam bloğu GERÇEK sayıları ve zinciri gösterir (gizleme yok)', () => {
+  const st = stateFixture();
+  st.scope = scopeFixture();
+  const html = renderPano(st);
+  assert.ok(html.includes('1139 düzenleme'), 'elenen proje dışı düzenleme sayısı');
+  assert.ok(html.includes('1900 beyan satırı'), 'ilişkilendirilemeyen beyan sayısı');
+  assert.ok(html.includes('37 kontrol komutu'), 'claim üretmeyen kontrol komutu sayısı');
+  assert.ok(html.includes('4 yerde'), 'kısaltılan yol sayısı');
+  assert.ok(
+    html.includes('Ham 2507 satır (70 kanıt · 2437 beyan) → 1900 ilişkisiz beyan elendi → 53 tekrar tekilleşti → 100 satır sınırda kırpıldı → panoda 454 satır.'),
+  );
+  assert.ok(html.includes('Motor notları (1)'));
+});
+
+test('kapsam bloğu: git yoksa bunu açıkça söyler', () => {
+  const st = stateFixture();
+  st.scope = scopeFixture({ gitYok: true });
+  assert.ok(renderPano(st).includes('git deposu değil'));
+});
+
+test('kapsam kaydı YOKSA sayı UYDURULMAZ', () => {
+  const html = renderPano(stateFixture()); // scope undefined
+  assert.ok(html.includes('Kapsam kaydı yok'));
+  assert.equal(html.includes('Ham '), false, 'ölçülmemiş ham sayı iddia edilmemeli');
+});
+
+test('eleme yoksa dürüst "elenen kayıt yok" cümlesi', () => {
+  const st = stateFixture();
+  st.scope = scopeFixture({
+    disKapsamDuzenleme: 0,
+    kontrolKomutu: 0,
+    kisaltilanYol: 0,
+    gitYok: false,
+    log: { hamToplam: 3, hamKanit: 2, hamBeyan: 1, ilgisizBeyan: 0, tekillestirilen: 0, kirpilan: 0, tutulan: 3 },
+    notlar: [],
+  });
+  const html = renderPano(st);
+  assert.ok(html.includes('elenen kayıt yok'));
 });

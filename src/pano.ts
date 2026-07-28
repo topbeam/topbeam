@@ -24,6 +24,7 @@ import {
   type LogEntry,
   type LogSource,
   type OceanState,
+  type ScopeNotes,
 } from './types.ts';
 
 // ── küçük yardımcılar ────────────────────────────────────────────────────────
@@ -65,12 +66,28 @@ function levelPill(level: EvidenceLevel): string {
 
 // ── bölüm render'ları ────────────────────────────────────────────────────────
 
-function cmdBlock(command: string): string {
+/** Kopyalanabilir komut satırı — TEK desen (kart ve pasaport aynı bileşeni kullanır). */
+interface CmdBlockOptions {
+  /** Kapsayıcıya eklenecek ek sınıf (yerleşim farkı için; bileşen aynı kalır). */
+  cls?: string;
+  /** Ekran okuyucu etiketi — çok satırlı listede hangi komut olduğunu ayırt eder. */
+  etiket?: string;
+}
+
+function cmdBlock(command: string, opts: CmdBlockOptions = {}): string {
   const c = esc(command);
+  const cls = opts.cls === undefined ? '' : ` ${opts.cls}`;
+  const label = esc(opts.etiket ?? `Komutu kopyala: ${command}`);
   return (
-    `<div class="cmdrow"><code class="cmd" data-cmd="${c}">${c}</code>` +
-    `<button class="btn mini" type="button" data-cmd="${c}" onclick="oceanKopyala(this)">Kopyala</button></div>`
+    `<div class="cmdrow${cls}"><code class="cmd" data-cmd="${c}">${c}</code>` +
+    `<button class="btn mini" type="button" aria-label="${label}" aria-live="polite" data-cmd="${c}" onclick="oceanKopyala(this)">Kopyala</button></div>`
   );
+}
+
+/** Uzun başlığı ekran-okuyucu etiketine sığacak kadar kısaltır (deterministik). */
+function kisaBaslik(s: string, max = 60): string {
+  const t = s.trim().replace(/\s+/g, ' ');
+  return t.length > max ? `${t.slice(0, max)}…` : t;
 }
 
 function renderCard(card: Card): string {
@@ -132,7 +149,7 @@ function logItems(entries: readonly LogEntry[]): string {
  * Beyan kanıt değildir → varsayılan görünürlüğü de kanıtla eşit olamaz.
  * Silmiyoruz (dürüstlük: kayıt duruyor), katlıyoruz — isteyen açar.
  */
-function renderLog(log: readonly LogEntry[]): string {
+function renderLog(log: readonly LogEntry[], scope?: ScopeNotes): string {
   const total = log.length;
   const ters = [...log].reverse(); // en yeni üstte
   const kanit = ters.filter((e) => e.source !== 'claude-beyan');
@@ -141,8 +158,26 @@ function renderLog(log: readonly LogEntry[]): string {
   const kanitShown = kanit.slice(0, LOG_SHOWN_MAX);
   const beyanShown = beyan.slice(0, LOG_SHOWN_MAX);
 
-  const capNote = (gosterilen: number, tumu: number, ad: string): string =>
-    tumu > gosterilen ? `<p class="capnote">Son ${gosterilen} ${ad} satırı gösteriliyor (toplam ${tumu}).</p>` : '';
+  /**
+   * "toplam N" YASAK. Buradaki N, panoda TUTULAN satır sayısıdır; ham kayıt
+   * daha büyüktür (elenmiş + tekilleşmiş + kırpılmış). Eski metin "toplam 454"
+   * derken 454 zaten süzülmüş bir sayıydı — sayı uydurmak moat ihlalidir.
+   * Ham sayı yalnız ÖLÇÜLDÜYSE (scope varsa) yazılır; yoksa hiç iddia edilmez.
+   */
+  const capNote = (gosterilen: number, tutulan: number, ham: number | null, ad: string): string => {
+    const kirpildi = tutulan > gosterilen;
+    const hamFarkli = ham !== null && ham > tutulan;
+    if (!kirpildi && !hamFarkli) return '';
+    const bas = kirpildi
+      ? `Son ${gosterilen} ${ad} satırı gösteriliyor — panoda tutulan ${tutulan} satırdan.`
+      : `Panoda ${tutulan} ${ad} satırı tutuluyor.`;
+    const kuyruk = hamFarkli
+      ? ` Ham kayıtta ${ham} ${ad} satırı vardı; aradaki farkın dökümü yukarıdaki “Bu panonun kapsamı” bloğunda.`
+      : '';
+    return `<p class="capnote">${bas}${kuyruk}</p>`;
+  };
+  const hamKanit = scope !== undefined ? scope.log.hamKanit : null;
+  const hamBeyan = scope !== undefined ? scope.log.hamBeyan : null;
 
   const empty =
     total === 0 ? '<p class="empty">Henüz log kaydı yok — <span class="mono">ocean sync</span> sonrası dolar.</p>' : '';
@@ -155,17 +190,118 @@ function renderLog(log: readonly LogEntry[]): string {
       ? `<details class="beyanlar">
       <summary><span class="pill ev-none">beyan</span> Claude'un beyanları (${beyan.length}) — kanıt değil, katlı</summary>
       <ul class="timeline">${logItems(beyanShown)}</ul>
-      ${capNote(beyanShown.length, beyan.length, 'beyan')}
+      ${capNote(beyanShown.length, beyan.length, hamBeyan, 'beyan')}
     </details>`
       : '';
 
   return `<section class="panel" aria-label="Log history">
-    <div class="sechead"><span class="eyebrow">Log history</span><span class="count mono">${kanit.length} kanıt · ${beyan.length} beyan</span></div>
+    <div class="sechead"><span class="eyebrow">Log history</span><span class="count mono">panoda ${kanit.length} kanıt · ${beyan.length} beyan</span></div>
     ${empty}
     ${kanitBos}
     <ul class="timeline">${logItems(kanitShown)}</ul>
-    ${capNote(kanitShown.length, kanit.length, 'kanıt')}
+    ${capNote(kanitShown.length, kanit.length, hamKanit, 'kanıt')}
     ${beyanBlok}
+  </section>`;
+}
+
+/**
+ * "Bu panonun kapsamı — ve bilmedikleri" — kartın HEMEN ALTINDA.
+ *
+ * NEDEN: Ocean gürültüyü keser (proje dışı düzenleme, ilişkilendirilemeyen
+ * beyan, sayı üretmeyen kontrol komutu, satır sınırı). Kesmek doğru; ama İZ
+ * BIRAKMADAN kesmek gizlemektir — kullanıcı panonun her şeyi gördüğünü sanır.
+ * Bu blok farkı kapatır: neyin, kaç tane elendiği ölçülmüş sayılarla yazar.
+ * Sayı yoksa (eski state / sync koşmamış) UYDURULMAZ, "kayıt yok" denir.
+ */
+function renderScope(scope: ScopeNotes | undefined): string {
+  const bas = `<div class="sechead"><span class="eyebrow">Bu panonun kapsamı — ve bilmedikleri</span></div>`;
+  if (scope === undefined) {
+    return `<section class="panel scope" aria-label="Panonun kapsamı">
+    ${bas}
+    <p class="empty">Kapsam kaydı yok — bu pano kapsam ölçümü eklenmeden önce üretilmiş.
+    <span class="mono">ocean sync</span> koşunca neyin elendiği buraya yazılır.</p>
+  </section>`;
+  }
+
+  const c = scope.log;
+  const satir = (k: string, v: string): string =>
+    `<li><span class="sk">${esc(k)}</span><span class="sv">${esc(v)}</span></li>`;
+
+  const rows: string[] = [];
+  if (scope.disKapsamDuzenleme > 0) {
+    rows.push(
+      satir(
+        'Proje dışı düzenleme',
+        `${scope.disKapsamDuzenleme} düzenleme bu proje kökünün dışındaki dosyalardaydı — claim ve log'a alınmadı (bu pano yalnız bu projeyi anlatır).`,
+      ),
+    );
+  }
+  if (c.ilgisizBeyan > 0) {
+    rows.push(
+      satir(
+        'İlişkilendirilemeyen beyan',
+        `${c.ilgisizBeyan} beyan satırı bu projeyle ilişkilendirilemedi — log'a alınmadı (beyan zaten kanıt değildir).`,
+      ),
+    );
+  }
+  if (scope.kontrolKomutu > 0) {
+    rows.push(
+      satir(
+        'Claim üretmeyen kontrol komutu',
+        `${scope.kontrolKomutu} kontrol komutu (tsc/eslint gibi) claim üretmedi — bu komutlar geçti/kaldı sayısı üretmez, sonuç uydurulmaz.`,
+      ),
+    );
+  }
+  if (scope.atlananOturum > 0) {
+    rows.push(
+      satir(
+        'Atlanan oturum',
+        `${scope.atlananOturum} Claude Code oturumu baştan sona başka bir dizinde kaydedilmiş — claim üretilmedi.`,
+      ),
+    );
+  }
+  if (scope.kisaltilanYol > 0) {
+    rows.push(
+      satir(
+        'Kısaltılan yol',
+        `${scope.kisaltilanYol} yerde proje dışındaki mutlak yol “~/…” diye kısaltıldı — başka bir projenin yolu bu panonun manşetinde durmaz.`,
+      ),
+    );
+  }
+  if (scope.gitYok) {
+    rows.push(
+      satir(
+        'Git',
+        'Bu dizin bir git deposu değil — değişiklikler git ile karşılaştırılamadı, dosya-kanıtı yolu kapalı.',
+      ),
+    );
+  }
+
+  // Sayı zinciri HER ZAMAN yazılır: panodaki her satırın nereden geldiği.
+  const zincir =
+    `Ham ${c.hamToplam} satır (${c.hamKanit} kanıt · ${c.hamBeyan} beyan) → ` +
+    `${c.ilgisizBeyan} ilişkisiz beyan elendi → ${c.tekillestirilen} tekrar tekilleşti → ` +
+    `${c.kirpilan} satır sınırda kırpıldı → panoda ${c.tutulan} satır.`;
+  rows.push(satir('Log satır zinciri', zincir));
+
+  const temiz =
+    rows.length === 1
+      ? '<p class="scopelead">Bu senkronda elenen kayıt yok — ham kayıtların tamamı panoda.</p>'
+      : '<p class="scopelead">Gürültü kesildi, ama iz bırakılarak: aşağıdakiler bilerek kapsam dışında tutuldu.</p>';
+
+  const notlar =
+    scope.notlar.length > 0
+      ? `<details class="scopenotes">
+      <summary>Motor notları (${scope.notlar.length})</summary>
+      <ul class="notelist">${scope.notlar.map((n) => `<li>${esc(n)}</li>`).join('\n')}</ul>
+    </details>`
+      : '';
+
+  return `<section class="panel scope" aria-label="Panonun kapsamı">
+    ${bas}
+    ${temiz}
+    <ul class="scopelist">${rows.join('\n')}</ul>
+    ${notlar}
   </section>`;
 }
 
@@ -182,7 +318,16 @@ function renderPassport(state: OceanState): string {
       // İş birimi = insanın tek seferde onaylayabileceği öbek → komutu görünür
       // olsun ki FULL-TİK erişilebilir kalsın (kayıt sayısı da dürüstçe yazar).
       const adet = i.claimIds.length > 1 ? `<span class="pcount mono">${i.claimIds.length} kayıt</span>` : '';
-      const cmd = done ? '' : `<code class="pid mono">ocean verify ${esc(i.id)}</code>`;
+      /**
+       * Çıplak id elle seçilmez: her satır kartla AYNI kopyala desenini taşır.
+       * (Dogfood dersi: 11 satırda 11 UUID vardı, kopyala butonu yoktu.)
+       */
+      const cmd = done
+        ? ''
+        : cmdBlock(`ocean verify ${i.id}`, {
+            cls: 'pcmd',
+            etiket: `Doğrulama komutunu kopyala — ${kisaBaslik(i.title)}`,
+          });
       const reason = i.reason !== undefined ? `<span class="preason">${esc(i.reason)}</span>` : '';
       return `<li class="pitem"><span class="tick ${done ? 'on' : ''}">${done ? '✓' : '○'}</span><span class="ptitle">${esc(i.title)}${reason}</span>${adet}${levelPill(i.level)}${cmd}</li>`;
     })
@@ -269,6 +414,20 @@ header.top .goal .k{font-family:var(--mono);font-size:9.5px;letter-spacing:.14em
 .timeline .ts{font-size:11px;color:var(--muted);white-space:nowrap}
 .timeline .txt{color:var(--dim);overflow-wrap:anywhere}
 .capnote,.empty{font-size:12px;color:var(--muted);padding:8px 0 0}
+.scope .scopelead{font-size:12.5px;color:var(--dim);margin-bottom:10px}
+.scopelist{list-style:none}
+.scopelist li{display:flex;align-items:baseline;gap:12px;border-bottom:1px solid var(--line);padding:9px 0;font-size:12.5px;flex-wrap:wrap}
+.scopelist li:last-child{border-bottom:none}
+.scopelist .sk{font-family:var(--mono);font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);flex:none;min-width:16ch}
+.scopelist .sv{flex:1;min-width:min(100%,26ch);color:var(--dim);overflow-wrap:anywhere}
+.scopenotes{margin-top:12px;border-top:1px solid var(--line);padding-top:10px}
+.scopenotes>summary{cursor:pointer;font-size:12px;color:var(--muted);list-style:none;padding:4px 0}
+.scopenotes>summary::-webkit-details-marker{display:none}
+.scopenotes>summary::after{content:'göster';font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--plan);margin-left:8px}
+.scopenotes[open]>summary::after{content:'gizle'}
+.notelist{list-style:none;margin-top:6px}
+.notelist li{font-size:12px;color:var(--muted);padding:5px 0;border-bottom:1px solid var(--line);overflow-wrap:anywhere}
+.notelist li:last-child{border-bottom:none}
 .beyanlar{margin-top:14px;border-top:1px solid var(--line);padding-top:10px}
 .beyanlar>summary{cursor:pointer;font-size:12px;color:var(--muted);display:flex;align-items:center;gap:8px;list-style:none;padding:4px 0}
 .beyanlar>summary::-webkit-details-marker{display:none}
@@ -283,7 +442,10 @@ header.top .goal .k{font-family:var(--mono);font-size:9.5px;letter-spacing:.14em
 .ptitle{flex:1;min-width:min(100%,22ch);color:var(--dim);overflow-wrap:anywhere}
 .preason{display:block;font-size:11.5px;color:var(--muted);margin-top:2px}
 .pcount{font-size:10.5px;color:var(--muted);white-space:nowrap}
-.pid{font-size:11px;color:var(--teal2);background:var(--s3);border:1px solid var(--line2);border-radius:7px;padding:3px 8px;white-space:nowrap;user-select:all}
+.cmdrow.pcmd{flex-basis:100%;margin-top:6px}
+.cmdrow.pcmd .cmd{font-size:11px;padding:6px 10px;color:var(--teal2)}
+.cmdrow.pcmd .btn.mini{font-size:10.5px;padding:0 10px}
+.btn:focus-visible,.beyanlar>summary:focus-visible{outline:2px solid var(--teal);outline-offset:2px}
 .fullband{margin:0 0 14px;padding:12px 16px;border-radius:11px;background:var(--teald);border:1px solid rgba(45,212,191,.3);color:var(--teal2);font-size:13.5px;font-weight:600;letter-spacing:-.01em}
 footer{font-family:var(--mono);font-size:10.5px;color:var(--muted);text-align:center;padding-top:8px;line-height:1.8}
 @media(max-width:600px){.panel{padding:18px 16px}.krow .v{text-align:left}.krow{flex-direction:column;gap:2px}}
@@ -339,7 +501,8 @@ export function renderPano(state: OceanState, opts: PanoOptions = {}): string {
     ${goal}
   </header>
   ${cardHtml}
-  ${renderLog(state.log)}
+  ${renderScope(state.scope)}
+  ${renderLog(state.log, state.scope)}
   ${renderPassport(state)}
   <footer>Ocean yalnız kanıtlı gerçekleri ve açık belirsizlikleri gösterir.<br>
   kanıt seviyeleri: dosya-kanıtı · test-kanıtı · insan-onayı · doğrulanmadı</footer>

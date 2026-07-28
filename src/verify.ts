@@ -1,6 +1,25 @@
 /**
  * ocean verify <id> — insan onayı akışı. "Çalışıyor"nun tek meşru kapısı.
  *
+ * İNSAN KAPISI (ürünün EN kutsal kuralı: insan onayı = GERÇEK insan).
+ * Dogfood'da bir ajan `ocean verify <id> <<< "e"` koşturup passport.jsonl'e
+ * `by:"dogfood-ajan"` diye "insan onayı" yazdı. Bu, ürünün tek moat'ını
+ * (dürüstlük) delen bir olaydı. Kapı artık KODDA:
+ *
+ *  1. TTY ŞARTI — cevap kanalı (stdin) gerçek bir terminale bağlı değilse
+ *     (pipe, dosya, otomasyon, CI) seviye YÜKSELTİLMEZ, passport.jsonl'e
+ *     hiçbir satır yazılmaz. Soru bile sorulmaz.
+ *  2. KİMLİK ŞARTI — onaylayan, işletim sistemi kullanıcısıdır (os.userInfo).
+ *     Kimlik okunamıyorsa onay YOK ("bilinmiyor" imzayla onay olmaz).
+ *  3. Kayıt kanalı taşır: Verification.source='terminal'.
+ *
+ * NEDEN BAYPAS BAYRAĞI YOK: `--etkilesimsiz-onay` gibi bir kaçış kapısını bir
+ * bot da geçebilir — o zaman kapı kapı olmaktan çıkar, süse döner. Bir ajanın
+ * taklit EDEMEYECEĞİ tek sinyal, onay kanalının işletim sistemi düzeyinde bir
+ * terminale bağlı olmasıdır. Bu yüzden tek ölçüt odur.
+ * Bedeli bilinçli: `ocean verify` betikten koşturulamaz. Doğru bedel — bu komut
+ * zaten "bir insan kendi gözüyle gördü" demek için var.
+ *
  * <id> ya tek bir CLAIM ya da bir İŞ BİRİMİ (pasaport maddesi, `birim-…`)
  * olabilir. Birim verilirse birimdeki TÜM doğrulanmamış kayıtlar ekrana
  * dökülür ve TEK soruyla birlikte onaylanır — 278 kere "evet" demek zorunda
@@ -67,21 +86,81 @@ export interface VerifyDeps {
   out: (line: string) => void;
   /** Bildirim (varsayılan notifyMac — hata yutar). */
   notify?: (title: string, message: string) => Promise<boolean>;
-  /** Onaylayan kişi (varsayılan: işletim sistemi kullanıcı adı). */
+  /**
+   * Cevap kanalı GERÇEK bir terminal mi (CLI: process.stdin.isTTY).
+   * Verilmezse false sayılır — bu bir GÜVENLİK KAPISI: "bilinmiyor" insan
+   * sayılmaz. (Ürünün geri kalanında 'bilinmiyor ≠ yok'tur; ama onay
+   * vermek için kanıt gerekir, kanıtsız kapı açılmaz.)
+   */
+  interactive?: boolean;
+  /**
+   * Onaylayan kişi. CLI bunu ÇAĞIRANDAN ALMAZ — işletim sistemi kullanıcı
+   * adını kullanır. Enjeksiyon yalnız testler içindir; imza uydurulamasın
+   * diye `--by` bayrağı bilerek kaldırıldı.
+   */
   by?: string;
   now?: Date;
 }
+
+/** Onay kapısının kapanma nedeni (dürüst raporlama için makine karşılığı). */
+export type VerifyGate = 'etkilesimsiz' | 'kimlik-yok';
 
 export interface VerifyResult {
   ok: boolean;
   error?: string;
   approved?: boolean;
+  /** İnsan kapısı kapandıysa nedeni (onay istenmedi, hiçbir şey yazılmadı). */
+  gate?: VerifyGate;
   fullTick?: boolean;
   notified?: boolean;
   panoPath?: string;
 }
 
 const YES = new Set(['e', 'evet', 'y', 'yes']);
+
+/** Kimlik olarak kabul edilmeyen değerler — bunlarla onay kaydı yazılmaz. */
+const KIMLIKSIZ = new Set(['', 'unknown', 'bilinmiyor', 'nobody', 'none', 'null', 'undefined']);
+
+/**
+ * İnsan kapısı — SAF fonksiyon (testle kilitlenir).
+ * Geçerse onaylayanın kimliğini döner; geçmezse nedeni + insan-okur açıklama.
+ */
+export function insanKapisi(deps: {
+  interactive?: boolean;
+  by?: string;
+}): { ok: true; by: string } | { ok: false; gate: VerifyGate; message: string } {
+  if (deps.interactive !== true) {
+    return {
+      ok: false,
+      gate: 'etkilesimsiz',
+      message:
+        'Onay kaydedilmedi: cevap bir terminalden gelmedi (pipe/otomasyon girdisi).\n' +
+        'İnsan onayı bu üründe GERÇEK insan demektir — bir betik ya da ajan onay veremez.\n' +
+        'Bu komutu kendi terminalinde, elinle çalıştır: ocean verify <id>',
+    };
+  }
+  const by = (deps.by ?? osKullanici() ?? '').trim();
+  if (KIMLIKSIZ.has(by.toLocaleLowerCase('en-US'))) {
+    return {
+      ok: false,
+      gate: 'kimlik-yok',
+      message:
+        'Onay kaydedilmedi: onaylayan kullanıcı adı okunamadı.\n' +
+        'İmzası bilinmeyen bir onay, onay değildir — kayıt yazılmadı.',
+    };
+  }
+  return { ok: true, by };
+}
+
+/** İşletim sistemi kullanıcı adı; okunamazsa null (uydurulmaz). */
+function osKullanici(): string | null {
+  try {
+    const u = userInfo().username;
+    return typeof u === 'string' && u !== '' ? u : null;
+  } catch {
+    return null;
+  }
+}
 
 function evidenceLines(claim: Claim): string[] {
   if (claim.evidence.length === 0) return ['  (kanıt kaydı yok)'];
@@ -153,6 +232,18 @@ export async function runVerify(cwd: string, id: string, deps: VerifyDeps): Prom
     return { ok: true, approved: false };
   }
 
+  /**
+   * İNSAN KAPISI — soru SORULMADAN önce. Kapı kapalıysa soru bile sorulmaz:
+   * bir otomasyona "onaylıyor musun?" diye sormanın anlamı yok, ve sorulmuş
+   * bir sorunun cevabı log'a "insan onayı" diye sızabilir.
+   */
+  const kapi = insanKapisi(deps);
+  if (!kapi.ok) {
+    deps.out(kapi.message);
+    return { ok: true, approved: false, gate: kapi.gate };
+  }
+  const by = kapi.by;
+
   const soru =
     bekleyenIdx.length > 1
       ? `Bu ${bekleyenIdx.length} kaydın hepsini kendi gözünle doğruladın mı? [e/H] `
@@ -164,8 +255,13 @@ export async function runVerify(cwd: string, id: string, deps: VerifyDeps): Prom
   }
 
   // ── onay: tek yönlü yükseltme + değişmez log ──
-  const by = deps.by ?? userInfo().username;
-  const verification: Verification = { by, at: now.toISOString(), decision: 'approved' };
+  // source='terminal': kayıt kendi kanalını taşır (denetçi eski kayıttan ayırsın).
+  const verification: Verification = {
+    by,
+    at: now.toISOString(),
+    decision: 'approved',
+    source: 'terminal',
+  };
   const claims = [...state.claims];
   const onaylananlar: Claim[] = [];
   for (const i of bekleyenIdx) {
@@ -184,6 +280,7 @@ export async function runVerify(cwd: string, id: string, deps: VerifyDeps): Prom
       title: claimTitle(c.text),
       decision: verification.decision,
       by,
+      source: 'terminal',
       levelBefore: c.level,
       levelAfter: 'insan-onayi',
     });

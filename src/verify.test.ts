@@ -2,6 +2,10 @@
  * verify.ts testleri — sahte ask/notify enjeksiyonu; osascript ASLA çağrılmaz.
  * Dürüstlük invaryantları: onay yalnız insan cevabıyla; red → seviye değişmez;
  * full-tik bildirimi BİR KEZ; passport.jsonl append-only.
+ *
+ * İNSAN KAPISI: fakeDeps interactive=true verir — yani "cevap gerçek bir
+ * terminalden geldi" senaryosu. Kapının KAPALI hâli ayrı testlerde (aşağıda)
+ * ve cli.test.ts'te (gerçek subprocess, gerçek pipe) kilitlenir.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -11,7 +15,7 @@ import { join } from 'node:path';
 import { newOceanState, type Claim, type Verification } from './types.ts';
 import { writeState, readState, passportLogPath } from './state.ts';
 import { buildPassport } from './passport.ts';
-import { approveClaim, runVerify, type VerifyDeps } from './verify.ts';
+import { approveClaim, insanKapisi, runVerify, type VerifyDeps } from './verify.ts';
 
 const NOW = new Date('2026-07-28T15:00:00.000Z');
 
@@ -65,6 +69,7 @@ function fakeDeps(answer: string): FakeDeps {
       return Promise.resolve(true);
     },
     by: 'ekin',
+    interactive: true, // gerçek terminal senaryosu
     now: NOW,
   };
 }
@@ -222,6 +227,88 @@ test('bilinmeyen id hatası iş birimlerini de gösterir (yol tarif eder)', asyn
   assert.equal(res.ok, false);
   assert.ok(res.error?.includes('birim-s1'));
   assert.ok(res.error?.includes('2 kayıt'));
+});
+
+// ── İNSAN KAPISI (ürünün en kutsal kuralı: insan onayı = GERÇEK insan) ──────
+
+test('insanKapisi: etkileşimsiz girdi (pipe/otomasyon) kapıyı KAPATIR', () => {
+  const yok = insanKapisi({ by: 'ekin' }); // interactive verilmedi = TTY yok
+  assert.equal(yok.ok, false);
+  assert.equal(yok.ok === false && yok.gate, 'etkilesimsiz');
+  assert.ok(yok.ok === false && yok.message.includes('terminal'));
+
+  const kapali = insanKapisi({ interactive: false, by: 'ekin' });
+  assert.equal(kapali.ok, false);
+  assert.equal(kapali.ok === false && kapali.gate, 'etkilesimsiz');
+});
+
+test('insanKapisi: kimlik okunamıyorsa onay YOK ("bilinmiyor" imzayla onay olmaz)', () => {
+  for (const by of ['', '   ', 'unknown', 'bilinmiyor', 'NONE']) {
+    const r = insanKapisi({ interactive: true, by });
+    assert.equal(r.ok, false, `'${by}' kimlik sayılmamalı`);
+    assert.equal(r.ok === false && r.gate, 'kimlik-yok');
+  }
+  const ok = insanKapisi({ interactive: true, by: 'ekin' });
+  assert.equal(ok.ok, true);
+  assert.equal(ok.ok === true && ok.by, 'ekin');
+});
+
+test('BOT ONAYI ENGELLENDİ: etkileşimsiz "e" cevabı seviyeyi YÜKSELTMEZ, log YAZMAZ', async () => {
+  const dir = await makeStateDir();
+  const deps = fakeDeps('e');
+  let soruldu = false;
+  const bot: FakeDeps = {
+    ...deps,
+    interactive: false, // pipe / otomasyon
+    ask: () => {
+      soruldu = true;
+      return Promise.resolve('e');
+    },
+  };
+
+  const res = await runVerify(dir, 'dosya-git-s1', bot);
+  assert.equal(res.ok, true);
+  assert.equal(res.approved, false);
+  assert.equal(res.gate, 'etkilesimsiz');
+  assert.equal(soruldu, false, 'otomasyona soru bile sorulmamalı');
+
+  // seviye aynı, insan kanıtı eklenmedi
+  const st = await readState(dir);
+  const c = st?.claims.find((x) => x.id === 'dosya-git-s1');
+  assert.equal(c?.level, 'dosya-kaniti');
+  assert.equal(c?.evidence.some((e) => e.kind === 'human'), false);
+  // pasaport yükselmedi + değişmez log HİÇ oluşmadı
+  assert.notEqual(st?.passport.find((p) => p.id === 'dosya-git-s1')?.status, 'completed');
+  await assert.rejects(() => readFile(passportLogPath(dir), 'utf8'));
+
+  // kullanıcıya neden söylenir (sessiz yutma yok)
+  assert.ok(bot.lines.some((l) => l.includes('GERÇEK insan') || l.includes('gerçek insan')));
+});
+
+test('kimliksiz onay: kapı kapalı, hiçbir kayıt yazılmaz', async () => {
+  const dir = await makeStateDir();
+  const deps: FakeDeps = { ...fakeDeps('e'), by: '   ' };
+  const res = await runVerify(dir, 'dosya-git-s1', deps);
+  assert.equal(res.approved, false);
+  assert.equal(res.gate, 'kimlik-yok');
+  const st = await readState(dir);
+  assert.equal(st?.claims.find((x) => x.id === 'dosya-git-s1')?.level, 'dosya-kaniti');
+  await assert.rejects(() => readFile(passportLogPath(dir), 'utf8'));
+});
+
+test('terminal onayı kanalını KAYDEDER: verification.source + jsonl source = terminal', async () => {
+  const dir = await makeStateDir();
+  await runVerify(dir, 'dosya-git-s1', fakeDeps('e'));
+
+  const st = await readState(dir);
+  assert.equal(st?.passport.find((p) => p.id === 'dosya-git-s1')?.verification?.source, 'terminal');
+
+  const rec = JSON.parse((await readFile(passportLogPath(dir), 'utf8')).trim()) as {
+    by: string;
+    source?: string;
+  };
+  assert.equal(rec.source, 'terminal');
+  assert.equal(rec.by, 'ekin');
 });
 
 test('approveClaim: kanıt ekler, seviye yükseltir, orijinali MUTASYONA UĞRATMAZ', () => {

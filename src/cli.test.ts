@@ -121,7 +121,12 @@ test('verify: olmayan id ile exit 1 + dürüst mesaj (subprocess)', async () => 
   assert.match(r.stderr, /Kayıt bulunamadı: gorev-3/);
 });
 
-test('verify subprocess: piped onay (e) çalışır — readline pipe bug kilidi', async () => {
+/**
+ * İNSAN KAPISI — bu testin kilitlediği olay GERÇEK: dogfood'da bir ajan
+ * `ocean verify <id> <<< "e"` koşturup passport.jsonl'e "insan onayı" yazdırdı.
+ * Subprocess'in stdin'i bir PIPE'tır (isTTY yok) → tam o senaryo.
+ */
+test('verify subprocess: piped "e" onay VERMEZ — bot insan onayı yazamaz', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'ocean-code-verify-e-'));
   const { newOceanState } = await import('./types.ts');
   const { writeState, readState } = await import('./state.ts');
@@ -137,12 +142,22 @@ test('verify subprocess: piped onay (e) çalışır — readline pipe bug kilidi
   ];
   await writeState(dir, st);
 
-  const r = run(['verify', 'dosya-git-s9', '--by', 'test-kullanici'], { cwd: dir, input: 'e\n' });
+  const r = run(['verify', 'dosya-git-s9'], { cwd: dir, input: 'e\n' });
   assert.equal(r.code, 0, r.stderr);
-  assert.ok(r.stdout.includes('Onay kaydedildi'));
+  assert.equal(r.stdout.includes('Onay kaydedildi'), false, 'pipe onayı kaydedilmemeli');
+  assert.ok(r.stdout.includes('terminal'), 'neden söylenmeli');
 
   const back = await readState(dir);
-  assert.equal(back?.claims[0]?.level, 'insan-onayi');
+  assert.equal(back?.claims[0]?.level, 'dosya-kaniti'); // seviye DEĞİŞMEDİ
+  await assert.rejects(() => readFile(join(dir, '.ocean', 'passport.jsonl'), 'utf8'));
+});
+
+test('verify: --by bayrağı reddedilir (imza uydurma kapısı kapalı)', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'ocean-code-verify-by-'));
+  run(['init'], { cwd: dir });
+  const r = run(['verify', 'dosya-git-s9', '--by', 'dogfood-ajan'], { cwd: dir, input: 'e\n' });
+  assert.equal(r.code, 1);
+  assert.match(r.stderr, /--by/);
 });
 
 test('verify subprocess: girdi kapalıysa (cevapsız) onay YOK — dürüst varsayılan', async () => {

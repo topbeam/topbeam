@@ -258,12 +258,25 @@ export type PassportItemStatus =
   | 'not_verified'
   | 'deferred';
 
+/**
+ * Onayın geldiği KANAL. Tek meşru değer: 'terminal' — cevap gerçek bir TTY'den
+ * (insanın klavyesinden) geldi. Etkileşimsiz girdide (pipe/otomasyon) onay hiç
+ * kaydedilmez, bu yüzden başka bir değer ÜRETİLMEZ.
+ *
+ * Alan OPSİYONELDİR: bu kapı kodlanmadan önce yazılmış kayıtlarda yoktur.
+ * "Kanal kaydı yok" ile "terminaldi" karıştırılmaz — eski kayda sonradan
+ * 'terminal' yazmak, ölçülmemiş bir şeyi ölçülmüş göstermek olurdu.
+ */
+export type VerificationSource = 'terminal';
+
 /** BP Verification ile birebir uyumlu — insan kararı kaydı. */
 export interface Verification {
   by: string;
   at: string; // ISO-8601
   decision: 'approved' | 'corrected';
   note?: string;
+  /** Onayın geldiği kanal (yalnız yeni kayıtlarda). */
+  source?: VerificationSource;
 }
 
 /**
@@ -296,6 +309,61 @@ export function isPassportFull(items: readonly PassportItem[]): boolean {
   );
 }
 
+// ── Kapsam: neyin dışarıda bırakıldığı (gürültü kesme İZ BIRAKARAK) ──────────
+
+/**
+ * Log satır sayıları ZİNCİRİ — panodaki her sayının nereden geldiği.
+ *
+ * NEDEN VAR: gürültüyü kesmek doğru, ama İZ BIRAKMADAN kesmek gizlemektir.
+ * Pano "toplam 454" derken 454 zaten süzülmüş+kırpılmış bir sayıydı; ham
+ * kayıt çok daha büyüktü. Bu yapı ham sayıyı da, her eleme adımını da taşır.
+ *
+ * KİMLİK (her sync'te sağlanır, testle kilitli):
+ *   hamToplam = ilgisizBeyan + tekillestirilen + kirpilan + tutulan
+ */
+export interface LogCounts {
+  /** Hiçbir eleme yapılmadan önce görülen TÜM satır (kanıt + beyan). */
+  hamToplam: number;
+  /** Ham kanıt satırı (git olayları + kanıtlı claim satırları + korunan insan/ocean). */
+  hamKanit: number;
+  /** Ham beyan satırı (Claude'un niyet cümleleri + notes.md satırları). */
+  hamBeyan: number;
+  /** Projeyle ilişkilendirilemediği için log'a HİÇ alınmayan beyan. */
+  ilgisizBeyan: number;
+  /** Aynı satırın tekrarı olduğu için birleşen/atılan satır. */
+  tekillestirilen: number;
+  /** Satır sınırı dolduğu için listeden düşen satır. */
+  kirpilan: number;
+  /** Sonuçta state'te duran satır. */
+  tutulan: number;
+}
+
+/**
+ * ScopeNotes — "bu panonun kapsamı ve bilmedikleri". state.json'a KALICI yazılır
+ * ve panoda kartın hemen altında gösterilir.
+ *
+ * Dürüstlük gerekçesi: Ocean gürültüyü keser (proje dışı düzenleme, ilişkisiz
+ * beyan, sayı üretmeyen kontrol komutu). Kesilen şey görünmezse kullanıcı
+ * panonun her şeyi gördüğünü sanır — bu, sessiz bir yalandır. Sayılar burada
+ * durur; hepsi ÖLÇÜLMÜŞ, hiçbiri tahmin değildir.
+ */
+export interface ScopeNotes {
+  /** Proje kökü DIŞINDAKİ dosyalarda yapılan ve claim'e girmeyen düzenleme. */
+  disKapsamDuzenleme: number;
+  /** Farklı cwd ile kaydedildiği için claim üretilmeyen oturum. */
+  atlananOturum: number;
+  /** Sayı üretmediği için claim doğurmayan kontrol komutu (tsc/eslint…). */
+  kontrolKomutu: number;
+  /** Metinde proje dışına çıktığı için '~/…' diye kısaltılan mutlak yol. */
+  kisaltilanYol: number;
+  /** Dizin git deposu değil → dosya-kanıtı yolu bu projede kapalı. */
+  gitYok: boolean;
+  /** Log satır sayıları zinciri (ham → tutulan). */
+  log: LogCounts;
+  /** Toplayıcı/motor notları (insan-okur; yollar kısaltılmış). */
+  notlar: string[];
+}
+
 // ── Ocean durumu (.ocean/state.json) ─────────────────────────────────────────
 
 /**
@@ -318,6 +386,11 @@ export interface OceanState {
   passport: PassportItem[];
   /** Güncel sıradaki-tek-hareket kartı (yoksa henüz sync koşmadı). */
   card?: Card;
+  /**
+   * Panonun kapsamı: neyin elendiği + log sayı zinciri. Yoksa (eski state ya da
+   * henüz sync koşmamış) UYDURULMAZ — pano "kapsam kaydı yok" der.
+   */
+  scope?: ScopeNotes;
   /** İşlenmiş Claude Code oturum id'leri (tekrar-işleme koruması). */
   sessionsSeen: string[];
   /** Son sync zamanı (varsa). */

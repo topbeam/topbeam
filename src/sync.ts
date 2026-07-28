@@ -35,7 +35,7 @@ import {
   writePano,
   writeState,
 } from './state.ts';
-import type { Claim, LogEntry, OceanState } from './types.ts';
+import type { Claim, LogCounts, LogEntry, OceanState, ScopeNotes } from './types.ts';
 
 export interface SyncResult {
   ok: boolean;
@@ -123,7 +123,27 @@ export async function runSync(cwd: string, opts: { now?: Date } = {}): Promise<S
     );
   }
   const keptHuman = state.log.filter((e) => e.source === 'insan' || e.source === 'ocean');
+  const birlesikOncesi = truth.log.length + noteEntries.length + keptHuman.length;
   const log = dedupeSortLog([...truth.log, ...noteEntries, ...keptHuman]);
+
+  /**
+   * SAYI ZİNCİRİ — panodaki her sayının kaynağı (ham → tutulan).
+   * Motor kendi kırpmasını yaptıktan sonra burada notes.md + korunan insan/ocean
+   * satırları eklenir ve bir tekilleştirme daha koşar; iki adımın kaybı toplanır.
+   * Kimlik (testle kilitli):
+   *   hamToplam = ilgisizBeyan + tekillestirilen + kirpilan + tutulan
+   */
+  const hamKanit = truth.counts.hamKanit + keptHuman.length;
+  const hamBeyan = truth.counts.hamBeyan + noteEntries.length;
+  const logCounts: LogCounts = {
+    hamToplam: hamKanit + hamBeyan,
+    hamKanit,
+    hamBeyan,
+    ilgisizBeyan: truth.counts.ilgisizBeyan,
+    tekillestirilen: truth.counts.tekillestirilen + (birlesikOncesi - log.length),
+    kirpilan: truth.counts.kirpilan,
+    tutulan: log.length,
+  };
 
   // Pasaport: claim başına değil, İŞ BİRİMİ (oturum) başına madde — insanın
   // onaylayabileceği ölçek. İnsan kararları taşınır (passport.ts).
@@ -140,6 +160,18 @@ export async function runSync(cwd: string, opts: { now?: Date } = {}): Promise<S
   const card = buildCard(merged, { scripts, now, isGitRepo: git.isGit });
 
   // 6) State + pano yaz.
+  // Kapsam KALICI yazılır: gürültüyü kesmek tamam, ama İZ BIRAKMADAN kesmek
+  // gizlemektir. Panoda kartın hemen altında bu blok görünür.
+  const scope: ScopeNotes = {
+    disKapsamDuzenleme: truth.scope.disKapsamDuzenleme,
+    atlananOturum: truth.scope.atlananOturum,
+    kontrolKomutu: truth.scope.kontrolKomutu,
+    kisaltilanYol: truth.scope.kisaltilanYol,
+    gitYok: truth.scope.gitYok,
+    log: logCounts,
+    notlar: [...notes],
+  };
+
   const sessionsSeen = [...new Set([...state.sessionsSeen, ...claude.sessions.map((s) => s.sessionId)])];
   const next: OceanState = {
     ...state,
@@ -149,6 +181,7 @@ export async function runSync(cwd: string, opts: { now?: Date } = {}): Promise<S
     claims: merged,
     passport,
     card,
+    scope,
     sessionsSeen,
   };
   const { hits } = await writeState(cwd, next);

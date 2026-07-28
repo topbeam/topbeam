@@ -4,7 +4,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, realpath, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, realpath, writeFile } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -270,4 +270,57 @@ test('git deposu OLMAYAN proje: kart "git status" ÖNERMEZ', async () => {
   assert.equal(card.action.command, `ocean verify ${card.id}`);
   assert.ok(card.action.verb.includes('git deposu değil'));
   assert.ok(card.fact.includes('git deposu değil'));
+});
+
+test('kapsam state\'e KALICI yazılır: sayı zinciri kimliği + panoda blok', async () => {
+  const { proj, claudeDir } = await makeProject();
+  await runInit(proj, { now: NOW });
+  const res = await withClaudeDir(claudeDir, () => runSync(proj, { now: NOW }));
+
+  const scope = res.state?.scope;
+  assert.ok(scope, 'scope state.json\'a yazılmalı');
+  const c = scope.log;
+  // KİMLİK: ham = ilişkisiz + tekilleşen + kırpılan + tutulan (sayı uydurulmaz)
+  assert.equal(c.hamToplam, c.hamKanit + c.hamBeyan);
+  assert.equal(c.hamToplam, c.ilgisizBeyan + c.tekillestirilen + c.kirpilan + c.tutulan);
+  assert.equal(c.tutulan, res.state?.log.length);
+  assert.ok(c.hamToplam >= c.tutulan, 'ham sayı tutulan sayıdan küçük olamaz');
+
+  // diskten geri okununca da duruyor (kalıcı)
+  const back = await readState(proj);
+  assert.deepEqual(back?.scope?.log, c);
+
+  const html = await readFile(join(proj, '.ocean', 'pano.html'), 'utf8');
+  assert.ok(html.includes('Bu panonun kapsamı'));
+  assert.ok(html.includes(`panoda ${c.tutulan} satır.`));
+});
+
+test('kapsam: proje DIŞI düzenleme sayılır ve panoda görünür (iz bırakarak eleme)', async () => {
+  const { proj, claudeDir } = await makeProject();
+  const slugDir = join(claudeDir, 'projects', slugifyCwd(proj));
+  const sid = 'sess-dis';
+  const disari = join(tmpdir(), 'ocean-baska-proje', 'gizli.ts');
+  const lines = [
+    j({
+      type: 'assistant', cwd: proj, sessionId: sid, uuid: 'a1', timestamp: '2026-07-28T10:01:00.000Z',
+      message: {
+        id: 'm1', role: 'assistant',
+        content: [{ type: 'tool_use', id: 't1', name: 'Write', input: { file_path: disari } }],
+      },
+    }),
+    j({
+      type: 'user', cwd: proj, sessionId: sid, uuid: 'u2', timestamp: '2026-07-28T10:01:05.000Z',
+      message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't1', is_error: false, content: 'ok' }] },
+      toolUseResult: { filePath: disari, structuredPatch: [], userModified: false },
+    }),
+  ];
+  await writeFile(join(slugDir, `${sid}.jsonl`), `${lines.join('\n')}\n`, 'utf8');
+
+  await runInit(proj, { now: NOW });
+  const res = await withClaudeDir(claudeDir, () => runSync(proj, { now: NOW }));
+  assert.equal(res.state?.scope?.disKapsamDuzenleme, 1);
+
+  const html = await readFile(join(proj, '.ocean', 'pano.html'), 'utf8');
+  assert.ok(html.includes('1 düzenleme bu proje kökünün dışındaki'));
+  assert.equal(html.includes('gizli.ts'), false, 'proje dışı dosya adı panoya girmez');
 });

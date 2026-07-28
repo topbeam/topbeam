@@ -34,6 +34,8 @@ Komutlar:
   verify <id>     Bir işi doğrula (insan onayı kaydet — kanıt seviyesi yükselir)
                   <id> tek kayıt ya da pasaport iş birimi (birim-…) olabilir;
                   birim verirsen o oturumun tüm kayıtları tek onayla geçer
+                  YALNIZ terminalden: cevap pipe/otomasyondan gelirse onay
+                  kaydedilmez (insan onayı = gerçek insan)
   open            Pano yolunu göster (tarayıcıyı otomatik AÇMAZ)
 
 Seçenekler:
@@ -125,16 +127,29 @@ function makeAsker(): { ask: (q: string) => Promise<string>; close: () => void }
   };
 }
 
+/**
+ * verify — İNSAN KAPISI burada kurulur:
+ * - interactive: cevap kanalı (stdin) gerçek bir terminal mi. Pipe/dosya/CI ise
+ *   false → runVerify onay istemez, hiçbir şey yazmaz.
+ * - `by` GEÇİRİLMEZ: onaylayan kimliği işletim sisteminden okunur. Eski `--by`
+ *   bayrağı imza uydurmaya (`by:"dogfood-ajan"`) izin veriyordu, kaldırıldı.
+ */
 async function cmdVerify(args: Args): Promise<void> {
   const id = args.positional[0];
   if (id === undefined || id === '') fail('Kullanım: ocean verify <id>');
+  if (args.flags.by !== undefined) {
+    fail(
+      "'--by' bayrağı kaldırıldı: onaylayan kimliği işletim sistemi kullanıcısından okunur.\n" +
+        'Başkasının adına onay kaydedilemez — insan onayı bu üründe gerçek insan demektir.',
+    );
+  }
   const cwd = process.cwd();
   const asker = makeAsker();
   try {
     const res = await runVerify(cwd, id, {
       ask: asker.ask,
       out,
-      ...(typeof args.flags.by === 'string' ? { by: args.flags.by } : {}),
+      interactive: process.stdin.isTTY === true,
     });
     if (!res.ok) fail(res.error ?? 'Doğrulama başarısız.');
     if (res.panoPath !== undefined) out(`Pano güncellendi: ${res.panoPath}`);

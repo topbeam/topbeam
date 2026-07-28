@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import type { BashRun, ChangedFile, ClaudeCollectResult, SessionSummary, TestSignal } from './collect/claude.ts';
 import type { GitFacts } from './collect/git.ts';
 import type { LogEntry } from './types.ts';
-import { buildCalisiyorClaim, buildTruth, collapseRepeats, isInsideProject } from './truth.ts';
+import { buildCalisiyorClaim, buildTruth, collapseRepeats, isInsideProject, kisaltYollar } from './truth.ts';
 
 function bash(command: string, description: string | null, over: Partial<BashRun> = {}): BashRun {
   return {
@@ -594,4 +594,107 @@ test('buildCalisiyorClaim: yalnız Verification ile, insan-onayi + human kanıt�
   assert.ok(c.text.includes('kullanıcı doğruladı'));
   assert.equal(c.evidence[0]?.kind, 'human');
   assert.ok(c.evidence[0]?.summary.includes('Ekin'));
+});
+
+// ── kapsam sızıntısı: komut metnindeki mutlak yollar ─────────────────────────
+
+const EV = '/Users/deneme';
+
+test('kisaltYollar: proje kökü proje-göreli olur (komut ÇALIŞIR kalır)', () => {
+  const r = kisaltYollar(`cd "${CWD}/alt" && npm test`, CWD, EV, { disariKirp: true });
+  assert.equal(r.text, 'cd "./alt" && npm test');
+  assert.equal(r.disari, 0); // proje içi: kapsam dışına çıkmadı
+});
+
+test('kisaltYollar: proje DIŞI ev yolu "~/…" diye kısalır, sayılır', () => {
+  const r = kisaltYollar(`cat ${EV}/Desktop/BaskaProje/gizli.ts`, CWD, EV, { disariKirp: true });
+  assert.equal(r.text, 'cat ~/…');
+  assert.equal(r.disari, 1);
+
+  // not modunda kuyruk korunur (teşhis bilgisi kaybolmasın), kullanıcı adı gitmiş olur
+  const not = kisaltYollar(`Dizin okunamadı: ${EV}/.claude/projects/x`, CWD, EV);
+  assert.equal(not.text, 'Dizin okunamadı: ~/.claude/projects/x');
+});
+
+test('kisaltYollar: sınır kontrolü — /proj/ornek deseni /proj/ornekler yolunu yemez', () => {
+  const r = kisaltYollar('/proj/ornekler/a.ts', CWD, EV);
+  assert.equal(r.text, '/proj/ornekler/a.ts');
+  assert.equal(r.hits, 0);
+});
+
+test('claim metni ve ref proje dışı mutlak yol GÖSTERMEZ (kart manşeti temiz)', () => {
+  const komut = `cd "${EV}/Desktop/BaskaProje" && npm test`;
+  const claude = collect([
+    session('s1', { testSignals: [signal(komut, { passed: 12, failed: 0, summaryLine: '# pass 12' })] }),
+  ]);
+  const { claims } = buildTruth(claude, gitFacts(), { now: NOW, homeDir: EV });
+  const c = claims[0];
+  assert.ok(c);
+  assert.equal(c.text.includes(EV), false, 'manşette mutlak ev yolu olmamalı');
+  assert.ok(c.text.includes('~/…'));
+  assert.equal(c.evidence.some((e) => e.ref?.includes(EV) === true), false, 'ref de sızmamalı');
+});
+
+test('kısaltılan yol sayısı kapsam ölçümüne düşer (sessiz maskeleme yok)', () => {
+  const claude = collect([
+    session('s1', {
+      testSignals: [signal(`node ${EV}/tools/x.js`, { passed: 1, failed: 0 })],
+      bashRuns: [bash(`npm test --prefix ${EV}/baska`, `Testi ${EV}/baska içinde koş`)],
+    }),
+  ]);
+  const { scope, log } = buildTruth(claude, gitFacts(), { now: NOW, homeDir: EV, includeBeyan: true });
+  assert.ok(scope.kisaltilanYol >= 2);
+  assert.equal(log.some((e) => e.text.includes(EV)), false);
+});
+
+// ── sayı zinciri (ham → tutulan) ─────────────────────────────────────────────
+
+test('sayı zinciri: ham beyan elenenle birlikte sayılır (süzülmüş sayı ham diye satılmaz)', () => {
+  const claude = collect([
+    session('s1', {
+      changedFiles: [file(`${CWD}/src/a.ts`)],
+      bashRuns: [
+        bash('npm test', 'Testleri çalıştır'), // ilişkili → log'a girer
+        bash('osascript -e beep', 'Sesi çal'), // ilişkisiz → elenir
+        bash('open https://x.dev', 'Tarayıcıyı aç'), // ilişkisiz → elenir
+      ],
+    }),
+  ]);
+  const { counts, log } = buildTruth(claude, gitFacts(), { now: NOW, includeBeyan: true });
+  assert.equal(counts.hamBeyan, 3, 'ham beyan = elenen dâhil');
+  assert.equal(counts.ilgisizBeyan, 2);
+  assert.equal(log.filter((e) => e.source === 'claude-beyan').length, 1);
+  // kimlik: ham = ilgisiz + tekilleşen + kırpılan + tutulan
+  assert.equal(
+    counts.hamKanit + counts.hamBeyan,
+    counts.ilgisizBeyan + counts.tekillestirilen + counts.kirpilan + counts.tutulan,
+  );
+});
+
+test('sayı zinciri: kırpma ve tekilleştirme ayrı ayrı sayılır', () => {
+  const runs = Array.from({ length: 700 }, () => bash('npm test', 'Testleri çalıştır'));
+  const claude = collect([session('s1', { bashRuns: runs })]);
+  const { counts, log } = buildTruth(claude, gitFacts(), { now: NOW, includeBeyan: true });
+  assert.equal(counts.hamBeyan, 700);
+  assert.ok(counts.tekillestirilen > 0, 'aynı beyanın tekrarı tekilleşmeli');
+  assert.equal(counts.tutulan, log.length);
+  assert.equal(
+    counts.hamKanit + counts.hamBeyan,
+    counts.ilgisizBeyan + counts.tekillestirilen + counts.kirpilan + counts.tutulan,
+  );
+});
+
+test('kapsam ölçümü: proje dışı düzenleme, kontrol komutu, atlanan oturum, git-yok', () => {
+  const claude = collect([
+    session('s1', {
+      changedFiles: [file(`${CWD}/src/a.ts`), file(`${EV}/baska/b.ts`), file(`${EV}/baska/c.ts`)],
+      testSignals: [signal('tsc --noEmit'), signal('eslint .')],
+    }),
+    session('s2', { cwd: '/baska/proje', lastCwd: '/baska/proje', cwdMismatch: true }),
+  ]);
+  const { scope } = buildTruth(claude, gitFacts({ isGit: false }), { now: NOW, homeDir: EV });
+  assert.equal(scope.disKapsamDuzenleme, 2);
+  assert.equal(scope.kontrolKomutu, 2);
+  assert.equal(scope.atlananOturum, 1);
+  assert.equal(scope.gitYok, true);
 });

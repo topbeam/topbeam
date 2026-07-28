@@ -85,6 +85,12 @@ export interface PassportLogRecord {
   decision: Verification['decision'];
   by: string;
   note?: string;
+  /**
+   * Onayın geldiği kanal ('terminal' = gerçek TTY). Bu alan olmayan satırlar
+   * insan kapısı koda girmeden ÖNCE yazılmıştır — denetçi ikisini ayırabilsin
+   * diye sonradan doldurulmaz.
+   */
+  source?: Verification['source'];
   levelBefore: string;
   levelAfter: string;
 }

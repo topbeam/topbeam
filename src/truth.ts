@@ -35,9 +35,17 @@
  *   beyanlar düşer.
  * Bunların hiçbiri kanıt seviyesini yükseltmez; yalnız gürültüyü eler.
  *
+ * KAPSAM SIZINTISI (dosya yolları kapsandı, KOMUT METNİ kapsanmamıştı):
+ * dosya yolları proje kökü dışındaysa hiç girmiyordu ama komut metni ham
+ * geliyordu → kart manşetinde `cd "/Users/<isim>/Desktop/BaskaProje"` görünüyordu.
+ * Artık metne giren her komut kisaltYollar()'dan geçer: proje kökü proje-göreli
+ * ('./…') yazılır, proje dışı ev-dizini yolları '~/…' diye kısaltılır. Kısaltma
+ * SESSİZ değildir — sayısı kapsam bloğuna düşer.
+ *
  * Not (persist katmanına): evidence.ref komut metni içerebilir; state.json'a
  * yazan modül BP redact desenini kurmadan bu alanı diske YAZMAMALI.
  */
+import { homedir } from 'node:os';
 import { basename, isAbsolute, relative, resolve, sep } from 'node:path';
 import type {
   Claim,
@@ -99,6 +107,33 @@ export interface TruthOptions {
   includeBeyan?: boolean;
   /** Girdide ts olmayan satırlar için son-çare zaman (test determinizmi). */
   now?: Date;
+  /** Ev dizini (yol kısaltma) — verilmezse os.homedir(). Test determinizmi. */
+  homeDir?: string;
+}
+
+/** Motorun ürettiği HAM log sayıları — sync bunları LogCounts'a tamamlar. */
+export interface TruthCounts {
+  /** Ham kanıt satırı (git olayları + kanıtlı claim satırları). */
+  hamKanit: number;
+  /** Ham beyan satırı (elenen dâhil — description'ı olan her bash koşumu). */
+  hamBeyan: number;
+  /** Projeyle ilişkilendirilemediği için log'a HİÇ alınmayan beyan. */
+  ilgisizBeyan: number;
+  /** Tekrar olduğu için birleşen satır. */
+  tekillestirilen: number;
+  /** Satır sınırında listeden düşen satır. */
+  kirpilan: number;
+  /** Motordan çıkan satır sayısı. */
+  tutulan: number;
+}
+
+/** Motorun ölçtüğü kapsam daralmaları (pano "kapsam bloğu"nun kaynağı). */
+export interface TruthScope {
+  disKapsamDuzenleme: number;
+  atlananOturum: number;
+  kontrolKomutu: number;
+  kisaltilanYol: number;
+  gitYok: boolean;
 }
 
 export interface TruthResult {
@@ -108,6 +143,10 @@ export interface TruthResult {
   log: LogEntry[];
   /** Dürüst durum notları (atlanan oturum, kırpılan liste...). */
   notes: string[];
+  /** Ham → tutulan satır zinciri (panodaki her sayının kaynağı). */
+  counts: TruthCounts;
+  /** Neyin kapsam dışı bırakıldığı — sayıyla. */
+  scope: TruthScope;
 }
 
 // ── yardımcılar ──────────────────────────────────────────────────────────────
@@ -131,6 +170,91 @@ function projectRelative(abs: string, projectCwd: string): string | null {
 /** Dosya proje kökünün ALTINDA mı (kökün kendisi dosya değildir → false). */
 export function isInsideProject(path: string, projectCwd: string): boolean {
   return projectRelative(absPath(path, projectCwd), projectCwd) !== null;
+}
+
+// ── yol kısaltma (kapsam sızıntısı kapatma) ──────────────────────────────────
+
+/** Regex özel karakter kaçışı (dinamik desen kurulumu için). */
+function escapeRe(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+export interface YolKisaltma {
+  text: string;
+  /** Toplam kısaltma sayısı (proje-göreli + proje dışı). */
+  hits: number;
+  /** Proje DIŞINA çıktığı için kırpılan/masklenen yol sayısı. */
+  disari: number;
+}
+
+/**
+ * Metindeki mutlak yolları kısalt — kart manşeti başka projenin yolunu
+ * göstermesin diye.
+ *
+ * - Proje kökü → '.' (yani `<kök>/src/a.ts` → `./src/a.ts`). Komut ÇALIŞIR
+ *   kalır: proje kökünden koşulduğunda anlamı aynıdır.
+ * - Proje dışı ama ev dizini altındaki yol → `disariKirp` ise '~/…' (kapsam
+ *   dışı: bu panonun anlatacağı bir şey değil), değilse '~' öneki + kuyruk
+ *   (notlar için: teşhis bilgisi korunur, kullanıcı adı görünmez).
+ *
+ * BİLİNEN SINIR: ev dizini dışındaki mutlak yollar (/tmp, /Volumes…) olduğu
+ * gibi kalır — kullanıcı kimliği taşımazlar ve komutu kırmamak daha değerli.
+ */
+export function kisaltYollar(
+  text: string,
+  projectCwd: string,
+  home: string,
+  opts: { disariKirp?: boolean } = {},
+): YolKisaltma {
+  let hits = 0;
+  let disari = 0;
+  let out = text;
+
+  const root = projectCwd === '' ? '' : resolve(projectCwd);
+  // Sınır kontrolü (lookahead): '/a/b' deseni '/a/bc' yolunu yakalamasın.
+  if (root !== '' && root !== sep) {
+    out = out.replace(new RegExp(`${escapeRe(root)}(?=$|[/\\s"'\`;:,)\\]])`, 'g'), () => {
+      hits++;
+      return '.';
+    });
+  }
+
+  const ev = home === '' ? '' : resolve(home);
+  if (ev !== '' && ev !== sep && ev !== root) {
+    // Kuyruk sınıfı kabuk ayraçlarını dışarıda bırakır (komutun geri kalanı yenmez).
+    const re = new RegExp(`${escapeRe(ev)}((?:/[^\\s"'\`;:,)\\]|&<>]+)*)`, 'g');
+    out = out.replace(re, (_m, tail: string) => {
+      hits++;
+      disari++;
+      if (tail === '') return '~';
+      return opts.disariKirp === true ? '~/…' : `~${tail}`;
+    });
+  }
+
+  return { text: out, hits, disari };
+}
+
+/** Metin yazım yardımcıları — kısaltma sayacı buradan akar. */
+interface Yazim {
+  /** Komut/beyan metni: proje dışı yol '~/…' diye kırpılır (kapsam kuralı). */
+  komut: (s: string) => string;
+  /** Not metni: ev dizini '~' olur ama kuyruk kalır (teşhis bilgisi korunur). */
+  not: (s: string) => string;
+  /** Proje dışına çıktığı için kırpılan yol sayısı. */
+  disari: () => number;
+}
+
+function makeYazim(projectCwd: string, home: string): Yazim {
+  let disari = 0;
+  return {
+    komut: (s) => {
+      const r = kisaltYollar(s, projectCwd, home, { disariKirp: true });
+      disari += r.disari;
+      return r.text;
+    },
+    not: (s) => kisaltYollar(s, projectCwd, home).text,
+    disari: () => disari,
+  };
 }
 
 /** "a, b, c" listesi — LIMITS.nameList üstü "+N dosya daha". */
@@ -347,14 +471,20 @@ function kontrolKomutu(command: string): boolean {
   return isCheckLikeCommand(command) && !isTestLikeCommand(command);
 }
 
-function testClaims(session: SessionSummary, fallbackTs: string): { claims: Claim[]; skipped: number } {
+function testClaims(
+  session: SessionSummary,
+  fallbackTs: string,
+  yaz: Yazim,
+): { claims: Claim[]; skipped: number } {
   const claims: Claim[] = [];
   const tumu = lastSignalPerCommand(session.testSignals);
+  // Sınıflandırma HAM komut üzerinde yapılır (maskeleme yalnız METNE dokunur).
   const signals = tumu.filter((s) => !kontrolKomutu(s.command));
   const skipped = tumu.length - signals.length;
   signals.forEach((sig, i) => {
     const ts = sig.ts ?? session.lastTs ?? fallbackTs;
-    const cmd = shortCmd(sig.command);
+    const komut = yaz.komut(sig.command);
+    const cmd = shortCmd(komut);
     const id = `test-${session.sessionId}-${i}`;
     const hasNumbers = sig.passed !== null || sig.failed !== null;
 
@@ -384,7 +514,7 @@ function testClaims(session: SessionSummary, fallbackTs: string): { claims: Clai
         {
           kind: 'test-output',
           summary: sig.summaryLine ?? 'Test çıktısından geçti/kaldı sayısı okundu.',
-          ref: sig.command,
+          ref: komut,
         },
       ];
       if (sig.exitCode !== null && sig.exitCode !== 0) {
@@ -415,7 +545,7 @@ function testClaims(session: SessionSummary, fallbackTs: string): { claims: Clai
           {
             kind: 'transcript-tool-use',
             summary: 'Transcript: test-benzeri komut koştu; çıktıdan geçti/kaldı sayısı çekilemedi.',
-            ref: sig.command,
+            ref: komut,
           },
         ],
         sessionId: session.sessionId,
@@ -503,25 +633,29 @@ function beyanLog(
   session: SessionSummary,
   projectCwd: string,
   fallbackTs: string,
-): { entries: LogEntry[]; dropped: number } {
+  yaz: Yazim,
+): { entries: LogEntry[]; dropped: number; ham: number } {
   const entries: LogEntry[] = [];
   const names = projectFileNames(session, projectCwd);
   let dropped = 0;
+  let ham = 0;
   for (const run of session.bashRuns) {
     if (run.description === null) continue;
+    ham++;
+    // İlişki testi HAM komut üzerinde (maskeleme kararı etkilemesin).
     if (!beyanAnlamli(run, projectCwd, names)) {
       dropped++;
       continue;
     }
     entries.push({
       ts: run.ts ?? session.lastTs ?? fallbackTs,
-      text: `Beyan: ${run.description}`,
+      text: `Beyan: ${yaz.komut(run.description)}`,
       source: 'claude-beyan',
       sessionId: session.sessionId,
       // ref BİLEREK yok: komut metni secret içerebilir (redact persist katmanında).
     });
   }
-  return { entries, dropped };
+  return { entries, dropped, ham };
 }
 
 // ── tekrar sıkıştırma + log sınırı ───────────────────────────────────────────
@@ -579,8 +713,10 @@ function capLog(log: readonly LogEntry[], notes: string[]): LogEntry[] {
   const keptKanit = kanit.slice(-LIMITS.logMax);
   const slot = LIMITS.logMax - keptKanit.length;
   const keptBeyan = slot > 0 ? beyan.slice(-slot) : [];
+  // "toplam" DEMİYORUZ: buraya gelen sayı zaten süzülmüş+tekilleşmiş bir sayı.
+  // Ham sayı kapsam bloğunda (ScopeNotes.log) durur.
   notes.push(
-    `Log ${LIMITS.logMax} satırla sınırlandı (toplam ${log.length}): kanıt taşıyan satırlar önce tutuldu, ` +
+    `Log ${LIMITS.logMax} satırla sınırlandı (bu adıma ${log.length} satır girmişti): kanıt taşıyan satırlar önce tutuldu, ` +
       `${beyan.length - keptBeyan.length} beyan ve ${kanit.length - keptKanit.length} kanıt satırı listeden düştü.`,
   );
   return sortLog([...keptKanit, ...keptBeyan]);
@@ -603,18 +739,24 @@ export function buildTruth(
   opts: TruthOptions = {},
 ): TruthResult {
   const nowIso = (opts.now ?? new Date()).toISOString();
+  const home = opts.homeDir ?? homedir();
+  const yaz = makeYazim(claude.projectCwd, home);
   const notes: string[] = [...claude.notes, ...git.notes];
   const gitKnown = gitKnownPaths(git, claude.projectCwd);
 
   const claims: Claim[] = [];
   const log: LogEntry[] = gitLog(git, nowIso);
+  let hamKanit = log.length;
+  let hamBeyan = 0;
   let disKapsam = 0;
   let kontrolAtlanan = 0;
   let beyanDusen = 0;
+  let atlananOturum = 0;
 
   for (const session of claude.sessions) {
     if (session.cwdMismatch && session.cwd !== null && session.lastCwd !== null && session.cwd === session.lastCwd) {
       // Baştan sona başka cwd — büyük olasılıkla başka projenin işi.
+      atlananOturum++;
       notes.push(
         `Oturum ${sessionLabel(session)} (${session.sessionId.slice(0, 8)}…) farklı bir cwd ile kaydedilmiş — claim üretilmedi.`,
       );
@@ -623,13 +765,14 @@ export function buildTruth(
     const buckets = bucketFiles(session, gitKnown, claude.projectCwd);
     disKapsam += buckets.outsideCount;
     claims.push(...fileClaims(session, buckets, git, claude.projectCwd, nowIso));
-    const t = testClaims(session, nowIso);
+    const t = testClaims(session, nowIso, yaz);
     claims.push(...t.claims);
     kontrolAtlanan += t.skipped;
     if (opts.includeBeyan === true) {
-      const b = beyanLog(session, claude.projectCwd, nowIso);
+      const b = beyanLog(session, claude.projectCwd, nowIso, yaz);
       log.push(...b.entries);
       beyanDusen += b.dropped;
+      hamBeyan += b.ham;
     }
   }
 
@@ -650,17 +793,41 @@ export function buildTruth(
     );
   }
 
-  log.push(...claimLog(claims));
+  const kanitSatirlari = claimLog(claims);
+  hamKanit += kanitSatirlari.length;
+  log.push(...kanitSatirlari);
 
   // Deterministik sıralama: ts, sonra metin (eşit ts'te sabit sıra).
   // Sonra ardışık tekrarlar "×N" ile tekilleşir, en son kanıt-öncelikli sınır.
-  const capped = capLog(collapseRepeats(sortLog(log)), notes);
+  const giren = log.length; // elemeden SONRA, tekilleştirmeden ÖNCE
+  const collapsed = collapseRepeats(sortLog(log));
+  const capped = capLog(collapsed, notes);
 
   claims.sort((x, y) =>
     x.createdAt < y.createdAt ? -1 : x.createdAt > y.createdAt ? 1 : x.id.localeCompare(y.id),
   );
 
-  return { claims, log: capped, notes };
+  return {
+    claims,
+    log: capped,
+    // Notlarda da mutlak yol kalmasın (toplayıcı notları dizin yolu taşıyor).
+    notes: notes.map((n) => yaz.not(n)),
+    counts: {
+      hamKanit,
+      hamBeyan,
+      ilgisizBeyan: beyanDusen,
+      tekillestirilen: giren - collapsed.length,
+      kirpilan: collapsed.length - capped.length,
+      tutulan: capped.length,
+    },
+    scope: {
+      disKapsamDuzenleme: disKapsam,
+      atlananOturum,
+      kontrolKomutu: kontrolAtlanan,
+      kisaltilanYol: yaz.disari(),
+      gitYok: !git.isGit,
+    },
+  };
 }
 
 /**
