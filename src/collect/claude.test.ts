@@ -195,6 +195,27 @@ test('extractTestStats: TAP / jest / pytest desenleri; bulunamazsa null (uydurma
   assert.equal(none.summaryLine, null);
 });
 
+test('extractTestStats: node:test spec reporter (ℹ pass N) — gerçek transcript formatı', () => {
+  // Dogfood 2026-07-28: gerçek ~/.claude transcript'lerinde node:test çıktısı TAP değil
+  // spec reporter formatında yakalanıyor ("ℹ pass 113"); bu desen okunmazsa
+  // GERÇEK yeşil koşumlar haksız yere 'dogrulanmadi'ye düşüyordu.
+  const spec = extractTestStats(
+    '✔ onay (e): insan-onayı + pasaport completed (5.08ms)\nℹ tests 113\nℹ suites 0\nℹ pass 113\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 3827.58\n',
+  );
+  assert.equal(spec.passed, 113);
+  assert.equal(spec.failed, 0);
+  assert.ok(spec.summaryLine !== null && /ℹ (pass|fail)/.test(spec.summaryLine));
+
+  const specFail = extractTestStats('✖ test (29.9ms)\nℹ tests 1\nℹ suites 0\nℹ pass 0\nℹ fail 1\n');
+  assert.equal(specFail.passed, 0);
+  assert.equal(specFail.failed, 1);
+
+  // "ℹ tests 113" satırındaki sayı pass sayısı DEĞİL — karışmamalı.
+  const onlyTests = extractTestStats('ℹ tests 5\nℹ duration_ms 12\n');
+  assert.equal(onlyTests.passed, null);
+  assert.equal(onlyTests.failed, null);
+});
+
 // ── entegrasyon: collectClaude fixture'ları ──────────────────────────────────
 
 test('collectClaude: oturumları bulur, kronolojik sıralar, cwd uyuşmazlığını işaretler', async () => {

@@ -205,8 +205,9 @@ export function isTestLikeCommand(command: string): boolean {
 /**
  * Test çıktısından pass/fail sayısı çek (yalnız çıktının son 4000 karakteri).
  * Bulunamazsa null — sayı UYDURULMAZ.
- * Desteklenen desenler: node:test TAP ("# pass 19"), jest/vitest/pytest/mocha
- * ("N passed"/"N failed"/"N passing"), go/genel PASS-FAIL satırları.
+ * Desteklenen desenler: node:test TAP ("# pass 19"), node:test spec reporter
+ * ("ℹ pass 19" — dogfood'da GERÇEK transcript'lerde görülen tek node:test formatı),
+ * jest/vitest/pytest/mocha ("N passed"/"N failed"/"N passing"), go/genel PASS-FAIL satırları.
  */
 export function extractTestStats(output: string): TestStats {
   const tail = output.length > CAPS.statTail ? output.slice(-CAPS.statTail) : output;
@@ -217,6 +218,16 @@ export function extractTestStats(output: string): TestStats {
   if (tapPass?.[1] !== undefined) passed = Number(tapPass[1]);
   const tapFail = /^# fail (\d+)\s*$/m.exec(tail);
   if (tapFail?.[1] !== undefined) failed = Number(tapFail[1]);
+
+  // node:test spec reporter (Node 20+ TTY varsayılanı; Claude bash çıktısında da bu görülüyor).
+  if (passed === null) {
+    const m = /^\s*ℹ pass (\d+)\s*$/m.exec(tail);
+    if (m?.[1] !== undefined) passed = Number(m[1]);
+  }
+  if (failed === null) {
+    const m = /^\s*ℹ fail (\d+)\s*$/m.exec(tail);
+    if (m?.[1] !== undefined) failed = Number(m[1]);
+  }
 
   if (passed === null) {
     const m = /(\d+)\s+pass(?:ed|ing)\b/i.exec(tail);
@@ -229,7 +240,7 @@ export function extractTestStats(output: string): TestStats {
 
   // Kanıt referansı: sondan başa ilk sonuç-benzeri satır.
   const lineRe =
-    /(# (?:pass|fail) \d+|\d+\s+(?:passed|failed|passing|failing)\b|^(?:PASS|FAIL)\b|^ok\s+\S+|^FAIL\s+\S+)/i;
+    /(# (?:pass|fail) \d+|ℹ (?:pass|fail) \d+|\d+\s+(?:passed|failed|passing|failing)\b|^(?:PASS|FAIL)\b|^ok\s+\S+|^FAIL\s+\S+)/i;
   let summaryLine: string | null = null;
   const lines = tail.split('\n');
   for (let i = lines.length - 1; i >= 0; i--) {
