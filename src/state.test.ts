@@ -1,10 +1,11 @@
 /** state.ts testleri — mkdtemp izolasyonu; gerçek projeye sıfır dokunuş. */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, writeFile, mkdir } from 'node:fs/promises';
+import { appendFile, mkdtemp, readFile, writeFile, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { newOceanState } from './types.ts';
+import { claimOnayli } from './ledger.ts';
 import {
   appendPassportLog,
   goalPath,
@@ -12,7 +13,9 @@ import {
   parseNotes,
   passportLogPath,
   readGoal,
+  readLedger,
   readNotes,
+  readPassportLog,
   readState,
   statePath,
   writeState,
@@ -113,4 +116,43 @@ test('readGoal: şablon (başlık+yönerge) → null; gerçek hedef satırı →
 test('readNotes: dosya yoksa boş liste', async () => {
   const dir = await tmpProj();
   assert.deepEqual(await readNotes(dir, '2026-07-28T00:00:00Z'), []);
+});
+
+// ── doğrulama defteri (diskten) ─────────────────────────────────────────────
+
+test('readLedger: dosya yoksa BOŞ defter — "bilinmiyor" değil, "onay yok" (fail-closed)', async () => {
+  const dir = await tmpProj();
+  const d = await readLedger(dir);
+  assert.equal(d.dosyaVar, false);
+  assert.equal(d.gecerli.size, 0);
+  assert.equal(claimOnayli(d, 'her-hangi'), false);
+});
+
+test('readLedger: gerçek satırlar rozet verir, kanalsız/bozuk satırlar VERMEZ (silinmeden)', async () => {
+  const dir = await tmpProj();
+  const base = { schema_version: 1, decision: 'approved' as const, by: 'ekin', levelBefore: 'test-kaniti', levelAfter: 'insan-onayi' };
+  // 1) gerçek terminal onayı
+  await appendPassportLog(dir, { ...base, at: '2026-07-28T10:00:00Z', claimId: 'gercek-1', title: 'A', source: 'terminal' });
+  // 2) kanal kaydı olmayan eski satır (kapı kodlanmadan önce yazılmış)
+  await appendPassportLog(dir, { ...base, at: '2026-07-28T10:05:00Z', claimId: 'kanalsiz-1', title: 'B' });
+  // 3) elle eklenmiş bozuk satır
+  await appendFile(passportLogPath(dir), 'bu json degil\n', 'utf8');
+
+  const d = await readLedger(dir);
+  assert.equal(d.dosyaVar, true);
+  assert.equal(claimOnayli(d, 'gercek-1'), true);
+  assert.equal(claimOnayli(d, 'kanalsiz-1'), false);
+  assert.ok(d.gecersiz.get('kanalsiz-1')?.includes('kanal'), 'dürüst gerekçe kalmalı');
+  assert.equal(d.reddedilenSatir, 1, 'bozuk satır sayılır (sessizce yok sayılmaz)');
+  assert.equal(d.okunanSatir, 2, 'ayrıştırılabilen satır sayısı');
+});
+
+test('readPassportLog: şekil VARSAYILMAZ — bozuk satır atlanır ve sayılır', async () => {
+  const dir = await tmpProj();
+  await mkdir(oceanDir(dir), { recursive: true });
+  await writeFile(passportLogPath(dir), '{"claimId":"a"}\n{bozuk\n\n[1,2]\n', 'utf8');
+  const { records, dosyaVar, atlanan } = await readPassportLog(dir);
+  assert.equal(dosyaVar, true);
+  assert.equal(atlanan, 1);
+  assert.equal(records.length, 2); // nesne + dizi (şekil DOĞRULAMASI ledger'ın işi)
 });

@@ -44,7 +44,6 @@ import { userInfo } from 'node:os';
 import {
   EVIDENCE_LEVEL_LABELS_TR,
   SCHEMA_VERSION,
-  isPassportFull,
   type Claim,
   type ClaimEvidence,
   type OceanState,
@@ -56,9 +55,18 @@ import { buildPassport, claimTitle } from './passport.ts';
 import { renderPano } from './pano.ts';
 import { notifyMac } from './notify.ts';
 import {
+  ROZETSIZ_ETIKET,
+  ROZETSIZ_NOT,
+  claimOnayli,
+  dogrulananSayisi,
+  kimlikGecerliMi,
+  pasaportTamMi,
+} from './ledger.ts';
+import {
   appendPassportLog,
   panoPath,
   readGoal,
+  readLedger,
   readState,
   writePano,
   writeState,
@@ -118,9 +126,6 @@ export interface VerifyResult {
 
 const YES = new Set(['e', 'evet', 'y', 'yes']);
 
-/** Kimlik olarak kabul edilmeyen değerler — bunlarla onay kaydı yazılmaz. */
-const KIMLIKSIZ = new Set(['', 'unknown', 'bilinmiyor', 'nobody', 'none', 'null', 'undefined']);
-
 /**
  * İnsan kapısı — SAF fonksiyon (testle kilitlenir).
  * Geçerse onaylayanın kimliğini döner; geçmezse nedeni + insan-okur açıklama.
@@ -139,8 +144,10 @@ export function insanKapisi(deps: {
         'Bu komutu kendi terminalinde, elinle çalıştır: ocean verify <id>',
     };
   }
+  // Kimlik listesi ledger.ts'te: onayı YAZAN kapı ile onayı GÖSTEREN kapı
+  // aynı ölçütü kullanmalı, yoksa biri diğerinin geçirdiğini reddeder.
   const by = (deps.by ?? osKullanici() ?? '').trim();
-  if (KIMLIKSIZ.has(by.toLocaleLowerCase('en-US'))) {
+  if (!kimlikGecerliMi(by)) {
     return {
       ok: false,
       gate: 'kimlik-yok',
@@ -206,6 +213,15 @@ export async function runVerify(cwd: string, id: string, deps: VerifyDeps): Prom
     };
   }
 
+  /**
+   * İNSAN ROZETİ = DEFTER — raporda da. Bir claim'in kendi `level:'insan-onayi'`
+   * yazması onu onaylı YAPMAZ: dayanak .ocean/passport.jsonl'deki terminal
+   * imzalı kayıttır (ledger.ts). Kaydı olmayan kayıt silinmez — "kanal kaydı
+   * yok" diye işaretlenir ve yeniden doğrulanabilir kalır (onarım yolu açık).
+   */
+  const defter = await readLedger(cwd);
+  const onayliMi = (c: Claim): boolean => claimOnayli(defter, c.id);
+
   // ── göster: her iddia + seviye + kanıtlar (karar insanın, kör onay yok) ──
   const hedefler = hedefIdx.map((i) => state.claims[i] as Claim);
   if (unit !== undefined && hedefler.length > 1) {
@@ -216,13 +232,24 @@ export async function runVerify(cwd: string, id: string, deps: VerifyDeps): Prom
   for (const c of hedefler) {
     deps.out('');
     deps.out(`İddia   : ${c.text}`);
-    deps.out(`Seviye  : ${EVIDENCE_LEVEL_LABELS_TR[c.level]}`);
+    // Seviye satırı defterle kesişir: dayanaksız "insan onayı" olduğu gibi yazılmaz.
+    const kaynaksiz = c.level === 'insan-onayi' && !onayliMi(c);
+    deps.out(
+      `Seviye  : ${EVIDENCE_LEVEL_LABELS_TR[c.level]}${
+        kaynaksiz ? ` — ${ROZETSIZ_ETIKET} (${ROZETSIZ_NOT}: passport.jsonl)` : ''
+      }`,
+    );
     deps.out('Kanıtlar:');
     for (const line of evidenceLines(c)) deps.out(line);
   }
   deps.out('');
 
-  const bekleyenIdx = hedefIdx.filter((i) => (state.claims[i] as Claim).level !== 'insan-onayi');
+  /**
+   * "Bekleyen" ölçütü SEVİYE değil DEFTERDİR: state'te 'insan-onayi' yazan ama
+   * defterde karşılığı olmayan kayıt onaylı sayılmaz, yeniden sorulur.
+   * (Aksi hâlde dayanaksız bir seviye, doğrulamayı sonsuza dek kilitlerdi.)
+   */
+  const bekleyenIdx = hedefIdx.filter((i) => !onayliMi(state.claims[i] as Claim));
   if (bekleyenIdx.length === 0) {
     deps.out(
       hedefler.length > 1
@@ -309,8 +336,14 @@ export async function runVerify(cwd: string, id: string, deps: VerifyDeps): Prom
     },
   ];
 
-  // ── full-tik kontrolü (bildirim BİR KEZ) ──
-  const fullTick = isPassportFull(passport);
+  /**
+   * ── full-tik kontrolü (bildirim BİR KEZ) ──
+   * Defter DİSKTEN taze okunur: az önce yazılan satırlar dâhil, her maddenin
+   * onayı passport.jsonl'de gerçekten duruyor mu? Kutlama da rozet gibi
+   * kanıta dayanır — state'in kendi "completed" iddiasına değil.
+   */
+  const ledger = await readLedger(cwd);
+  const fullTick = pasaportTamMi(passport, ledger);
   let notified = false;
   let fullTickNotifiedAt = state.fullTickNotifiedAt;
   if (fullTick && fullTickNotifiedAt === undefined) {
@@ -343,7 +376,7 @@ export async function runVerify(cwd: string, id: string, deps: VerifyDeps): Prom
   };
   await writeState(cwd, next);
   const goalText = await readGoal(cwd);
-  await writePano(cwd, renderPano(next, { goalText }));
+  await writePano(cwd, renderPano(next, { goalText, ledger }));
 
   deps.out('');
   deps.out(
@@ -351,7 +384,8 @@ export async function runVerify(cwd: string, id: string, deps: VerifyDeps): Prom
       ? `Onay kaydedildi: ${onaylananlar.length} kayıt → insan-onayı (${by}).`
       : `Onay kaydedildi: ${(onaylananlar[0] as Claim).id} → insan-onayı (${by}).`,
   );
-  deps.out(`Pasaport: ${passport.filter((p) => p.status === 'completed' && p.level === 'insan-onayi').length}/${passport.length} doğrulandı.`);
+  // Rapor da panoyla aynı kapıdan: sayı defterden gelir (passport.jsonl).
+  deps.out(`Pasaport: ${dogrulananSayisi(passport, ledger)}/${passport.length} doğrulandı.`);
   if (fullTick) deps.out('Pasaport FULL-TİK — ürün geliştirildi 🎉');
 
   return { ok: true, approved: true, fullTick, notified, panoPath: panoPath(cwd) };

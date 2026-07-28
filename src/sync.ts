@@ -30,11 +30,13 @@ import { renderPano } from './pano.ts';
 import {
   panoPath,
   readGoal,
+  readLedger,
   readNotes,
   readState,
   writePano,
   writeState,
 } from './state.ts';
+import { claimOnayli, dogrulananSayisi } from './ledger.ts';
 import type { Claim, LogCounts, LogEntry, OceanState, ScopeNotes } from './types.ts';
 
 export interface SyncResult {
@@ -48,6 +50,18 @@ export interface SyncResult {
   /** Kaç secret parçası maskelendi (şeffaflık). */
   redactHits?: number;
   transcriptsFound?: number;
+  /**
+   * DEFTERLE DESTEKLENEN "doğrulandı" sayısı (passport.jsonl). Pasaportun kendi
+   * 'completed' iddiası buraya girmez — CLI ve pano aynı sayıyı gösterir.
+   */
+  dogrulananBirim?: number;
+  /** Defterde geçerli terminal onayı BULUNAN claim sayısı ("insan onayı" der). */
+  onayliClaim?: number;
+  /**
+   * Kendini 'insan-onayi' sayan ama defterde karşılığı OLMAYAN claim sayısı.
+   * Rapor bunu insan onayı diye saymaz; "kanal kaydı yok" diye ayrı yazar.
+   */
+  kaynaksizClaim?: number;
 }
 
 /** Eski + taze claim birleşimi: onaylı eskiler kazanır, kalanlar tazeden gelir. */
@@ -186,9 +200,31 @@ export async function runSync(cwd: string, opts: { now?: Date } = {}): Promise<S
   };
   const { hits } = await writeState(cwd, next);
   const goalText = await readGoal(cwd);
-  await writePano(cwd, renderPano(next, { goalText }));
+  /**
+   * İNSAN ROZETİ = DEFTER. Pano, state'in kendi "insan onaylı" iddiasına değil
+   * .ocean/passport.jsonl'deki terminal imzalı kayda bakar; defter burada
+   * (diskten, her sync'te taze) okunur ve render'a verilir.
+   */
+  const ledger = await readLedger(cwd);
+  await writePano(cwd, renderPano(next, { goalText, ledger }));
 
   if (hits > 0) notes.push(`${hits} parça olası gizli bilgi maskelendi (state/pano).`);
+  // Dayanağı düşmüş onay iddiası SESSİZ kalmaz — sayıyla söylenir.
+  const kaynaksizMadde = passport.filter(
+    (p) => p.level === 'insan-onayi' && !p.claimIds.every((cid) => ledger.gecerli.has(cid)),
+  ).length;
+  if (kaynaksizMadde > 0) {
+    notes.push(
+      `${kaynaksizMadde} pasaport maddesi kendini insan onaylı sayıyor ama passport.jsonl defterinde ` +
+        `terminal imzalı bir doğrulama kaydına bağlanamadı — panoda "kanal kaydı yok" diye işaretlendi (silinmedi).`,
+    );
+  }
+
+  // Claim seviyesinde de aynı kapı: "insan onayı" diyen sayı deftere dayanır.
+  const onayliClaim = merged.filter((c) => claimOnayli(ledger, c.id)).length;
+  const kaynaksizClaim = merged.filter(
+    (c) => c.level === 'insan-onayi' && !claimOnayli(ledger, c.id),
+  ).length;
 
   return {
     ok: true,
@@ -197,5 +233,8 @@ export async function runSync(cwd: string, opts: { now?: Date } = {}): Promise<S
     panoPath: panoPath(cwd),
     redactHits: hits,
     transcriptsFound: claude.transcriptsFound,
+    dogrulananBirim: dogrulananSayisi(passport, ledger),
+    onayliClaim,
+    kaynaksizClaim,
   };
 }

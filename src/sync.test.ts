@@ -12,7 +12,7 @@ import { slugifyCwd } from './collect/claude.ts';
 import { runInit } from './init.ts';
 import { runSync, mergeClaims } from './sync.ts';
 import { buildPassport } from './passport.ts';
-import { readState } from './state.ts';
+import { appendPassportLog, readState, writeState } from './state.ts';
 import type { Claim } from './types.ts';
 
 const NOW = new Date('2026-07-28T12:00:00.000Z');
@@ -323,4 +323,81 @@ test('kapsam: proje DIŞI düzenleme sayılır ve panoda görünür (iz bırakar
   const html = await readFile(join(proj, '.ocean', 'pano.html'), 'utf8');
   assert.ok(html.includes('1 düzenleme bu proje kökünün dışındaki'));
   assert.equal(html.includes('gizli.ts'), false, 'proje dışı dosya adı panoya girmez');
+});
+
+// ── İNSAN ROZETİ = DEFTER (uçtan uca) ───────────────────────────────────────
+
+/** state'i "her şey insan onaylı" diye işaretle — DEFTERE hiçbir şey yazmadan. */
+async function botIddiasiYaz(proj: string): Promise<void> {
+  const st = await readState(proj);
+  assert.ok(st);
+  st.claims = st.claims.map((c) => ({ ...c, level: 'insan-onayi' as const }));
+  st.passport = st.passport.map((p) => ({
+    ...p,
+    status: 'completed' as const,
+    level: 'insan-onayi' as const,
+  }));
+  st.log.push({
+    ts: '2026-07-28T11:30:00.000Z',
+    text: 'Doğrulandı: her şey çalışıyor (dogfood-ajan)',
+    source: 'insan',
+  });
+  await writeState(proj, st);
+}
+
+test('DEFTERSİZ "insan onayı" iddiası: sync sonrası panoda rozet YOK, sayıyla söylenir', async () => {
+  const { proj, claudeDir } = await makeProject();
+  await runInit(proj, { now: NOW });
+  await withClaudeDir(claudeDir, () => runSync(proj, { now: NOW }));
+  await botIddiasiYaz(proj); // bot imzalı "onay" — passport.jsonl'e hiçbir satır yazılmadı
+
+  const res = await withClaudeDir(claudeDir, () => runSync(proj, { now: NOW }));
+  assert.equal(res.ok, true);
+  assert.equal(res.dogrulananBirim, 0, 'defter desteklemeyen madde doğrulandı sayılmaz');
+  assert.equal(res.kaynaksizClaim, 2, 'dayanaksız iddia sayısı dürüstçe raporlanır');
+  assert.equal(res.onayliClaim, 0);
+  assert.ok(res.notes.some((n) => n.includes('kanal kaydı yok')));
+
+  assert.ok(res.panoPath);
+  const html = await readFile(res.panoPath, 'utf8');
+  assert.equal(html.includes('>insan<'), false, 'bot imzalı log satırı insan rozeti alamaz');
+  assert.equal(html.includes('>insan-onayı<'), false, 'dayanaksız seviye rozeti çıkamaz');
+  assert.ok(html.includes('kanal kaydı yok'));
+  assert.ok(html.includes('0/1 doğrulandı'));
+  // sessiz silme yok: satır panoda duruyor
+  assert.ok(html.includes('Doğrulandı: her şey çalışıyor'));
+  // state'in kendi iddiası korunur (veri yok edilmez) — yalnız gösterim gerçeğe bağlı
+  const st = await readState(proj);
+  assert.ok(st?.claims.every((c) => c.level === 'insan-onayi'));
+});
+
+test('GERÇEK terminal kaydı defterdeyse aynı state rozeti ALIR (kapı çift yönlü)', async () => {
+  const { proj, claudeDir } = await makeProject();
+  await runInit(proj, { now: NOW });
+  await withClaudeDir(claudeDir, () => runSync(proj, { now: NOW }));
+  await botIddiasiYaz(proj);
+
+  // Aynı iddialar, bu kez gerçek (terminal imzalı) doğrulama kayıtlarıyla.
+  for (const claimId of [`dosya-git-${S1}`, `test-${S1}-0`]) {
+    await appendPassportLog(proj, {
+      schema_version: 1,
+      at: '2026-07-28T11:30:00.000Z',
+      claimId,
+      title: 'onaylanan iş',
+      decision: 'approved',
+      by: 'ekin',
+      source: 'terminal',
+      levelBefore: 'test-kaniti',
+      levelAfter: 'insan-onayi',
+    });
+  }
+
+  const res = await withClaudeDir(claudeDir, () => runSync(proj, { now: NOW }));
+  assert.equal(res.dogrulananBirim, 1);
+  assert.equal(res.kaynaksizClaim, 0);
+  assert.equal(res.onayliClaim, 2);
+  const html = await readFile(res.panoPath ?? '', 'utf8');
+  assert.ok(html.includes('>insan-onayı<'));
+  assert.ok(html.includes('1/1 doğrulandı'));
+  assert.equal(html.includes('kanal kaydı yok'), false);
 });

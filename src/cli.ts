@@ -68,10 +68,22 @@ async function cmdSync(_args: Args): Promise<void> {
   const st = res.state;
   const counts = new Map<EvidenceLevel, number>();
   for (const c of st.claims) counts.set(c.level, (counts.get(c.level) ?? 0) + 1);
-  const levelSummary = LEVEL_ORDER.filter((l) => (counts.get(l) ?? 0) > 0)
-    .map((l) => `${counts.get(l)} ${EVIDENCE_LEVEL_LABELS_TR[l].split(' — ')[0]?.toLocaleLowerCase('tr-TR')}`)
-    .join(' · ');
-  const verified = st.passport.filter((p) => p.status === 'completed' && p.level === 'insan-onayi').length;
+  /**
+   * "insan onayı" sayısı DEFTERDEN gelir (passport.jsonl), claim'in kendi
+   * seviyesinden değil. Dayanağı olmayanlar sayıya girmez; yok da sayılmaz —
+   * ayrı "kanal kaydı yok" kalemi olarak yazılır (sessiz silme yok).
+   */
+  const kaynaksiz = res.kaynaksizClaim ?? 0;
+  counts.set('insan-onayi', res.onayliClaim ?? 0);
+  const levelSummary = [
+    ...LEVEL_ORDER.filter((l) => (counts.get(l) ?? 0) > 0).map(
+      (l) => `${counts.get(l)} ${EVIDENCE_LEVEL_LABELS_TR[l].split(' — ')[0]?.toLocaleLowerCase('tr-TR')}`,
+    ),
+    ...(kaynaksiz > 0 ? [`${kaynaksiz} kanal kaydı yok`] : []),
+  ].join(' · ');
+  // Rapor da panoyla AYNI kapıdan geçer: "doğrulandı" sayısı passport.jsonl
+  // defterine dayanır, pasaportun kendi 'completed' iddiasına değil.
+  const verified = res.dogrulananBirim ?? 0;
 
   out(`Ocean senkron tamam — ${st.projectName}`);
   out(`  Transcript : ${res.transcriptsFound ?? 0} oturum tarandı`);

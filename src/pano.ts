@@ -14,18 +14,36 @@
  *   (beyan kanıt değildir → görünürlüğü de kanıtla eşit olamaz).
  * - Tüm dinamik metin HTML-escape edilir; tek JS: kopyala butonu (opsiyonel,
  *   JS'siz de komut metni seçilip kopyalanabilir).
+ * - İNSAN ROZETİ = YALNIZ DEFTER. Hiçbir satır kendi iddiasıyla "insan onaylı"
+ *   görünemez: rozet, .ocean/passport.jsonl'deki geçerli (imzalı + terminal
+ *   kanallı) doğrulama kaydına dayanır (ledger.ts). Kaydı olmayan kayıt
+ *   SİLİNMEZ — "kanal kaydı yok" diye işaretlenir. Defter verilmezse rozet
+ *   verilmez (fail-closed).
  */
 import {
   CARD_PRIMARY_BUTTON_TR,
   TOOL_VERSION,
-  isPassportFull,
   type Card,
+  type Claim,
   type EvidenceLevel,
   type LogEntry,
   type LogSource,
   type OceanState,
   type ScopeNotes,
 } from './types.ts';
+import {
+  BOS_LEDGER,
+  ROZETSIZ_BASLIK,
+  ROZETSIZ_ETIKET,
+  ROZETSIZ_NOT,
+  birimOnayli,
+  claimOnayli,
+  dogrulananSayisi,
+  logSatiriOnayli,
+  maddeOnayli,
+  pasaportTamMi,
+  type VerificationLedger,
+} from './ledger.ts';
 
 // ── küçük yardımcılar ────────────────────────────────────────────────────────
 
@@ -59,7 +77,18 @@ const SOURCE_PILL: Record<LogSource, { cls: string; label: string }> = {
   ocean: { cls: 'ev-ocean', label: 'ocean' },
 };
 
-function levelPill(level: EvidenceLevel): string {
+/** Defterle desteklenmeyen "insan" iddiasının yerine geçen dürüst rozet. */
+const ROZETSIZ_PILL = `<span class="pill ev-stale" title="${esc(ROZETSIZ_BASLIK)}">${esc(
+  ROZETSIZ_ETIKET,
+)}</span>`;
+
+/**
+ * Seviye rozeti. `onayli` = bu birimin defterde geçerli doğrulama kaydı var mı.
+ * 'insan-onayi' seviyesi için TEK yetkili budur; kaydı olmayan iddia rozet
+ * ALAMAZ (parametre zorunlu: unutulup fail-open olmasın).
+ */
+function levelPill(level: EvidenceLevel, onayli: boolean): string {
+  if (level === 'insan-onayi' && !onayli) return ROZETSIZ_PILL;
   const p = LEVEL_PILL[level];
   return `<span class="pill ${p.cls}">${p.label}</span>`;
 }
@@ -90,12 +119,47 @@ function kisaBaslik(s: string, max = 60): string {
   return t.length > max ? `${t.slice(0, max)}…` : t;
 }
 
-function renderCard(card: Card): string {
+/**
+ * Kartın dayandığı KAYIT kimliği — rozetin defterde aranacağı anahtar.
+ *
+ * Normal kartlarda `card.id` zaten claim id'sidir. 'kart-tam' gibi sentetik
+ * kartların kendi kimliği yoktur; gerçek yine bir claim'den gelir, o yüzden
+ * aynı tarih + aynı cümle TEK bir claim'e işaret ediyorsa o kullanılır.
+ * Birden çok aday varsa (ya da hiç yoksa) rozet YOKTUR — belirsizlikte
+ * fail-closed davranırız, ama gerçek onayı da haksız yere düşürmeyiz.
+ */
+function kartKayitId(card: Card, claims: readonly Claim[]): string | null {
+  if (claims.some((c) => c.id === card.id)) return card.id;
+  if (card.factDate === undefined) return null;
+  const adaylar = claims.filter((c) => c.createdAt === card.factDate && c.text === card.fact);
+  return adaylar.length === 1 ? (adaylar[0] as Claim).id : null;
+}
+
+/**
+ * Kartın "İnsan onayı" satırı — metin DEFTERDEN yazılır, claim'in kendi
+ * cümlesinden DEĞİL. Böylece uydurulmuş bir kanıt cümlesi bu satıra giremez.
+ */
+function insanOnayiSatiri(
+  card: Card,
+  ledger: VerificationLedger,
+  kayitId: string | null,
+): string | null {
+  const kayit = kayitId === null ? undefined : ledger.gecerli.get(kayitId);
+  if (kayit !== undefined) {
+    return `${kayit.by} doğruladı — ${fmtTs(kayit.at)} (terminal onayı, passport.jsonl)`;
+  }
+  // İddia var ama dayanağı yok → sessizce silinmez, dürüstçe işaretlenir.
+  return card.evidence.humanApproval === null ? null : ROZETSIZ_NOT;
+}
+
+function renderCard(card: Card, ledger: VerificationLedger, claims: readonly Claim[]): string {
   const ev = card.evidence;
-  const row = (k: string, v: string | null): string =>
-    `<div class="krow"><span class="k">${k}</span><span class="v${v === null ? ' none' : ''}">${
-      v === null ? 'kayıt yok' : esc(v)
-    }</span></div>`;
+  const kayitId = kartKayitId(card, claims);
+  const onayli = kayitId !== null && claimOnayli(ledger, kayitId);
+  const row = (k: string, v: string | null, stale = false): string =>
+    `<div class="krow"><span class="k">${k}</span><span class="v${v === null ? ' none' : ''}${
+      stale ? ' stale' : ''
+    }">${v === null ? 'kayıt yok' : esc(v)}</span></div>`;
 
   const isClaimCard = card.id !== 'kart-bos' && card.id !== 'kart-tam';
   const verifyBox = isClaimCard
@@ -109,7 +173,7 @@ function renderCard(card: Card): string {
   return `<section class="panel hero" aria-label="Sıradaki tek hareket">
     <div class="heroTop">
       <span class="eyebrow">Sıradaki tek hareket</span>
-      ${levelPill(card.factLevel)}
+      ${levelPill(card.factLevel, onayli)}
     </div>
     <h2 class="fact">${esc(card.fact)}</h2>
     ${
@@ -122,7 +186,7 @@ function renderCard(card: Card): string {
     <div class="evrows">
       ${row('Git diff', ev.gitDiff)}
       ${row('Test çıktısı', ev.testOutput)}
-      ${row('İnsan onayı', ev.humanApproval)}
+      ${row('İnsan onayı', insanOnayiSatiri(card, ledger, kayitId), !onayli && ev.humanApproval !== null)}
     </div>
     <div class="unknown"><span class="k">Eksik / belirsiz</span><p>${esc(card.unknown)}</p></div>
     <div class="action">
@@ -139,11 +203,21 @@ function renderCard(card: Card): string {
 
 const LOG_SHOWN_MAX = 100;
 
-function logItems(entries: readonly LogEntry[]): string {
+/**
+ * Log satırı rozeti. 'insan' kaynağı KENDİ BAŞINA yetmez: satır, defterdeki
+ * bir terminal onayına (aynı zaman damgası) bağlanamıyorsa "insan" rozeti
+ * ALMAZ — satır silinmez, "kanal kaydı yok" diye işaretlenir.
+ */
+function logItems(entries: readonly LogEntry[], ledger: VerificationLedger): string {
   return entries
     .map((e) => {
+      const kaynaksiz = e.source === 'insan' && !logSatiriOnayli(ledger, e.ts);
       const p = SOURCE_PILL[e.source];
-      return `<li><span class="ts mono">${esc(fmtTs(e.ts))}</span><span class="pill ${p.cls}">${p.label}</span><span class="txt">${esc(e.text)}</span></li>`;
+      const pill = kaynaksiz
+        ? ROZETSIZ_PILL
+        : `<span class="pill ${p.cls}">${p.label}</span>`;
+      const not = kaynaksiz ? `<span class="kaynaksiz">${esc(ROZETSIZ_NOT)}</span>` : '';
+      return `<li><span class="ts mono">${esc(fmtTs(e.ts))}</span>${pill}<span class="txt">${esc(e.text)}${not}</span></li>`;
     })
     .join('\n');
 }
@@ -156,7 +230,11 @@ function logItems(entries: readonly LogEntry[]): string {
  * Beyan kanıt değildir → varsayılan görünürlüğü de kanıtla eşit olamaz.
  * Silmiyoruz (dürüstlük: kayıt duruyor), katlıyoruz — isteyen açar.
  */
-function renderLog(log: readonly LogEntry[], scope?: ScopeNotes): string {
+function renderLog(
+  log: readonly LogEntry[],
+  ledger: VerificationLedger,
+  scope?: ScopeNotes,
+): string {
   const total = log.length;
   const ters = [...log].reverse(); // en yeni üstte
   const kanit = ters.filter((e) => e.source !== 'claude-beyan');
@@ -196,17 +274,32 @@ function renderLog(log: readonly LogEntry[], scope?: ScopeNotes): string {
     beyan.length > 0
       ? `<details class="beyanlar">
       <summary><span class="pill ev-none">beyan</span> Claude'un beyanları (${beyan.length}) — kanıt değil, katlı</summary>
-      <ul class="timeline">${logItems(beyanShown)}</ul>
+      <ul class="timeline">${logItems(beyanShown, ledger)}</ul>
       ${capNote(beyanShown.length, beyan.length, hamBeyan, 'beyan')}
     </details>`
+      : '';
+
+  /**
+   * Kaynaksız "insan" satırı varsa bu SAYIYLA söylenir — gizlenmez de,
+   * rozetlenmez de. (Kaç satır dayanaksız çıktı: denetçinin ilk sorusu.)
+   */
+  const kaynaksizSayi = ters.filter(
+    (e) => e.source === 'insan' && !logSatiriOnayli(ledger, e.ts),
+  ).length;
+  const kaynaksizNot =
+    kaynaksizSayi > 0
+      ? `<p class="capnote">${kaynaksizSayi} satır kendini insan onayı sayıyor ama ` +
+        `<span class="mono">passport.jsonl</span> defterinde terminal imzalı bir doğrulama kaydına bağlanamadı — ` +
+        `rozetsiz bırakıldı, kayıt silinmedi.</p>`
       : '';
 
   return `<section class="panel" aria-label="Log history">
     <div class="sechead"><span class="eyebrow">Log history</span><span class="count mono">panoda ${kanit.length} kanıt · ${beyan.length} beyan</span></div>
     ${empty}
     ${kanitBos}
-    <ul class="timeline">${logItems(kanitShown)}</ul>
+    <ul class="timeline">${logItems(kanitShown, ledger)}</ul>
     ${capNote(kanitShown.length, kanit.length, hamKanit, 'kanıt')}
+    ${kaynaksizNot}
     ${beyanBlok}
   </section>`;
 }
@@ -312,16 +405,18 @@ function renderScope(scope: ScopeNotes | undefined): string {
   </section>`;
 }
 
-function renderPassport(state: OceanState): string {
+function renderPassport(state: OceanState, ledger: VerificationLedger): string {
   const items = state.passport;
-  const verified = items.filter((i) => i.status === 'completed' && i.level === 'insan-onayi').length;
-  const full = isPassportFull(items);
+  // Tik de, sayı da, kutlama bandı da DEFTERE dayanır: maddenin kendi
+  // "completed" iddiası tek başına ✓ getirmez (yoksa tik ölçmez, süsler).
+  const verified = dogrulananSayisi(items, ledger);
+  const full = pasaportTamMi(items, ledger);
   const band = full
     ? `<div class="fullband">Ürün geliştirildi 🎉 — pasaporttaki tüm maddeler insan onaylı.</div>`
     : '';
   const rows = items
     .map((i) => {
-      const done = i.status === 'completed' && i.level === 'insan-onayi';
+      const done = maddeOnayli(ledger, i);
       // İş birimi = insanın tek seferde onaylayabileceği öbek → komutu görünür
       // olsun ki FULL-TİK erişilebilir kalsın (kayıt sayısı da dürüstçe yazar).
       const adet = i.claimIds.length > 1 ? `<span class="pcount mono">${i.claimIds.length} kayıt</span>` : '';
@@ -336,7 +431,15 @@ function renderPassport(state: OceanState): string {
             etiket: `Doğrulama komutunu kopyala — ${kisaBaslik(i.title)}`,
           });
       const reason = i.reason !== undefined ? `<span class="preason">${esc(i.reason)}</span>` : '';
-      return `<li class="pitem"><span class="tick ${done ? 'on' : ''}">${done ? '✓' : '○'}</span><span class="ptitle">${esc(i.title)}${reason}</span>${adet}${levelPill(i.level)}${cmd}</li>`;
+      // Madde "insan onaylı" diyor ama defterde karşılığı yoksa: silme yok,
+      // dürüst not — hangi kaydın dayanağı düşmüş, görünsün.
+      const kaynaksiz =
+        i.level === 'insan-onayi' && !birimOnayli(ledger, i.claimIds)
+          ? `<span class="preason kaynaksiz">${esc(ROZETSIZ_NOT)} — bu madde ${esc(
+              'passport.jsonl',
+            )} defterindeki bir terminal onayına bağlanamadı.</span>`
+          : '';
+      return `<li class="pitem"><span class="tick ${done ? 'on' : ''}">${done ? '✓' : '○'}</span><span class="ptitle">${esc(i.title)}${reason}${kaynaksiz}</span>${adet}${levelPill(i.level, done)}${cmd}</li>`;
     })
     .join('\n');
   const empty =
@@ -356,6 +459,12 @@ function renderPassport(state: OceanState): string {
 export interface PanoOptions {
   /** goal.md'den okunan güncel hedef satırı (beyan — Claude/kullanıcı yazar). */
   goalText?: string | null;
+  /**
+   * .ocean/passport.jsonl doğrulama defteri — İNSAN ROZETİNİN TEK KAYNAĞI.
+   * VERİLMEZSE hiçbir yerde insan rozeti çıkmaz (fail-closed): rozet için
+   * kanıt gerekir, "bilinmiyor" insan sayılmaz.
+   */
+  ledger?: VerificationLedger;
 }
 
 const CSS = `
@@ -393,6 +502,10 @@ header.top .goal .k{font-family:var(--mono);font-size:9.5px;letter-spacing:.14em
 .ev-human{color:var(--teal2);background:var(--teald)}
 .ev-none{color:var(--plan);background:rgba(135,144,160,.14)}
 .ev-ocean{color:var(--violet);background:rgba(167,139,250,.13)}
+/* kaynaksız onay iddiası: sakin uyarı — alarm değil, dürüst işaret */
+.ev-stale{color:var(--watch);background:rgba(251,191,36,.11)}
+.kaynaksiz{display:block;font-size:11.5px;color:var(--watch);margin-top:2px}
+.krow .v.stale{color:var(--watch)}
 .evrows{margin-top:16px}
 .krow{display:flex;align-items:baseline;justify-content:space-between;gap:12px;border-bottom:1px solid var(--line);padding:11px 0}
 .krow:last-child{border-bottom:none}
@@ -476,6 +589,7 @@ function oceanKopyala(btn){
  * aynı state + aynı goal → aynı HTML. fs yok, network yok, LLM yok.
  */
 export function renderPano(state: OceanState, opts: PanoOptions = {}): string {
+  const ledger = opts.ledger ?? BOS_LEDGER;
   const card: Card | undefined = state.card;
   const goal =
     opts.goalText !== undefined && opts.goalText !== null && opts.goalText.trim() !== ''
@@ -486,7 +600,7 @@ export function renderPano(state: OceanState, opts: PanoOptions = {}): string {
 
   const cardHtml =
     card !== undefined
-      ? renderCard(card)
+      ? renderCard(card, ledger, state.claims)
       : `<section class="panel hero"><span class="eyebrow">Sıradaki tek hareket</span>
          <h2 class="fact">Henüz kart üretilmedi.</h2>
          <div class="action"><p class="verb">Senkronu çalıştır.</p>${cmdBlock('ocean sync')}</div></section>`;
@@ -510,10 +624,11 @@ export function renderPano(state: OceanState, opts: PanoOptions = {}): string {
   </header>
   ${cardHtml}
   ${renderScope(state.scope)}
-  ${renderLog(state.log, state.scope)}
-  ${renderPassport(state)}
+  ${renderLog(state.log, ledger, state.scope)}
+  ${renderPassport(state, ledger)}
   <footer>Ocean yalnız kanıtlı gerçekleri ve açık belirsizlikleri gösterir.<br>
-  kanıt seviyeleri: dosya-kanıtı · test-kanıtı · insan-onayı · doğrulanmadı</footer>
+  kanıt seviyeleri: dosya-kanıtı · test-kanıtı · insan-onayı · doğrulanmadı<br>
+  insan onayı rozeti yalnız <span class="mono">.ocean/passport.jsonl</span> defterindeki terminal imzalı kayda dayanır</footer>
 </main>
 <script>${COPY_JS}</script>
 </body>

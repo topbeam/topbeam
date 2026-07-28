@@ -307,12 +307,44 @@ export interface PassportItem {
   level: EvidenceLevel;
 }
 
-/** Pasaport FULL-TİK kontrolü: her madde completed + insan-onayı seviyesinde mi? */
+/**
+ * Pasaport FULL-TİK kontrolü — YALNIZ state'in kendi iddiasına bakar.
+ *
+ * DİKKAT (dürüstlük sınırı): bu fonksiyon "state böyle diyor" der, "kanıtlı"
+ * demez. Panoya/rapora çıkan FULL-TİK ve "insan" rozeti passport.jsonl
+ * defteriyle desteklenmek ZORUNDA — onun için `pasaportTamMi(items, ledger)`
+ * kullanılır (ledger.ts). Burası şema-içi tutarlılık kontrolüdür.
+ */
 export function isPassportFull(items: readonly PassportItem[]): boolean {
   return (
     items.length > 0 &&
     items.every((i) => i.status === 'completed' && i.level === 'insan-onayi')
   );
+}
+
+// ── passport.jsonl (append-only onay defteri) ────────────────────────────────
+
+/**
+ * Tek onay kaydı — değişmez log satırı ve İNSAN ROZETİNİN TEK KAYNAĞI.
+ * (Veri modeli burada durur ki saf `ledger.ts` fs katmanına bağlanmasın;
+ * dosyaya yazma tarafı state.ts'te.)
+ */
+export interface PassportLogRecord {
+  schema_version: number;
+  at: string; // ISO-8601
+  claimId: string;
+  title: string;
+  decision: Verification['decision'];
+  by: string;
+  note?: string;
+  /**
+   * Onayın geldiği kanal ('terminal' = gerçek TTY). Bu alan olmayan satırlar
+   * insan kapısı koda girmeden ÖNCE yazılmıştır — denetçi ikisini ayırabilsin
+   * diye sonradan doldurulmaz VE rozet hakkı vermez (ledger.ts kayitGecerliMi).
+   */
+  source?: Verification['source'];
+  levelBefore: string;
+  levelAfter: string;
 }
 
 // ── Kapsam: neyin dışarıda bırakıldığı (gürültü kesme İZ BIRAKARAK) ──────────

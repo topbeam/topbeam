@@ -1,15 +1,42 @@
 /**
  * pano.ts testleri — saf render, fs yok.
  * Dürüstlük invaryantları: yüzde-progress yok, kanıt satırı uydurulmaz,
- * escape zorunlu, "Doğrulamayı başlat" kutusu yalnız gerçek claim kartında.
+ * escape zorunlu, "Doğrulamayı başlat" kutusu yalnız gerçek claim kartında,
+ * VE insan rozeti yalnız passport.jsonl defterine dayanır (fail-closed).
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { newOceanState, type Claim, type OceanState, type ScopeNotes } from './types.ts';
 import { buildCard } from './card.ts';
+import { buildLedger, type VerificationLedger } from './ledger.ts';
 import { renderPano, esc } from './pano.ts';
 
 const NOW = new Date('2026-07-28T12:00:00Z');
+const ONAY_TS = '2026-07-28T11:30:00Z';
+
+/**
+ * GERÇEK passport.jsonl satır şekliyle defter kur — rozetin TEK kaynağı.
+ * `over` ile tek alan bozularak "şart sağlanmazsa rozet yok" kilitlenir.
+ */
+function ledgerFixture(
+  claimIds: readonly string[],
+  over: Record<string, unknown> = {},
+): VerificationLedger {
+  return buildLedger(
+    claimIds.map((claimId) => ({
+      schema_version: 1,
+      at: ONAY_TS,
+      claimId,
+      title: 'onaylanan iş',
+      decision: 'approved',
+      by: 'ekin',
+      source: 'terminal',
+      levelBefore: 'test-kaniti',
+      levelAfter: 'insan-onayi',
+      ...over,
+    })),
+  );
+}
 
 function claimFixture(over: Partial<Claim> = {}): Claim {
   return {
@@ -50,12 +77,17 @@ function stateFixture(): OceanState {
       status: 'completed',
       claimIds: [c2.id],
       level: 'insan-onayi',
-      verification: { by: 'ekin', at: '2026-07-28T11:30:00Z', decision: 'approved' },
+      verification: { by: 'ekin', at: ONAY_TS, decision: 'approved', source: 'terminal' },
     },
   ];
   st.card = buildCard(st.claims, { now: NOW });
   st.lastSyncedAt = NOW.toISOString();
   return st;
+}
+
+/** stateFixture'daki onayın GERÇEK dayanağı — defterdeki karşılığı. */
+function stateLedger(): VerificationLedger {
+  return ledgerFixture(['test-abc-0']);
 }
 
 test('kart EN ÜSTTE ve 6 alan + Doğrulamayı başlat kutusu + verify komutu', () => {
@@ -82,7 +114,7 @@ test('kanıt satırı uydurulmaz: olmayan tür "kayıt yok" görünür', () => {
 });
 
 test('yüzde-progress-bar YOK; dürüst sayım VAR', () => {
-  const html = renderPano(stateFixture());
+  const html = renderPano(stateFixture(), { ledger: stateLedger() });
   assert.equal(html.includes('<progress'), false);
   assert.equal(/progress-bar|progressbar/i.test(html), false);
   assert.ok(html.includes('1/2 doğrulandı'));
@@ -119,13 +151,20 @@ test('log: satır sayıları dürüst — beyan gizlense de sayılır', () => {
 
 test('full-tik değilse kutlama bandı YOK; full-tik ise VAR', () => {
   const st = stateFixture();
-  assert.equal(renderPano(st).includes('Ürün geliştirildi'), false);
+  assert.equal(
+    renderPano(st, { ledger: stateLedger() }).includes('Ürün geliştirildi'),
+    false,
+  );
 
   for (const p of st.passport) {
     p.status = 'completed';
     p.level = 'insan-onayi';
   }
-  assert.ok(renderPano(st).includes('Ürün geliştirildi 🎉'));
+  // Kutlama da DEFTERE dayanır: iki maddenin de gerçek onay kaydı olmalı.
+  const defter = ledgerFixture(['dosya-git-abc', 'test-abc-0']);
+  assert.ok(renderPano(st, { ledger: defter }).includes('Ürün geliştirildi 🎉'));
+  // Defter olmadan aynı state kutlama BASTIRAMAZ (fail-closed).
+  assert.equal(renderPano(st).includes('Ürün geliştirildi'), false);
 });
 
 test('pasaport: doğrulanmamış birimde verify komutu + kayıt sayısı görünür', () => {
@@ -138,7 +177,7 @@ test('pasaport: doğrulanmamış birimde verify komutu + kayıt sayısı görün
     level: 'dogrulanmadi',
     reason: '1/3 kayıt insan onaylı — birim henüz tamam değil.',
   };
-  const html = renderPano(st);
+  const html = renderPano(st, { ledger: stateLedger() });
   assert.ok(html.includes('ocean verify birim-s1'));
   assert.ok(html.includes('3 kayıt'));
   assert.ok(html.includes('1/3 kayıt insan onaylı'));
@@ -177,7 +216,9 @@ test('pasaport: onaylı maddede komut yok (yapılacak iş yok) + reduced-motion 
     p.status = 'completed';
     p.level = 'insan-onayi';
   }
-  const html = renderPano(st);
+  // "Onaylı" sayılmak DEFTERE bağlı: iki maddenin de gerçek kaydı olmalı,
+  // yoksa iş bitmemiştir ve komut satırı görünmeye DEVAM eder (fail-closed).
+  const html = renderPano(st, { ledger: ledgerFixture(['dosya-git-abc', 'test-abc-0']) });
   assert.equal(html.includes('class="cmdrow pcmd"'), false);
   assert.ok(html.includes('@media(prefers-reduced-motion:reduce)'));
   assert.ok(html.includes(':focus-visible'), 'klavye odağı görünür olmalı');
@@ -338,4 +379,164 @@ test('kart gerçeğinin KENDİ tarihi panoda görünür (tazelik damgası yanıl
   assert.ok(html.includes('Bu gerçek'), 'gerçeğin tarihi kartta ayrı satırda durmalı');
   assert.ok(html.includes('2026-07-11 09:00'), 'gösterilen tarih kaydın kendi tarihi olmalı');
   assert.ok(html.includes('Kart güncellendi'), 'kartın üretim damgası ayrı kalır');
+});
+
+// ── İNSAN ROZETİ = DEFTER (ürünün en ağır dürüstlük invaryantı) ─────────────
+//
+// Sızıntının şekli: bir LOG SATIRI `source:'insan'` yazdığı için, bir CLAIM
+// `level:'insan-onayi'` yazdığı için panoda "insan" rozeti alıyordu. Aşağıdaki
+// üç invaryant bunu yapısal olarak imkânsız kılar. Rozetin kaynağı tek yerdir:
+// .ocean/passport.jsonl'deki terminal imzalı doğrulama kaydı.
+
+/** Kendini insan onaylı SAYAN state — dayanağı ayrı verilir (ya da hiç verilmez). */
+function iddiaEdenState(): OceanState {
+  const st = newOceanState('İddia Proje', NOW);
+  const c = claimFixture({
+    id: 'test-abc-0',
+    level: 'insan-onayi',
+    kind: 'test',
+    // Uydurulmuş "insan kanıtı" cümlesi — bir ajan bunu yazabilir.
+    evidence: [{ kind: 'human', summary: 'dogfood-ajan 2026-07-28 tarihinde doğruladı.' }],
+    createdAt: '2026-07-28T11:00:00Z',
+  });
+  st.claims = [c];
+  st.log = [
+    { ts: ONAY_TS, text: 'Doğrulandı: 19 test geçti (dogfood-ajan)', source: 'insan' },
+    { ts: '2026-07-28T09:00:00Z', text: 'Commit: iskelet (abc123)', source: 'git' },
+  ];
+  st.passport = [
+    { id: 'birim-s1', title: 'oturum işi', status: 'completed', claimIds: [c.id], level: 'insan-onayi' },
+  ];
+  // Kart doğrudan kurulur: kural motoruna (card.ts) bağlanmadan render kilitlensin.
+  st.card = {
+    id: c.id,
+    fact: '19 test geçti (npm test).',
+    factLevel: 'insan-onayi',
+    evidence: { gitDiff: null, testOutput: '19/19 test geçti', humanApproval: 'dogfood-ajan doğruladı, 2026-07-28' },
+    unknown: 'Bilinmeyen yok.',
+    action: { verb: 'Doğrulamayı gözden geçir.' },
+    why: 'Kayıt insan onayı iddia ediyor.',
+    doneWhen: 'Terminal onayı defterde görünürse.',
+    rule: 'insan-onayi-bekliyor',
+    updatedAt: NOW.toISOString(),
+  };
+  st.lastSyncedAt = NOW.toISOString();
+  return st;
+}
+
+test('INVARYANT: verification OLMADAN insan rozeti YOK (log · kart · pasaport)', () => {
+  const html = renderPano(iddiaEdenState()); // defter verilmedi = fail-closed
+
+  // hiçbir yerde "insan" rozeti yok — ne log satırında ne seviye pilinde
+  assert.equal(html.includes('>insan<'), false, 'log satırı kendi iddiasıyla insan rozeti alamaz');
+  assert.equal(html.includes('>insan-onayı<'), false, 'seviye pili dayanaksız verilemez');
+  // yerine dürüst işaret
+  assert.ok(html.includes('kanal kaydı yok'));
+  assert.ok(html.includes('doğrulama kaydı bulunamadı'));
+  // SESSİZ SİLME YOK: satırın kendisi hâlâ panoda
+  assert.ok(html.includes('Doğrulandı: 19 test geçti'));
+  // sayı da dürüst: defterle desteklenmeyen madde "doğrulandı" sayılmaz
+  assert.ok(html.includes('0/1 doğrulandı'));
+  assert.ok(html.includes('1 satır kendini insan onayı sayıyor'));
+  // kartın uydurulmuş insan-kanıtı cümlesi ekrana ÇIKMAZ
+  assert.equal(html.includes('dogfood-ajan doğruladı'), false);
+});
+
+test('INVARYANT: kayıt "terminal" kanalı taşımıyorsa insan rozeti YOK', () => {
+  for (const bozuk of [
+    { source: undefined },
+    { source: 'ajan' },
+    { by: 'bilinmiyor' },
+    { decision: 'corrected' },
+    { levelAfter: 'test-kaniti' },
+  ]) {
+    const defter = ledgerFixture(['test-abc-0'], bozuk);
+    const html = renderPano(iddiaEdenState(), { ledger: defter });
+    const ad = JSON.stringify(bozuk);
+    assert.equal(html.includes('>insan<'), false, `${ad}: log rozeti düşmeliydi`);
+    assert.equal(html.includes('>insan-onayı<'), false, `${ad}: seviye rozeti düşmeliydi`);
+    assert.ok(html.includes('kanal kaydı yok'), `${ad}: dürüst işaret olmalı`);
+    assert.ok(html.includes('0/1 doğrulandı'), `${ad}: sayı yükselmemeli`);
+  }
+});
+
+test('INVARYANT: GEÇERLİ verification varsa rozet VAR ve metin DEFTERDEN gelir', () => {
+  const html = renderPano(iddiaEdenState(), { ledger: ledgerFixture(['test-abc-0']) });
+  assert.ok(html.includes('>insan<'), 'defterle bağlanan log satırı rozetini alır');
+  assert.ok(html.includes('>insan-onayı<'), 'seviye pili artık dayanaklı');
+  assert.equal(html.includes('kanal kaydı yok'), false);
+  assert.equal(html.includes('doğrulama kaydı bulunamadı'), false);
+  assert.ok(html.includes('1/1 doğrulandı'));
+  // İnsan onayı satırı defterden yazılır — claim'in uydurma cümlesinden değil
+  assert.ok(html.includes('ekin doğruladı — 2026-07-28 11:30 (terminal onayı, passport.jsonl)'));
+  assert.equal(html.includes('dogfood-ajan doğruladı'), false);
+});
+
+test('rozet kayıt BAŞINA verilir: başka claim\'in onayı bu satıra rozet kazandırmaz', () => {
+  const html = renderPano(iddiaEdenState(), { ledger: ledgerFixture(['baska-claim']) });
+  assert.equal(html.includes('>insan-onayı<'), false);
+  assert.ok(html.includes('kanal kaydı yok'));
+  assert.ok(html.includes('0/1 doğrulandı'));
+});
+
+test('log satırı bağı ZAMAN DAMGASIDIR: onayla eşleşmeyen satır rozetsiz kalır', () => {
+  const st = iddiaEdenState();
+  // Aynı claim onaylı, ama bu log satırı başka bir anın satırı → bağ yok.
+  st.log = [{ ts: '2026-07-27T08:00:00Z', text: 'Doğrulandı: eski bir iş (birisi)', source: 'insan' }];
+  const html = renderPano(st, { ledger: ledgerFixture(['test-abc-0']) });
+  assert.equal(html.includes('>insan<'), false, 'zamanı bağlanamayan satır rozet alamaz');
+  assert.ok(html.includes('Doğrulandı: eski bir iş'), 'satır silinmez');
+  assert.ok(html.includes('kanal kaydı yok'));
+});
+
+test('altbilgi rozetin tek kaynağını AÇIKÇA yazar (denetçi nereye bakacağını bilir)', () => {
+  const html = renderPano(stateFixture(), { ledger: stateLedger() });
+  assert.ok(html.includes('passport.jsonl'));
+  assert.ok(html.includes('insan onayı rozeti yalnız'));
+});
+
+/** Yalnız kart (hero) bloğu — rozet iddiaları pasaport satırıyla karışmasın. */
+function heroBlok(html: string): string {
+  const bas = html.indexOf('<section class="panel hero"');
+  return html.slice(bas, html.indexOf('</section>', bas));
+}
+
+/** Kimliksiz (sentetik) kart kurar — card.ts "her şey onaylı" dalının şekli. */
+function tamKart(st: OceanState, c: Claim): OceanState {
+  st.card = {
+    ...(st.card as NonNullable<OceanState['card']>),
+    id: 'kart-tam',
+    fact: c.text,
+    factDate: c.createdAt,
+    rule: 'tamam',
+  };
+  return st;
+}
+
+test('sentetik kart (kart-tam) rozeti de DEFTERDEN: gerçek onay haksız yere düşmez', () => {
+  const st = iddiaEdenState();
+  const c = st.claims[0] as Claim;
+  // card.ts "her şey onaylı" durumunda kimliksiz kart üretir (id: 'kart-tam');
+  // gerçek yine bir claim'den gelir → rozet o claim'in defter kaydına bakar.
+  tamKart(st, c);
+
+  const hero = heroBlok(renderPano(st, { ledger: ledgerFixture([c.id]) }));
+  assert.ok(hero.includes('>insan-onayı<'), 'defterde kaydı olan gerçek rozetini almalı');
+  assert.ok(hero.includes('ekin doğruladı — 2026-07-28 11:30 (terminal onayı, passport.jsonl)'));
+
+  // Defter yoksa aynı kart rozetsiz — kimliksiz kart fail-open olmaz.
+  const defterisiz = heroBlok(renderPano(st));
+  assert.equal(defterisiz.includes('>insan-onayı<'), false);
+  assert.ok(defterisiz.includes('kanal kaydı yok'));
+});
+
+test('sentetik kartta gerçek TEK adaya bağlanamıyorsa rozet YOK (belirsizlikte fail-closed)', () => {
+  const st = iddiaEdenState();
+  const c = st.claims[0] as Claim;
+  // aynı metin + aynı tarihte iki claim → hangi kaydın onayı olduğu belirsiz
+  st.claims = [c, { ...c, id: 'ikiz-claim' }];
+  tamKart(st, c);
+  const hero = heroBlok(renderPano(st, { ledger: ledgerFixture([c.id, 'ikiz-claim']) }));
+  assert.equal(hero.includes('>insan-onayı<'), false, 'belirsiz kimlikte rozet verilmez');
+  assert.ok(hero.includes('kanal kaydı yok'));
 });

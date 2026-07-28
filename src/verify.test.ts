@@ -320,3 +320,43 @@ test('approveClaim: kanıt ekler, seviye yükseltir, orijinali MUTASYONA UĞRATM
   assert.equal(orig.level, 'dosya-kaniti'); // orijinal değişmedi
   assert.ok(approved.evidence.at(-1)?.summary.includes('ekin'));
 });
+
+// ── İNSAN ROZETİ = DEFTER (rapor tarafı) ────────────────────────────────────
+
+test('DEFTERSİZ "insan-onayi" seviyesi onaylı SAYILMAZ: dürüstçe işaretlenir ve yeniden sorulur', async () => {
+  // state "insan onaylı" diyor ama passport.jsonl'de karşılığı yok (bot izi).
+  const dir = await makeStateDir(claims2().map((c) => ({ ...c, level: 'insan-onayi' as const })));
+  const deps = fakeDeps('e');
+  const res = await runVerify(dir, 'dosya-git-s1', deps);
+
+  // "zaten onaylı" DEMEZ — dayanağı olmayan seviye kapıyı kilitleyemez
+  assert.equal(res.approved, true);
+  assert.equal(deps.lines.some((l) => l.includes('zaten insan onaylı')), false);
+  assert.ok(
+    deps.lines.some((l) => l.includes('kanal kaydı yok')),
+    'dayanaksız seviye ekranda dürüstçe işaretlenmeli',
+  );
+
+  // gerçek terminal onayı artık DEFTERDE — ikinci çağrı "zaten onaylı" der
+  const rec = JSON.parse((await readFile(passportLogPath(dir), 'utf8')).trim()) as {
+    source?: string;
+    by: string;
+  };
+  assert.equal(rec.source, 'terminal');
+  const d2 = fakeDeps('e');
+  const res2 = await runVerify(dir, 'dosya-git-s1', d2);
+  assert.equal(res2.approved, false);
+  assert.ok(d2.lines.some((l) => l.includes('zaten insan onaylı')));
+  assert.equal(d2.lines.some((l) => l.includes('kanal kaydı yok')), false);
+});
+
+test('rapor sayısı DEFTERDEN: dayanaksız "completed" madde "doğrulandı" diye sayılmaz', async () => {
+  const dir = await makeStateDir(claimsBirimli());
+  const deps = fakeDeps('e');
+  await runVerify(dir, 'dosya-git-s1', deps); // birimin YALNIZ bir kaydı onaylı
+  assert.ok(deps.lines.some((l) => l.includes('Pasaport: 0/1 doğrulandı')));
+
+  const d2 = fakeDeps('e');
+  await runVerify(dir, 'test-s1-0', d2); // birim tamamlandı → defterle 1/1
+  assert.ok(d2.lines.some((l) => l.includes('Pasaport: 1/1 doğrulandı')));
+});

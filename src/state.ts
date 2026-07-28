@@ -9,8 +9,11 @@
  */
 import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { OCEAN_DIR, STATE_FILE, type OceanState, type Verification } from './types.ts';
+import { OCEAN_DIR, STATE_FILE, type OceanState, type PassportLogRecord } from './types.ts';
+import { buildLedger, BOS_LEDGER, type VerificationLedger } from './ledger.ts';
 import { redactDeep } from './redact.ts';
+
+export type { PassportLogRecord } from './types.ts';
 
 export const GOAL_FILE = 'goal.md';
 export const NOTES_FILE = 'notes.md';
@@ -74,31 +77,52 @@ export async function writePano(cwd: string, html: string): Promise<void> {
   await writeFile(panoPath(cwd), value, 'utf8');
 }
 
-// ── passport.jsonl (append-only onay logu) ───────────────────────────────────
-
-/** Tek onay kaydı — değişmez log satırı. */
-export interface PassportLogRecord {
-  schema_version: number;
-  at: string; // ISO-8601
-  claimId: string;
-  title: string;
-  decision: Verification['decision'];
-  by: string;
-  note?: string;
-  /**
-   * Onayın geldiği kanal ('terminal' = gerçek TTY). Bu alan olmayan satırlar
-   * insan kapısı koda girmeden ÖNCE yazılmıştır — denetçi ikisini ayırabilsin
-   * diye sonradan doldurulmaz.
-   */
-  source?: Verification['source'];
-  levelBefore: string;
-  levelAfter: string;
-}
+// ── passport.jsonl (append-only onay defteri) ────────────────────────────────
+// Kayıt şeması types.ts'te (PassportLogRecord); rozet kuralı ledger.ts'te.
 
 export async function appendPassportLog(cwd: string, record: PassportLogRecord): Promise<void> {
   await mkdir(oceanDir(cwd), { recursive: true });
   const { value } = redactDeep(record);
   await appendFile(passportLogPath(cwd), `${JSON.stringify(value)}\n`, 'utf8');
+}
+
+/**
+ * passport.jsonl satırlarını oku — ŞEKİL VARSAYILMAZ (unknown döner).
+ * Bozuk satır sessizce atlanır ama sayılır: `atlanan`. Dosya yoksa
+ * `dosyaVar:false` (bu "onay yok" demektir, "bilinmiyor" değil — rozet
+ * verilmesi için kanıt gerekir).
+ */
+export async function readPassportLog(
+  cwd: string,
+): Promise<{ records: unknown[]; dosyaVar: boolean; atlanan: number }> {
+  let raw: string;
+  try {
+    raw = await readFile(passportLogPath(cwd), 'utf8');
+  } catch {
+    return { records: [], dosyaVar: false, atlanan: 0 };
+  }
+  const records: unknown[] = [];
+  let atlanan = 0;
+  for (const line of raw.split('\n')) {
+    const t = line.trim();
+    if (t === '') continue;
+    try {
+      records.push(JSON.parse(t));
+    } catch {
+      atlanan++; // bozuk satır kanıt sayılmaz (ve uydurulmaz)
+    }
+  }
+  return { records, dosyaVar: true, atlanan };
+}
+
+/**
+ * Doğrulama defteri — "insan" rozetinin TEK GERÇEK KAYNAĞI.
+ * Pano/rapor yazan her yol panoyu render etmeden ÖNCE bunu okur.
+ */
+export async function readLedger(cwd: string): Promise<VerificationLedger> {
+  const { records, dosyaVar } = await readPassportLog(cwd);
+  if (!dosyaVar) return BOS_LEDGER;
+  return buildLedger(records, { dosyaVar });
 }
 
 // ── goal.md / notes.md okuma ─────────────────────────────────────────────────
