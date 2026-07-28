@@ -1,0 +1,6 @@
+node_modules/
+dist/
+.ocean/
+fixtures/generated/
+*.tgz
+.DS_Store

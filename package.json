@@ -1,0 +1,27 @@
+{
+  "name": "ocean-cli",
+  "version": "0.1.0",
+  "description": "Ocean — vibe coder için dürüst proje panosu: Claude Code transcript + git gerçeklerinden deterministik log, kanıt seviyeli durum ve sıradaki-tek-hareket kartı. LLM yok, network yok, local-first.",
+  "type": "module",
+  "license": "UNLICENSED",
+  "bin": {
+    "ocean": "dist/cli.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "files": [
+    "dist/",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "node --test \"src/**/*.test.ts\"",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.6.0"
+  }
+}
