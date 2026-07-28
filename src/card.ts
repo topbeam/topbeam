@@ -597,7 +597,7 @@ function yesilKosum(claim: Claim): boolean {
  * belirtmeden koşulan bir komut o projenin kökünde koşmuştur. Sentinel gerçek
  * bir yol olamayacak bir karakterle başlar ki 'kok' adlı bir dizinle karışmasın.
  */
-const PROJE_KOKU = ' proje-koku';
+const PROJE_KOKU = '\u0000proje-koku';
 
 /** Koşumun proje-göreli dizini (açık `cd` hedefi ya da proje kökü). */
 function dizin(k: Kosum): string {
