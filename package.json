@@ -1,9 +1,22 @@
 {
-  "name": "ocean-cli",
+  "name": "ocean-code",
   "version": "0.1.0",
   "description": "Ocean — vibe coder için dürüst proje panosu: Claude Code transcript + git gerçeklerinden deterministik log, kanıt seviyeli durum ve sıradaki-tek-hareket kartı. LLM yok, network yok, local-first.",
   "type": "module",
-  "license": "UNLICENSED",
+  "license": "MIT",
+  "author": "Ekin Kılıçkaya",
+  "keywords": [
+    "claude-code",
+    "cli",
+    "local-first",
+    "git",
+    "transcript",
+    "evidence",
+    "provenance",
+    "buildpassport",
+    "vibe-coding",
+    "offline"
+  ],
   "bin": {
     "ocean": "dist/cli.js"
   },
@@ -12,7 +25,8 @@
   },
   "files": [
     "dist/",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "scripts": {
     "build": "node scripts/build.mjs",

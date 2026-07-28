@@ -10,11 +10,44 @@ halüsinasyon yapısal olarak imkânsızdır (assistant'ın "bitti, çalışıyo
 
 ## Kurulum
 
+Marka adı **OCEAN**, komut adı **`ocean`**, npm paket adı **`ocean-code`**
+(npm'de `ocean` ve `ocean-cli` adları başka kişilerin ilgisiz paketleridir —
+kurulum komutunda paket adı `ocean-code`'dur).
+
+> **Durum: Ocean henüz npm'e yayınlanmadı.** Bugün çalışan tek yol aşağıdaki
+> yerel kurulumdur. `npx` yolu yayından sonra çalışacak; bugün çalıştığını
+> söylemek yalan olur, o yüzden ayrı başlıkta ve açıkça işaretli.
+
+### Bugün çalışan yol — yerelden kurulum
+
 ```bash
-cd ocean-cli
+cd ocean-cli        # bu deponun klasörü
 npm install
 npm run build
-npm link        # `ocean` komutu PATH'e girer
+npm link            # `ocean` komutu PATH'e girer
+```
+
+Kurulumu doğrula:
+
+```bash
+ocean --help        # yardım metni ve sürüm görünmeli
+```
+
+Geri almak: `npm unlink -g ocean-code`.
+
+`npm link` istemiyorsan global kurulum yapmadan da çalıştırabilirsin:
+
+```bash
+node /tam/yol/ocean-cli/dist/cli.js sync
+```
+
+### Yayından sonra (henüz ÇALIŞMAZ)
+
+Paket npm'e `ocean-code` adıyla yayınlandığında şu komutlar çalışacak:
+
+```bash
+npx ocean-code init      # yayın öncesi çalışmaz
+npm i -g ocean-code      # `ocean` komutunu global kurar
 ```
 
 Gereksinim: Node >= 20. Çalışma zamanı bağımlılığı yok (tek dosya bundle).

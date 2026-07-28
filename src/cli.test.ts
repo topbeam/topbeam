@@ -28,7 +28,7 @@ function run(args: string[], opts: RunOpts = {}): { code: number; stdout: string
       env: {
         ...process.env,
         NODE_OPTIONS: '',
-        OCEAN_CLAUDE_DIR: join(tmpdir(), 'ocean-cli-test-bos-claude'),
+        OCEAN_CLAUDE_DIR: join(tmpdir(), 'ocean-code-test-bos-claude'),
         OCEAN_NO_NOTIFY: '1',
       },
     });
@@ -67,21 +67,21 @@ test('verify id ister: idsiz exit 1', () => {
 });
 
 test('sync init olmadan dürüstçe reddeder, exit 1', async () => {
-  const dir = await mkdtemp(join(tmpdir(), 'ocean-cli-nosync-'));
+  const dir = await mkdtemp(join(tmpdir(), 'ocean-code-nosync-'));
   const r = run(['sync'], { cwd: dir });
   assert.equal(r.code, 1);
   assert.match(r.stderr, /ocean init/);
 });
 
 test('open pano yokken dürüstçe reddeder, exit 1', async () => {
-  const dir = await mkdtemp(join(tmpdir(), 'ocean-cli-noopen-'));
+  const dir = await mkdtemp(join(tmpdir(), 'ocean-code-noopen-'));
   const r = run(['open'], { cwd: dir });
   assert.equal(r.code, 1);
   assert.match(r.stderr, /ocean sync/);
 });
 
 test('tam akış: init → sync → open (izole dizin, transcript yok senaryosu)', async () => {
-  const dir = await mkdtemp(join(tmpdir(), 'ocean-cli-akis-'));
+  const dir = await mkdtemp(join(tmpdir(), 'ocean-code-akis-'));
 
   const init = run(['init'], { cwd: dir });
   assert.equal(init.code, 0, init.stderr);
@@ -114,7 +114,7 @@ test('tam akış: init → sync → open (izole dizin, transcript yok senaryosu)
 });
 
 test('verify: olmayan id ile exit 1 + dürüst mesaj (subprocess)', async () => {
-  const dir = await mkdtemp(join(tmpdir(), 'ocean-cli-verify-'));
+  const dir = await mkdtemp(join(tmpdir(), 'ocean-code-verify-'));
   run(['init'], { cwd: dir });
   const r = run(['verify', 'gorev-3'], { cwd: dir, input: 'h\n' });
   assert.equal(r.code, 1);
@@ -122,7 +122,7 @@ test('verify: olmayan id ile exit 1 + dürüst mesaj (subprocess)', async () => 
 });
 
 test('verify subprocess: piped onay (e) çalışır — readline pipe bug kilidi', async () => {
-  const dir = await mkdtemp(join(tmpdir(), 'ocean-cli-verify-e-'));
+  const dir = await mkdtemp(join(tmpdir(), 'ocean-code-verify-e-'));
   const { newOceanState } = await import('./types.ts');
   const { writeState, readState } = await import('./state.ts');
   const st = newOceanState('CliVerify', new Date('2026-07-28T10:00:00Z'));
@@ -146,7 +146,7 @@ test('verify subprocess: piped onay (e) çalışır — readline pipe bug kilidi
 });
 
 test('verify subprocess: girdi kapalıysa (cevapsız) onay YOK — dürüst varsayılan', async () => {
-  const dir = await mkdtemp(join(tmpdir(), 'ocean-cli-verify-h-'));
+  const dir = await mkdtemp(join(tmpdir(), 'ocean-code-verify-h-'));
   const { newOceanState } = await import('./types.ts');
   const { writeState, readState } = await import('./state.ts');
   const st = newOceanState('CliVerify2', new Date('2026-07-28T10:00:00Z'));
