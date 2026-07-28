@@ -78,6 +78,14 @@ export function toBpLevel(level: EvidenceLevel): BpEvidenceLevel {
 
 // ── Claim (iddia) ────────────────────────────────────────────────────────────
 
+/**
+ * Claim türü — kart heuristiği metin ayrıştırmak yerine bunu okur.
+ * - dosya : dosya-değişikliği iddiası
+ * - test  : test-koşumu iddiası
+ * - durum : "çalışıyor" tipi durum iddiası — YALNIZ verify akışı üretir
+ */
+export type ClaimKind = 'dosya' | 'test' | 'durum';
+
 /** Bir iddiayı destekleyen tekil kanıt parçası. */
 export interface ClaimEvidence {
   /** Kanıtın türü — nereden geldiği. */
@@ -99,6 +107,8 @@ export interface Claim {
   text: string;
   level: EvidenceLevel;
   evidence: ClaimEvidence[];
+  /** Claim türü (kart heuristiği için yapısal sinyal). */
+  kind?: ClaimKind;
   /** Kaynak Claude Code oturumu (transcript dosya adı = sessionId). */
   sessionId?: string;
   createdAt: string; // ISO-8601

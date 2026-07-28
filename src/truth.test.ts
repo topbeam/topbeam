@@ -1,0 +1,395 @@
+/**
+ * truth.ts testleri — elle kurulmuş toplayıcı-çıktısı fixture'ları
+ * (gerçek dosya sistemi / gerçek git YOK; tam determinizm).
+ */
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import type { ChangedFile, ClaudeCollectResult, SessionSummary, TestSignal } from './collect/claude.ts';
+import type { GitFacts } from './collect/git.ts';
+import { buildCalisiyorClaim, buildTruth } from './truth.ts';
+
+const CWD = '/proj/ornek';
+const NOW = new Date('2026-07-28T12:00:00.000Z');
+
+function file(path: string, over: Partial<ChangedFile> = {}): ChangedFile {
+  return {
+    path,
+    tools: ['Edit'],
+    edits: 1,
+    failedEdits: 0,
+    unknownEdits: 0,
+    addedLines: 3,
+    removedLines: 1,
+    userModified: false,
+    fromSubagent: false,
+    lastTs: '2026-07-28T10:00:00.000Z',
+    ...over,
+  };
+}
+
+function signal(command: string, over: Partial<TestSignal> = {}): TestSignal {
+  return {
+    command,
+    ts: '2026-07-28T10:30:00.000Z',
+    exitCode: null,
+    passed: null,
+    failed: null,
+    summaryLine: null,
+    fromSubagent: false,
+    ...over,
+  };
+}
+
+function session(id: string, over: Partial<SessionSummary> = {}): SessionSummary {
+  return {
+    sessionId: id,
+    transcriptPath: `/tmp/${id}.jsonl`,
+    firstTs: '2026-07-28T09:00:00.000Z',
+    lastTs: '2026-07-28T11:00:00.000Z',
+    cwd: CWD,
+    lastCwd: CWD,
+    gitBranch: 'main',
+    title: null,
+    userGoals: [],
+    userPromptCount: 0,
+    changedFiles: [],
+    fileHistoryPaths: [],
+    bashRuns: [],
+    bashRunCount: 0,
+    testSignals: [],
+    errorCount: 0,
+    lastErrors: [],
+    interruptedCount: 0,
+    compacted: false,
+    parseErrors: 0,
+    readErrors: 0,
+    subagentFiles: 0,
+    cwdMismatch: false,
+    ...over,
+  };
+}
+
+function collect(sessions: SessionSummary[]): ClaudeCollectResult {
+  return {
+    projectCwd: CWD,
+    claudeProjectsDir: '/tmp/.claude/projects',
+    slug: '-proj-ornek',
+    matchedDirs: ['-proj-ornek'],
+    transcriptsFound: sessions.length,
+    sessions,
+    notes: [],
+  };
+}
+
+function gitFacts(over: Partial<GitFacts> = {}): GitFacts {
+  return {
+    gitAvailable: true,
+    isGit: true,
+    root: CWD,
+    branch: 'main',
+    headHash: 'a'.repeat(40),
+    headShort: 'abc1234',
+    headDate: '2026-07-28T08:00:00.000Z',
+    headSubject: 'ilk commit',
+    dirtyFiles: [],
+    recentCommits: [{ hash: 'abc1234', date: '2026-07-28T08:00:00.000Z', subject: 'ilk commit' }],
+    diffStat: null,
+    notes: [],
+    ...over,
+  };
+}
+
+// ── dosya claim'leri ─────────────────────────────────────────────────────────
+
+test('transcript ∩ git kesişimi → dosya-kaniti; salt-transcript → dogrulanmadi', () => {
+  const claude = collect([
+    session('s1', {
+      changedFiles: [file(`${CWD}/src/a.ts`), file(`${CWD}/src/b.ts`), file(`${CWD}/hayalet.ts`)],
+    }),
+  ]);
+  const git = gitFacts({
+    diffStat: {
+      filesChanged: 2,
+      insertions: 6,
+      deletions: 2,
+      files: [
+        { path: 'src/a.ts', added: 3, removed: 1 },
+        { path: 'src/b.ts', added: 3, removed: 1 },
+      ],
+    },
+  });
+
+  const { claims } = buildTruth(claude, git, { now: NOW });
+
+  const verified = claims.find((c) => c.id === 'dosya-git-s1');
+  assert.ok(verified);
+  assert.equal(verified.level, 'dosya-kaniti');
+  assert.equal(verified.kind, 'dosya');
+  assert.equal(verified.text, '2 dosya değişti: src/a.ts, src/b.ts');
+  // İKİ kanıt: transcript + git — dosya-kaniti tanımı gereği.
+  assert.ok(verified.evidence.some((e) => e.kind === 'transcript-tool-use'));
+  assert.ok(verified.evidence.some((e) => e.kind === 'git-diff'));
+
+  const unverified = claims.find((c) => c.id === 'dosya-transcript-s1');
+  assert.ok(unverified);
+  assert.equal(unverified.level, 'dogrulanmadi');
+  assert.ok(unverified.text.includes('uygulandı görünüyor, doğrulanmadı'));
+  assert.ok(unverified.text.includes('hayalet.ts'));
+  assert.ok(unverified.evidence.every((e) => e.kind === 'transcript-tool-use'));
+});
+
+test('git kaydı hiç yoksa dosya claim\'i dosya-kaniti OLAMAZ', () => {
+  const claude = collect([session('s1', { changedFiles: [file(`${CWD}/x.ts`)] })]);
+  const { claims } = buildTruth(claude, gitFacts(), { now: NOW });
+  assert.ok(claims.every((c) => c.level !== 'dosya-kaniti'));
+  const only = claims.find((c) => c.kind === 'dosya');
+  assert.ok(only);
+  assert.equal(only.level, 'dogrulanmadi');
+});
+
+test('dirtyFiles kesişimi de dosya-kaniti sayılır (diff yerine status kaydı)', () => {
+  const claude = collect([session('s1', { changedFiles: [file(`${CWD}/yeni.ts`, { tools: ['Write'] })] })]);
+  const git = gitFacts({ dirtyFiles: [{ status: '??', path: 'yeni.ts' }] });
+  const { claims } = buildTruth(claude, git, { now: NOW });
+  const verified = claims.find((c) => c.id === 'dosya-git-s1');
+  assert.ok(verified);
+  assert.equal(verified.level, 'dosya-kaniti');
+});
+
+test('sonucu görülmeyen denemeler ayrı claim — başarıya katılmaz', () => {
+  const claude = collect([
+    session('s1', {
+      changedFiles: [file(`${CWD}/belirsiz.ts`, { edits: 0, unknownEdits: 2, addedLines: 0, removedLines: 0 })],
+    }),
+  ]);
+  const { claims } = buildTruth(claude, gitFacts(), { now: NOW });
+  const c = claims.find((x) => x.id === 'dosya-belirsiz-s1');
+  assert.ok(c);
+  assert.equal(c.level, 'dogrulanmadi');
+  assert.ok(c.text.includes("sonucu transcript'te görünmüyor"));
+  assert.equal(claims.filter((x) => x.kind === 'dosya').length, 1); // değişti-claim'i YOK
+});
+
+// ── test claim'leri ──────────────────────────────────────────────────────────
+
+test('çıktıdan okunan geçti sayısı → test-kaniti', () => {
+  const claude = collect([
+    session('s1', {
+      testSignals: [signal('npm test', { passed: 19, failed: 0, summaryLine: '# pass 19', exitCode: 0 })],
+    }),
+  ]);
+  const { claims } = buildTruth(claude, gitFacts(), { now: NOW });
+  const t = claims.find((c) => c.kind === 'test');
+  assert.ok(t);
+  assert.equal(t.level, 'test-kaniti');
+  assert.equal(t.text, '19 test geçti, 0 başarısız (npm test).');
+  assert.equal(t.evidence[0]?.kind, 'test-output');
+  assert.equal(t.evidence[0]?.summary, '# pass 19');
+  // exit 0 varsayım olabilir → metinde exit iddiası YOK.
+  assert.ok(!t.text.includes('exit'));
+});
+
+test('başarısız test sayısı da test-kaniti (kanıtlı gerçek, süslenmez)', () => {
+  const claude = collect([
+    session('s1', {
+      testSignals: [signal('npm test', { passed: 17, failed: 2, summaryLine: '# fail 2', exitCode: 1 })],
+    }),
+  ]);
+  const { claims } = buildTruth(claude, gitFacts(), { now: NOW });
+  const t = claims.find((c) => c.kind === 'test');
+  assert.ok(t);
+  assert.equal(t.level, 'test-kaniti');
+  assert.ok(t.text.includes('2 test başarısız'));
+  assert.ok(t.text.includes('17 test geçti'));
+});
+
+test('sayı okunamayan test koşumu → dogrulanmadi, sayı uydurulmaz', () => {
+  const claude = collect([session('s1', { testSignals: [signal('npx vitest run')] })]);
+  const { claims } = buildTruth(claude, gitFacts(), { now: NOW });
+  const t = claims.find((c) => c.kind === 'test');
+  assert.ok(t);
+  assert.equal(t.level, 'dogrulanmadi');
+  assert.ok(t.text.includes('sonuç çıktıdan okunamadı — doğrulanmadı'));
+  assert.ok(!/\d+ test geçti/.test(t.text));
+});
+
+test('aynı komutun tekrar koşumları → yalnız SON koşum claim olur', () => {
+  const claude = collect([
+    session('s1', {
+      testSignals: [
+        signal('npm test', { ts: '2026-07-28T10:00:00.000Z', passed: 3, failed: 5, summaryLine: '# fail 5' }),
+        signal('npm test', { ts: '2026-07-28T10:45:00.000Z', passed: 8, failed: 0, summaryLine: '# pass 8' }),
+      ],
+    }),
+  ]);
+  const { claims } = buildTruth(claude, gitFacts(), { now: NOW });
+  const tests = claims.filter((c) => c.kind === 'test');
+  assert.equal(tests.length, 1);
+  assert.ok(tests[0]?.text.includes('8 test geçti'));
+  assert.equal(tests[0]?.createdAt, '2026-07-28T10:45:00.000Z');
+});
+
+// ── DÜRÜSTLÜK İNVARYANTLARI ──────────────────────────────────────────────────
+
+test('İNVARYANT: kanıtsız claim yok — her seviyenin kanıt türü yerinde', () => {
+  const claude = collect([
+    session('s1', {
+      changedFiles: [
+        file(`${CWD}/src/a.ts`),
+        file(`${CWD}/salt.ts`),
+        file(`${CWD}/belirsiz.ts`, { edits: 0, unknownEdits: 1 }),
+      ],
+      testSignals: [
+        signal('npm test', { passed: 5, failed: 0, summaryLine: '# pass 5' }),
+        signal('npx tsc --noEmit'),
+      ],
+      bashRuns: [],
+    }),
+    session('s2', { changedFiles: [file(`${CWD}/b.ts`)] }),
+  ]);
+  const git = gitFacts({
+    diffStat: { filesChanged: 1, insertions: 3, deletions: 1, files: [{ path: 'src/a.ts', added: 3, removed: 1 }] },
+  });
+
+  const { claims } = buildTruth(claude, git, { now: NOW });
+  assert.ok(claims.length >= 5);
+
+  for (const c of claims) {
+    // 1) Kanıtsız claim GÖSTERİLMEZ: her claim'de en az bir kanıt kaydı var.
+    assert.ok(c.evidence.length > 0, `kanıtsız claim: ${c.id}`);
+    // 2) Motor ASLA insan-onayi üretmez.
+    assert.notEqual(c.level, 'insan-onayi', `motor insan-onayi üretti: ${c.id}`);
+    // 3) "çalışıyor" ifadesi motor çıktısında YASAK.
+    assert.ok(!c.text.toLowerCase().includes('çalışıyor'), `motor 'çalışıyor' dedi: ${c.id}`);
+    // 4) Seviye ↔ kanıt türü tutarlılığı.
+    if (c.level === 'dosya-kaniti') {
+      assert.ok(c.evidence.some((e) => e.kind === 'git-diff'), `dosya-kaniti git kanıtı yok: ${c.id}`);
+      assert.ok(c.evidence.some((e) => e.kind === 'transcript-tool-use'), `dosya-kaniti transcript kanıtı yok: ${c.id}`);
+    }
+    if (c.level === 'test-kaniti') {
+      assert.ok(c.evidence.some((e) => e.kind === 'test-output'), `test-kaniti çıktı kanıtı yok: ${c.id}`);
+    }
+    if (c.level === 'dogrulanmadi') {
+      assert.ok(c.text.includes('doğrulanmadı') || c.text.includes('görünmüyor'), `dogrulanmadi etiketi eksik: ${c.id}`);
+    }
+  }
+});
+
+test('İNVARYANT: determinizm — aynı girdi + aynı now → birebir aynı çıktı', () => {
+  const claude = collect([
+    session('s1', {
+      changedFiles: [file(`${CWD}/src/a.ts`), file(`${CWD}/z.ts`)],
+      testSignals: [signal('npm test', { passed: 2, failed: 1, summaryLine: '# fail 1' })],
+    }),
+  ]);
+  const git = gitFacts({
+    diffStat: { filesChanged: 1, insertions: 3, deletions: 1, files: [{ path: 'src/a.ts', added: 3, removed: 1 }] },
+  });
+  const r1 = buildTruth(claude, git, { now: NOW });
+  const r2 = buildTruth(claude, git, { now: NOW });
+  assert.deepEqual(r1, r2);
+});
+
+// ── log ──────────────────────────────────────────────────────────────────────
+
+test('log varsayılanı SADECE kanıtlı gerçekler — beyan girmez', () => {
+  const claude = collect([
+    session('s1', {
+      changedFiles: [file(`${CWD}/src/a.ts`)],
+      bashRuns: [
+        {
+          command: 'npm test',
+          description: 'Testleri çalıştır',
+          ts: '2026-07-28T10:15:00.000Z',
+          exitCode: 0,
+          exitAssumed: true,
+          resultKind: 'ok',
+          timedOut: false,
+          isTestLike: true,
+          fromSubagent: false,
+        },
+      ],
+      testSignals: [signal('npm test', { passed: 4, failed: 0, summaryLine: '# pass 4' })],
+    }),
+  ]);
+  const git = gitFacts({
+    diffStat: { filesChanged: 1, insertions: 3, deletions: 1, files: [{ path: 'src/a.ts', added: 3, removed: 1 }] },
+  });
+
+  const { log } = buildTruth(claude, git, { now: NOW });
+  assert.ok(log.length > 0);
+  assert.ok(log.every((l) => l.source !== 'claude-beyan'));
+  assert.ok(log.some((l) => l.source === 'git' && l.text.startsWith('Commit: ilk commit')));
+  assert.ok(log.some((l) => l.source === 'git' && l.text === '1 dosya değişti: src/a.ts'));
+  assert.ok(log.some((l) => l.source === 'test' && l.text.includes('4 test geçti')));
+  // dogrulanmadi claim'ler log'a girmez (bu fixture'da yok ama kural kilitli).
+  const ts = log.map((l) => l.ts);
+  assert.deepEqual(ts, [...ts].sort()); // kronolojik
+});
+
+test('includeBeyan=true → "Beyan:" öneki + claude-beyan kaynağı + komut ref\'i YOK', () => {
+  const claude = collect([
+    session('s1', {
+      bashRuns: [
+        {
+          command: 'curl -H "Authorization: Bearer cok-gizli"',
+          description: 'Bağımlılığı indir',
+          ts: '2026-07-28T10:20:00.000Z',
+          exitCode: 0,
+          exitAssumed: true,
+          resultKind: 'ok',
+          timedOut: false,
+          isTestLike: false,
+          fromSubagent: false,
+        },
+      ],
+    }),
+  ]);
+  const { log } = buildTruth(claude, gitFacts(), { now: NOW, includeBeyan: true });
+  const beyan = log.find((l) => l.source === 'claude-beyan');
+  assert.ok(beyan);
+  assert.equal(beyan.text, 'Beyan: Bağımlılığı indir');
+  assert.equal(beyan.ref, undefined); // komut metni (secret riski) log'a sızmaz
+});
+
+// ── oturum filtreleri ────────────────────────────────────────────────────────
+
+test('baştan sona farklı cwd\'li oturum atlanır + dürüst not düşülür', () => {
+  const claude = collect([
+    session('s1', {
+      cwd: '/baska/proje',
+      lastCwd: '/baska/proje',
+      cwdMismatch: true,
+      changedFiles: [file('/baska/proje/x.ts')],
+    }),
+  ]);
+  const { claims, notes } = buildTruth(claude, gitFacts(), { now: NOW });
+  assert.equal(claims.length, 0);
+  assert.ok(notes.some((n) => n.includes('farklı bir cwd')));
+});
+
+test('toplayıcı notları sonuca taşınır (kapsam sessiz daralmaz)', () => {
+  const claude = collect([]);
+  claude.notes.push('Bu proje için transcript dizini yok — (doğrulanamadı).');
+  const git = gitFacts({ isGit: false, headHash: null, recentCommits: [], notes: ['Bu dizin bir git çalışma ağacı değil — git kanıtı yok.'] });
+  const { notes } = buildTruth(claude, git, { now: NOW });
+  assert.ok(notes.some((n) => n.includes('transcript dizini yok')));
+  assert.ok(notes.some((n) => n.includes('git kanıtı yok')));
+});
+
+// ── çalışıyor claim'i (tek meşru yol) ────────────────────────────────────────
+
+test('buildCalisiyorClaim: yalnız Verification ile, insan-onayi + human kanıtı', () => {
+  const c = buildCalisiyorClaim('Giriş akışı', {
+    by: 'Ekin',
+    at: '2026-07-28T12:34:56.000Z',
+    decision: 'approved',
+    note: 'Elle denedim',
+  });
+  assert.equal(c.level, 'insan-onayi');
+  assert.equal(c.kind, 'durum');
+  assert.ok(c.text.includes('çalışıyor'));
+  assert.ok(c.text.includes('kullanıcı doğruladı'));
+  assert.equal(c.evidence[0]?.kind, 'human');
+  assert.ok(c.evidence[0]?.summary.includes('Ekin'));
+});
