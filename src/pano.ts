@@ -7,8 +7,13 @@
  *
  * DÜRÜSTLÜK (yapısal):
  * - EN BASKIN öğe = sıradaki-tek-hareket kartı (GPT spec 6 alan + "Doğrulamayı
- *   başlat" kutusu: kopyalanabilir `topbeam verify <id>` komutu).
- * - Yüzde-progress-bar YOK; pasaport "3/7 doğrulandı" dürüst sayımla verilir.
+ *   başlat" kutusu: kopyalanabilir `topbeam verify <id>` komutu). Bar kartın
+ *   ALTINDA durur — ilerleme kartın önüne geçmez.
+ * - BAR = teslim sözleri (goal.md `- [ ]`): SONLU, iki durumlu, yüzdesiz.
+ *   "3 / 7 madde onaylandı" dürüst sayımıyla; bölme yalnız defterle desteklenen
+ *   insan onayıyla dolar. Söz yoksa bar HİÇ çizilmez (boş bar sahte affordance).
+ * - Oturum kayıtları "Defter"dedir: nötr sayım ("11 oturum kaydı"), ilerleme
+ *   dili yok, satırlarında verify komutu öne çıkarılmaz (lastik damga daveti).
  * - Kanıt satırı yoksa "kayıt yok" — sakin gri, kırmızı alarm değil.
  * - Motivasyon sözü yok; beyan satırları "beyan" rozetiyle işaretli VE
  *   varsayılan olarak KATLI: kanıt üstte ve açık, beyan altta ve kapalı
@@ -45,6 +50,7 @@ import {
   pasaportTamMi,
   type VerificationLedger,
 } from './ledger.ts';
+import { buildDefter } from './passport.ts';
 
 // ── küçük yardımcılar ────────────────────────────────────────────────────────
 
@@ -407,52 +413,115 @@ function renderScope(scope: ScopeNotes | undefined): string {
   </section>`;
 }
 
-function renderPassport(state: OceanState, ledger: VerificationLedger): string {
+/**
+ * BAR — SONLU ve İKİ DURUMLU. Bölme sayısı = teslim sözü sayısı (kullanıcı
+ * goal.md'yi değiştirmedikçe SABİT: yeni oturum barı uzatmaz). Bölme yalnız
+ * DEFTERLE desteklenen insan onayıyla dolar. Yüzde yok, kısmi doluluk yok:
+ * bir söz ya insan onaylıdır ya değildir.
+ */
+function renderBar(dolu: number, toplam: number): string {
+  const segs = Array.from(
+    { length: toplam },
+    (_, i) => `<span class="seg${i < dolu ? ' on' : ''}"></span>`,
+  ).join('');
+  const etiket = `${toplam} teslim sözünden ${dolu} tanesi insan onaylı`;
+  return `<div class="bar" role="img" aria-label="${esc(etiket)}">${segs}</div>`;
+}
+
+/**
+ * TESLİM SÖZLERİ — ilerlemenin TEK yeri. Kartın hemen altında durur; kart
+ * en baskın öğe kalsın diye bar ince ve sessizdir.
+ *
+ * Söz yoksa BAR GÖSTERİLMEZ: boş bar sahte affordance olurdu ("bir yerde
+ * doluyormuş" hissi verir, oysa ölçülecek bir söz yoktur).
+ */
+function renderTeslim(state: OceanState, ledger: VerificationLedger): string {
   const items = state.passport;
-  // Tik de, sayı da, kutlama bandı da DEFTERE dayanır: maddenin kendi
+  const bas = `<span class="eyebrow">Teslim sözleri</span>`;
+  if (items.length === 0) {
+    return `<section class="panel" aria-label="Teslim sözleri">
+    <div class="sechead">${bas}</div>
+    <p class="empty">Teslim sözlerini <span class="mono">.ocean/goal.md</span>'ye yaz, bar orada dolsun.</p>
+  </section>`;
+  }
+
+  // Tik de, sayı da, tören bandı da DEFTERE dayanır: maddenin kendi
   // "completed" iddiası tek başına ✓ getirmez (yoksa tik ölçmez, süsler).
   const verified = dogrulananSayisi(items, ledger);
   const full = pasaportTamMi(items, ledger);
   const band = full
-    ? `<div class="fullband">Ürün geliştirildi 🎉 — pasaporttaki tüm maddeler insan onaylı.</div>`
+    ? `<div class="fullband">Ürün geliştirildi 🎉 — teslim sözlerinin hepsi insan onaylı. Mühür: <span class="mono">.ocean/muhur.md</span></div>`
     : '';
   const rows = items
     .map((i) => {
       const done = maddeOnayli(ledger, i);
-      // İş birimi = insanın tek seferde onaylayabileceği öbek → komutu görünür
-      // olsun ki FULL-TİK erişilebilir kalsın (kayıt sayısı da dürüstçe yazar).
-      const adet = i.claimIds.length > 1 ? `<span class="pcount mono">${i.claimIds.length} kayıt</span>` : '';
+      const adet = i.claimIds.length > 0 ? `<span class="pcount mono">${i.claimIds.length} kayıt</span>` : '';
       /**
        * Çıplak id elle seçilmez: her satır kartla AYNI kopyala desenini taşır.
-       * (Dogfood dersi: 11 satırda 11 UUID vardı, kopyala butonu yoktu.)
+       * Kaydı olmayan sözde komut YOK — onaylanacak bir şey olmadığı hâlde
+       * "doğrula" demek lastik damga davetidir.
        */
-      const cmd = done
-        ? ''
-        : cmdBlock(`topbeam verify ${i.id}`, {
-            cls: 'pcmd',
-            etiket: `Doğrulama komutunu kopyala — ${kisaBaslik(i.title)}`,
-          });
+      const cmd =
+        done || i.claimIds.length === 0
+          ? ''
+          : cmdBlock(`topbeam verify ${i.id}`, {
+              cls: 'pcmd',
+              etiket: `Doğrulama komutunu kopyala — ${kisaBaslik(i.title)}`,
+            });
       const reason = i.reason !== undefined ? `<span class="preason">${esc(i.reason)}</span>` : '';
       // Madde "insan onaylı" diyor ama defterde karşılığı yoksa: silme yok,
       // dürüst not — hangi kaydın dayanağı düşmüş, görünsün.
       const kaynaksiz =
         i.level === 'insan-onayi' && !birimOnayli(ledger, i.claimIds)
-          ? `<span class="preason kaynaksiz">${esc(ROZETSIZ_NOT)} — bu madde ${esc(
+          ? `<span class="preason kaynaksiz">${esc(ROZETSIZ_NOT)} — bu söz ${esc(
               'passport.jsonl',
             )} defterindeki bir terminal onayına bağlanamadı.</span>`
           : '';
       return `<li class="pitem"><span class="tick ${done ? 'on' : ''}">${done ? '✓' : '○'}</span><span class="ptitle">${esc(i.title)}${reason}${kaynaksiz}</span>${adet}${levelPill(i.level, done)}${cmd}</li>`;
     })
     .join('\n');
-  const empty =
-    items.length === 0
-      ? '<p class="empty">Pasaport henüz boş — claim üretildikçe maddeler buraya dolar.</p>'
-      : '';
-  return `<section class="panel" aria-label="Pasaport">
-    <div class="sechead"><span class="eyebrow">Pasaport</span><span class="count mono">${verified}/${items.length} doğrulandı</span></div>
+
+  return `<section class="panel" aria-label="Teslim sözleri">
+    <div class="sechead">${bas}<span class="count mono">${verified} / ${items.length} madde onaylandı</span></div>
+    ${renderBar(verified, items.length)}
     ${band}
-    ${empty}
     <ul class="plist">${rows}</ul>
+  </section>`;
+}
+
+/**
+ * DEFTER — oturum kayıtları arşivi. NÖTR SAYIM: "11 oturum kaydı", ilerleme
+ * dili YOK ("0/11 doğrulandı" burada bilinçli olarak kaldırıldı — çalıştıkça
+ * büyüyen bir payda, ilerleme değil Sisifos'tur).
+ *
+ * Satırlarda `topbeam verify` ÖNE ÇIKARILMAZ: 99 dosyalık bir arşiv birimine
+ * onay istemek lastik damga üretir ve insan onayını değersizleştirir.
+ */
+function renderDefter(claims: readonly Claim[], ledger: VerificationLedger): string {
+  const kayitlar = buildDefter(claims);
+  const bas = `<div class="sechead"><span class="eyebrow">Defter</span><span class="count mono">${kayitlar.length} oturum kaydı</span></div>`;
+  const not =
+    '<p class="capnote">Bu bir ilerleme ölçüsü değildir — yalnız hangi oturumda ne ölçüldüğünün kaydı. İlerleme yukarıdaki teslim sözlerinde.</p>';
+  if (kayitlar.length === 0) {
+    return `<section class="panel" aria-label="Defter">
+    ${bas}
+    ${not}
+    <p class="empty">Henüz oturum kaydı yok — <span class="mono">topbeam sync</span> sonrası dolar.</p>
+  </section>`;
+  }
+  const rows = kayitlar
+    .map((k) => {
+      const onayli = birimOnayli(ledger, k.claimIds);
+      return `<li class="pitem"><span class="ptitle">${esc(k.title)}</span><span class="pcount mono">${k.claimIds.length} kayıt</span>${levelPill(k.level, onayli)}</li>`;
+    })
+    .join('\n');
+  return `<section class="panel" aria-label="Defter">
+    ${bas}
+    ${not}
+    <details class="defter">
+      <summary>Oturum kayıtları (${kayitlar.length})</summary>
+      <ul class="plist">${rows}</ul>
+    </details>
   </section>`;
 }
 
@@ -557,6 +626,16 @@ header.top .goal .k{font-family:var(--mono);font-size:9.5px;letter-spacing:.14em
 .beyanlar>summary::after{content:'göster';font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--plan);margin-left:auto}
 .beyanlar[open]>summary::after{content:'gizle'}
 .beyanlar>summary:hover{color:var(--dim)}
+/* Bar: SONLU bölmeler, iki durumlu. Yüzde yok, animasyon yok, kısmi doluluk yok. */
+.bar{display:flex;gap:4px;margin:0 0 14px}
+.bar .seg{flex:1;height:7px;border-radius:3px;background:var(--s4);border:1px solid var(--line2)}
+.bar .seg.on{background:var(--teal);border-color:var(--teal)}
+.defter{border-top:1px solid var(--line);padding-top:10px;margin-top:4px}
+.defter>summary{cursor:pointer;font-size:12px;color:var(--muted);list-style:none;padding:4px 0}
+.defter>summary::-webkit-details-marker{display:none}
+.defter>summary::after{content:'göster';font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--plan);margin-left:8px}
+.defter[open]>summary::after{content:'gizle'}
+.defter>summary:focus-visible{outline:2px solid var(--teal);outline-offset:2px}
 .plist{list-style:none}
 .pitem{display:flex;align-items:baseline;gap:10px;border-bottom:1px solid var(--line);padding:10px 0;font-size:13px;flex-wrap:wrap}
 .pitem:last-child{border-bottom:none}
@@ -625,9 +704,10 @@ export function renderPano(state: OceanState, opts: PanoOptions = {}): string {
     ${goal}
   </header>
   ${cardHtml}
+  ${renderTeslim(state, ledger)}
   ${renderScope(state.scope)}
   ${renderLog(state.log, ledger, state.scope)}
-  ${renderPassport(state, ledger)}
+  ${renderDefter(state.claims, ledger)}
   <footer>Topbeam yalnız kanıtlı gerçekleri ve açık belirsizlikleri gösterir.<br>
   kanıt seviyeleri: dosya-kanıtı · test-kanıtı · insan-onayı · doğrulanmadı<br>
   insan onayı rozeti yalnız <span class="mono">.ocean/passport.jsonl</span> defterindeki terminal imzalı kayda dayanır</footer>

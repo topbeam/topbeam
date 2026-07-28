@@ -13,6 +13,7 @@ import {
   parseNotes,
   passportLogPath,
   readGoal,
+  readGoalItems,
   readLedger,
   readNotes,
   readPassportLog,
@@ -111,6 +112,35 @@ test('readGoal: şablon (başlık+yönerge) → null; gerçek hedef satırı →
 
   const yok = await mkdtemp(join(tmpdir(), 'topbeam-goal-yok-'));
   assert.equal(await readGoal(yok), null);
+});
+
+test('readGoal: TESLİM SÖZÜ satırı hedef cümlesi sanılmaz (liste ve alıntı atlanır)', async () => {
+  const dir = await tmpProj();
+  await mkdir(oceanDir(dir), { recursive: true });
+  await writeFile(
+    goalPath(dir),
+    '# Proje Hedefi\n\n> yönerge\n\n- [ ] Kurulum tek komutla çalışıyor\n* [x] başka söz\n',
+    'utf8',
+  );
+  assert.equal(await readGoal(dir), null, 'hedef paragrafı yoksa uydurulmaz');
+
+  await writeFile(
+    goalPath(dir),
+    '# Proje Hedefi\n\nGerçek hedef cümlesi.\n\n- [ ] Kurulum çalışıyor\n',
+    'utf8',
+  );
+  assert.equal(await readGoal(dir), 'Gerçek hedef cümlesi.');
+});
+
+test('readGoalItems: `- [ ]` satırlarını verir; dosya yoksa boş liste (bar yok)', async () => {
+  const dir = await tmpProj();
+  assert.deepEqual(await readGoalItems(dir), [], 'dosya yoksa sayı uydurulmaz');
+
+  await mkdir(oceanDir(dir), { recursive: true });
+  await writeFile(goalPath(dir), '# Hedef\n\nParagraf.\n\n- [ ] bir\n- [x] iki\n', 'utf8');
+  const items = await readGoalItems(dir);
+  assert.deepEqual(items.map((i) => i.text), ['bir', 'iki']);
+  assert.equal(items[1]?.checked, true);
 });
 
 test('readNotes: dosya yoksa boş liste', async () => {

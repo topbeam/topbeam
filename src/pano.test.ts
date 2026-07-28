@@ -117,7 +117,69 @@ test('yüzde-progress-bar YOK; dürüst sayım VAR', () => {
   const html = renderPano(stateFixture(), { ledger: stateLedger() });
   assert.equal(html.includes('<progress'), false);
   assert.equal(/progress-bar|progressbar/i.test(html), false);
-  assert.ok(html.includes('1/2 doğrulandı'));
+  // Gövdede (CSS dışında) yüzde YOK — ilerleme asla yüzdeyle anlatılmaz.
+  const govde = html.slice(html.indexOf('</style>'));
+  assert.equal(/\d\s*%|%\s*\d/.test(govde), false, 'gövdede yüzde ilerleme olmamalı');
+  assert.ok(html.includes('1 / 2 madde onaylandı'));
+});
+
+// ── BAR: sonlu · iki durumlu · yalnız insan onayıyla dolar ──────────────────
+
+test('BAR = teslim sözü sayısı kadar SONLU bölme; dolu bölme = insan onayı', () => {
+  const st = stateFixture(); // 2 madde, biri defterde onaylı
+  const html = renderPano(st, { ledger: stateLedger() });
+  const bar = /<div class="bar"[^>]*>([\s\S]*?)<\/div>/.exec(html)?.[1] ?? '';
+  assert.equal((bar.match(/<span class="seg/g) ?? []).length, 2, 'bölme sayısı = madde sayısı');
+  assert.equal((bar.match(/class="seg on"/g) ?? []).length, 1, 'yalnız onaylı madde dolar');
+  assert.ok(html.includes('aria-label="2 teslim sözünden 1 tanesi insan onaylı"'));
+});
+
+test('BAR defterle desteklenmeyen "completed" ile DOLMAZ (fail-closed)', () => {
+  const st = stateFixture();
+  for (const p of st.passport) {
+    p.status = 'completed';
+    p.level = 'insan-onayi';
+  }
+  const bar = /<div class="bar"[^>]*>([\s\S]*?)<\/div>/.exec(renderPano(st))?.[1] ?? '';
+  assert.equal((bar.match(/class="seg on"/g) ?? []).length, 0, 'defter yoksa hiçbir bölme dolmaz');
+});
+
+test('BAR KARTIN ALTINDA: kart en baskın öğe kalır', () => {
+  const html = renderPano(stateFixture(), { ledger: stateLedger() });
+  const kart = html.indexOf('Sıradaki tek hareket');
+  const bar = html.indexOf('<div class="bar"');
+  const log = html.indexOf('Log history');
+  assert.ok(kart > -1 && bar > -1 && log > -1);
+  assert.ok(kart < bar, 'bar kartın altında olmalı');
+  assert.ok(bar < log);
+});
+
+test('TESLİM SÖZÜ YOKSA BAR YOK: boş bar yerine tek satır yönerge', () => {
+  const st = stateFixture();
+  st.passport = [];
+  const html = renderPano(st, { ledger: stateLedger() });
+  assert.equal(html.includes('<div class="bar"'), false, 'boş bar sahte affordance olurdu');
+  assert.ok(html.includes("Teslim sözlerini <span class=\"mono\">.ocean/goal.md</span>'ye yaz, bar orada dolsun."));
+  assert.equal(html.includes('madde onaylandı'), false, 'sayım da uydurulmaz');
+});
+
+// ── DEFTER: arşiv, ilerleme değil ───────────────────────────────────────────
+
+test('DEFTER nötr sayar: "oturum kaydı" der, "doğrulandı" ilerleme dili KULLANMAZ', () => {
+  const html = renderPano(stateFixture(), { ledger: stateLedger() });
+  assert.ok(html.includes('>Defter<'));
+  assert.ok(html.includes('2 oturum kaydı'));
+  assert.ok(html.includes('Bu bir ilerleme ölçüsü değildir'));
+  assert.equal(/\d+\/\d+ doğrulandı/.test(html), false, 'eski ilerleme dili kalkmalı');
+});
+
+test('DEFTER satırında verify komutu ÖNE ÇIKARILMAZ (lastik damga daveti yok)', () => {
+  const st = stateFixture();
+  st.passport = []; // teslim sözü yok → paneldeki tek komut kaynağı defter olurdu
+  const html = renderPano(st);
+  const defter = html.slice(html.indexOf('<details class="defter">'));
+  assert.equal(defter.includes('topbeam verify'), false);
+  assert.equal(html.includes('class="cmdrow pcmd"'), false);
 });
 
 test('log: kanıt ÜSTTE ve açık, beyan ALTTA ve katlı (beyan kanıt değildir)', () => {
@@ -242,7 +304,9 @@ test('kart-bos: Doğrulamayı başlat kutusu yok, topbeam sync önerilir', () =>
   const html = renderPano(st);
   assert.equal(html.includes('Doğrulamayı başlat'), false);
   assert.ok(html.includes('topbeam sync'));
-  assert.ok(html.includes('0/0 doğrulandı'));
+  // teslim sözü yok → bar yok, sayım yok, dürüst yönerge var
+  assert.equal(html.includes('<div class="bar"'), false);
+  assert.ok(html.includes('bar orada dolsun'));
 });
 
 test('hedef satırı yalnız verilirse görünür; kart yoksa dürüst boş kart', () => {
@@ -436,7 +500,7 @@ test('INVARYANT: verification OLMADAN insan rozeti YOK (log · kart · pasaport)
   // SESSİZ SİLME YOK: satırın kendisi hâlâ panoda
   assert.ok(html.includes('Doğrulandı: 19 test geçti'));
   // sayı da dürüst: defterle desteklenmeyen madde "doğrulandı" sayılmaz
-  assert.ok(html.includes('0/1 doğrulandı'));
+  assert.ok(html.includes('0 / 1 madde onaylandı'));
   assert.ok(html.includes('1 satır kendini insan onayı sayıyor'));
   // kartın uydurulmuş insan-kanıtı cümlesi ekrana ÇIKMAZ
   assert.equal(html.includes('dogfood-ajan doğruladı'), false);
@@ -456,7 +520,7 @@ test('INVARYANT: kayıt "terminal" kanalı taşımıyorsa insan rozeti YOK', () 
     assert.equal(html.includes('>insan<'), false, `${ad}: log rozeti düşmeliydi`);
     assert.equal(html.includes('>insan-onayı<'), false, `${ad}: seviye rozeti düşmeliydi`);
     assert.ok(html.includes('kanal kaydı yok'), `${ad}: dürüst işaret olmalı`);
-    assert.ok(html.includes('0/1 doğrulandı'), `${ad}: sayı yükselmemeli`);
+    assert.ok(html.includes('0 / 1 madde onaylandı'), `${ad}: sayı yükselmemeli`);
   }
 });
 
@@ -466,7 +530,7 @@ test('INVARYANT: GEÇERLİ verification varsa rozet VAR ve metin DEFTERDEN gelir
   assert.ok(html.includes('>insan-onayı<'), 'seviye pili artık dayanaklı');
   assert.equal(html.includes('kanal kaydı yok'), false);
   assert.equal(html.includes('doğrulama kaydı bulunamadı'), false);
-  assert.ok(html.includes('1/1 doğrulandı'));
+  assert.ok(html.includes('1 / 1 madde onaylandı'));
   // İnsan onayı satırı defterden yazılır — claim'in uydurma cümlesinden değil
   assert.ok(html.includes('ekin doğruladı — 2026-07-28 11:30 (terminal onayı, passport.jsonl)'));
   assert.equal(html.includes('dogfood-ajan doğruladı'), false);
@@ -476,7 +540,7 @@ test('rozet kayıt BAŞINA verilir: başka claim\'in onayı bu satıra rozet kaz
   const html = renderPano(iddiaEdenState(), { ledger: ledgerFixture(['baska-claim']) });
   assert.equal(html.includes('>insan-onayı<'), false);
   assert.ok(html.includes('kanal kaydı yok'));
-  assert.ok(html.includes('0/1 doğrulandı'));
+  assert.ok(html.includes('0 / 1 madde onaylandı'));
 });
 
 test('log satırı bağı ZAMAN DAMGASIDIR: onayla eşleşmeyen satır rozetsiz kalır', () => {

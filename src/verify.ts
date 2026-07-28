@@ -20,21 +20,22 @@
  * Bedeli bilinçli: `topbeam verify` betikten koşturulamaz. Doğru bedel — bu komut
  * zaten "bir insan kendi gözüyle gördü" demek için var.
  *
- * <id> ya tek bir CLAIM ya da bir İŞ BİRİMİ (pasaport maddesi, `birim-…`)
- * olabilir. Birim verilirse birimdeki TÜM doğrulanmamış kayıtlar ekrana
- * dökülür ve TEK soruyla birlikte onaylanır — 278 kere "evet" demek zorunda
- * kalmadan FULL-TİK'e erişilebilsin diye. Kör onay yok: onaylanan her kayıt
- * (iddia + kanıtları) soru sorulmadan ÖNCE gösterilir.
+ * <id> ya tek bir CLAIM ya da bir TESLİM SÖZÜ (goal.md maddesi, `soz-…`)
+ * olabilir. Söz verilirse o söze eşleşen TÜM doğrulanmamış kayıtlar ekrana
+ * dökülür ve TEK soruyla birlikte onaylanır. Kör onay yok: onaylanan her kayıt
+ * (iddia + kanıtları) soru sorulmadan ÖNCE gösterilir. Sözler insanın kendi
+ * cümleleridir (sonlu ve kilitli) — bu yüzden onay lastik damgaya dönüşmez.
  *
  * Akış: claim'leri göster → kanıtları listele → kullanıcı onayı sor (e/H) →
  * onaylanırsa:
  *   - claim insan-onayi seviyesine yükselir (approveClaim — verify akışının
  *     TEK yükseltme kapısı; motor asla kendisi yükseltmez),
- *   - pasaport maddesi completed + verification olur,
+ *   - teslim sözü completed + verification olur,
  *   - .ocean/passport.jsonl'e APPEND edilir (değişmez onay logu),
  *   - kart yeniden kurulur, state + pano yazılır,
- *   - pasaport FULL-TİK olduysa BİR KEZ macOS bildirimi:
- *     "Topbeam: ürün geliştirildi 🎉" (fullTickNotifiedAt ile tekrarlanmaz).
+ *   - BAR DOLDUYSA (her söz defterle desteklenen insan onaylı) bir kez
+ *     .ocean/muhur.md yazılır + macOS bildirimi verilir
+ *     ("Topbeam: ürün geliştirildi 🎉"; fullTickNotifiedAt ile tekrarlanmaz).
  *
  * Reddedilirse (H) hiçbir seviye değişmez — dürüstlük: onay zorla alınmaz.
  */
@@ -51,7 +52,9 @@ import {
   type Verification,
 } from './types.ts';
 import { buildCard, scriptsFromPackageJson } from './card.ts';
-import { buildPassport, claimTitle } from './passport.ts';
+import { buildTeslim } from './goal.ts';
+import { claimTitle } from './passport.ts';
+import { muhurMetni } from './muhur.ts';
 import { renderPano } from './pano.ts';
 import { notifyMac } from './notify.ts';
 import {
@@ -64,10 +67,13 @@ import {
 } from './ledger.ts';
 import {
   appendPassportLog,
+  muhurPath,
   panoPath,
   readGoal,
+  readGoalItems,
   readLedger,
   readState,
+  writeMuhur,
   writePano,
   writeState,
 } from './state.ts';
@@ -127,6 +133,14 @@ export interface VerifyResult {
 const YES = new Set(['e', 'evet', 'y', 'yes']);
 
 /**
+ * Tek soruda onaylanması "gözle görüldü" sayılabilecek makul kayıt sayısı.
+ * Üstüne çıkınca soru sorulmadan ÖNCE uyarılır: geniş bir söz, tek "e" ile
+ * lastik damgaya döner ve insan onayını değersizleştirir (ürünün moat'ı budur).
+ * Kapı DEĞİL, uyarıdır — söz insanın kendi sözü, kararı da onun.
+ */
+export const KALABALIK_ESIK = 10;
+
+/**
  * İnsan kapısı — SAF fonksiyon (testle kilitlenir).
  * Geçerse onaylayanın kimliğini döner; geçmezse nedeni + insan-okur açıklama.
  */
@@ -183,7 +197,7 @@ export async function runVerify(cwd: string, id: string, deps: VerifyDeps): Prom
     return { ok: false, error: "Bu proje Topbeam'e bağlı değil. Önce: topbeam init" };
   }
 
-  // ── hedefi çöz: tek claim mi, iş birimi mi? ──
+  // ── hedefi çöz: tek claim mi, teslim sözü mü? ──
   const byIdx = new Map<string, number>(state.claims.map((c, i) => [c.id, i]));
   const unit = state.passport.find((p) => p.id === id);
   let hedefIdx: number[];
@@ -199,8 +213,20 @@ export async function runVerify(cwd: string, id: string, deps: VerifyDeps): Prom
     hedefAdi = id;
   }
 
+  // Sözün kendisi var ama bağlanacak kaydı yok: bu bir "bulunamadı" değil,
+  // "kanıt yok" durumudur — dürüst ayrım (onay burada kör damga olurdu).
+  if (hedefIdx.length === 0 && unit !== undefined) {
+    return {
+      ok: false,
+      error:
+        `Bu teslim sözüne bağlanan kayıt yok: ${unit.title}\n` +
+        'Onay bir KAYDI doğrular; kayıt yoksa onaylanacak bir şey de yok.\n' +
+        'Söze bir ipucu ekle (yol: `src/auth` · `test:` öneki · #etiket), sonra: topbeam sync',
+    };
+  }
+
   if (hedefIdx.length === 0) {
-    const birimler = state.passport.slice(-3).map((p) => `  - ${p.id}  (${p.claimIds.length} kayıt)`);
+    const sozler = state.passport.slice(0, 3).map((p) => `  - ${p.id}  (${p.claimIds.length} kayıt)  ${p.title}`);
     const known = state.claims.slice(-5).map((c) => `  - ${c.id}`);
     return {
       ok: false,
@@ -208,7 +234,9 @@ export async function runVerify(cwd: string, id: string, deps: VerifyDeps): Prom
         `Kayıt bulunamadı: ${id}\n` +
         (known.length > 0
           ? `Kayıtlı son claim id'leri:\n${known.join('\n')}` +
-            (birimler.length > 0 ? `\nPasaport iş birimleri (hepsini tek onayla):\n${birimler.join('\n')}` : '')
+            (sozler.length > 0
+              ? `\nTeslim sözleri (sözün tüm kayıtları tek onayla geçer):\n${sozler.join('\n')}`
+              : '')
           : "Henüz hiç claim yok — önce: topbeam sync"),
     };
   }
@@ -226,8 +254,8 @@ export async function runVerify(cwd: string, id: string, deps: VerifyDeps): Prom
   const hedefler = hedefIdx.map((i) => state.claims[i] as Claim);
   if (unit !== undefined && hedefler.length > 1) {
     deps.out('');
-    deps.out(`İş birimi: ${hedefAdi}`);
-    deps.out(`Kayıt    : ${hedefler.length} adet — hepsi aşağıda`);
+    deps.out(`Teslim sözü: ${hedefAdi}`);
+    deps.out(`Kayıt      : ${hedefler.length} adet — hepsi aşağıda`);
   }
   for (const c of hedefler) {
     deps.out('');
@@ -271,6 +299,15 @@ export async function runVerify(cwd: string, id: string, deps: VerifyDeps): Prom
   }
   const by = kapi.by;
 
+  // Geniş söz uyarısı — tek "e" ile lastik damga vurulmasın diye.
+  if (bekleyenIdx.length > KALABALIK_ESIK) {
+    deps.out(
+      `Dikkat: bu söz ${bekleyenIdx.length} kaydı kapsıyor. Hepsini gerçekten kendi gözünle\n` +
+        'görmediysen H de — sözü daraltacak bir ipucu ekle (yol · `test:` · #etiket).\n' +
+        'Tek "evet" ile geçilen geniş bir onay, onay olmaktan çıkar.',
+    );
+  }
+
   const soru =
     bekleyenIdx.length > 1
       ? `Bu ${bekleyenIdx.length} kaydın hepsini kendi gözünle doğruladın mı? [e/H] `
@@ -313,11 +350,13 @@ export async function runVerify(cwd: string, id: string, deps: VerifyDeps): Prom
     });
   }
 
-  // Pasaport iş birimleri claim'lerden yeniden kurulur; bu onay ilgili birime yazılır.
+  // Pasaport = teslim sözleri (goal.md); bu onay, tamamlanan söze yazılır.
+  const goalItems = await readGoalItems(cwd);
   const onayliIds = new Set(claims.filter((c) => c.level === 'insan-onayi').map((c) => c.id));
   const onaylananIds = new Set(onaylananlar.map((c) => c.id));
-  const passport: PassportItem[] = buildPassport(state.passport, claims).map((p) =>
+  const passport: PassportItem[] = buildTeslim(state.passport, claims, goalItems).map((p) =>
     p.verification === undefined &&
+    p.claimIds.length > 0 &&
     p.claimIds.some((cid) => onaylananIds.has(cid)) &&
     p.claimIds.every((cid) => onayliIds.has(cid))
       ? { ...p, verification }
@@ -337,21 +376,36 @@ export async function runVerify(cwd: string, id: string, deps: VerifyDeps): Prom
   ];
 
   /**
-   * ── full-tik kontrolü (bildirim BİR KEZ) ──
-   * Defter DİSKTEN taze okunur: az önce yazılan satırlar dâhil, her maddenin
-   * onayı passport.jsonl'de gerçekten duruyor mu? Kutlama da rozet gibi
-   * kanıta dayanır — state'in kendi "completed" iddiasına değil.
+   * ── bar doldu mu (MÜHÜR + bildirim BİR KEZ) ──
+   * Defter DİSKTEN taze okunur: az önce yazılan satırlar dâhil, her teslim
+   * sözünün onayı passport.jsonl'de gerçekten duruyor mu? Tören de rozet gibi
+   * kanıta dayanır — maddenin kendi "completed" iddiasına değil.
+   *
+   * Mühür YALNIZ BURADA yazılır (son onay anında). Sözleri silerek barı
+   * doldurmak mühür getirmez: sync mühür yazmaz.
    */
   const ledger = await readLedger(cwd);
   const fullTick = pasaportTamMi(passport, ledger);
   let notified = false;
   let fullTickNotifiedAt = state.fullTickNotifiedAt;
   if (fullTick && fullTickNotifiedAt === undefined) {
-    notified = await notify('Topbeam', 'Ürün geliştirildi 🎉 — pasaporttaki tüm maddeler insan onaylı.');
+    await writeMuhur(
+      cwd,
+      muhurMetni({
+        projectName: state.projectName,
+        at: verification.at,
+        by,
+        items: passport,
+        claims,
+        ledger,
+        toolVersion: state.tool_version,
+      }),
+    );
+    notified = await notify('Topbeam', 'Ürün geliştirildi 🎉 — teslim sözlerinin hepsi insan onaylı.');
     fullTickNotifiedAt = verification.at;
     log.push({
       ts: verification.at,
-      text: 'Pasaport FULL-TİK: tüm maddeler insan onaylı — ürün geliştirildi 🎉',
+      text: `Bar doldu: ${passport.length} teslim sözünün hepsi insan onaylı — mühür yazıldı (.ocean/muhur.md).`,
       // 'ocean' = LogSource enum DEĞERİ (şema uyumu; panoda etiket "topbeam").
       source: 'ocean' as const,
     });
@@ -386,8 +440,13 @@ export async function runVerify(cwd: string, id: string, deps: VerifyDeps): Prom
       : `Onay kaydedildi: ${(onaylananlar[0] as Claim).id} → insan-onayı (${by}).`,
   );
   // Rapor da panoyla aynı kapıdan: sayı defterden gelir (passport.jsonl).
-  deps.out(`Pasaport: ${dogrulananSayisi(passport, ledger)}/${passport.length} doğrulandı.`);
-  if (fullTick) deps.out('Pasaport FULL-TİK — ürün geliştirildi 🎉');
+  if (passport.length > 0) {
+    deps.out(`Teslim sözü: ${dogrulananSayisi(passport, ledger)} / ${passport.length} madde onaylandı.`);
+  }
+  if (fullTick) {
+    deps.out('Bar doldu — ürün geliştirildi 🎉');
+    deps.out(`Mühür yazıldı: ${muhurPath(cwd)}`);
+  }
 
   return { ok: true, approved: true, fullTick, notified, panoPath: panoPath(cwd) };
 }

@@ -72,7 +72,9 @@ Aynı gerekçeyle ortam değişkenleri de `OCEAN_*` önekini koruyor.
 
 ### `topbeam init`
 Projeyi Topbeam'e bağlar — kullanıcı elle iş yapmaz:
-- `.ocean/` kurulur: `state.json` (durum), `goal.md` (hedef), `notes.md` (kısa notlar)
+- `.ocean/` kurulur: `state.json` (durum), `goal.md` (hedef **+ teslim sözleri**),
+  `notes.md` (kısa notlar). `goal.md` anlamlı bir şablonla gelir: 7 evrensel
+  teslim kapısı örneği — sil, kendi sözlerini yaz.
 - Projenin `CLAUDE.md`'sine **"## Topbeam"** bölümü eklenir (varsa dokunmaz):
   Claude'a talimat — hedefi güncel tut, önemli adımlarda 1 satır Türkçe not ekle,
   kanıtsız "çalışıyor" deme.
@@ -86,9 +88,15 @@ kanıt-kurallı iddialar (claim), LOG HISTORY ve **sıradaki-tek-hareket kartın
 Bir iddiayı gösterir, kanıtlarını listeler, onayını sorar (e/H). Onaylarsan:
 - iddia **insan-onayı** seviyesine yükselir (tek meşru yükseltme yolu budur),
 - `.ocean/passport.jsonl`'e eklenir (append-only, değişmez onay logu),
-- pasaport **FULL-TİK** olursa bir kez macOS bildirimi: "Topbeam: ürün geliştirildi 🎉"
+- **bar dolarsa** (her teslim sözü insan onaylı) bir kez `.ocean/muhur.md` yazılır
+  + macOS bildirimi: "Topbeam: ürün geliştirildi 🎉"
   (planlanan fiyatlamada bu bildirim Pro tarafında — bugünkü sürümde herkeste açık,
   kodda lisans kontrolü yok; bkz. [Fiyat](#fiyat-planlanan--açık-çekirdek)).
+
+`<id>` tek bir kayıt ya da bir **teslim sözü** (`soz-…`) olabilir. Söz verirsen o
+söze eşleşen tüm kayıtlar ekrana dökülür ve tek soruyla onaylanır. Kaydı olmayan
+söz onaylanamaz ve 10'dan çok kaydı kapsayan söz için soru sorulmadan önce
+uyarılırsın — Topbeam lastik damga vurdurmaz.
 
 ### `topbeam open`
 Pano yolunu yazdırır. Tarayıcıyı **otomatik açmaz** — sen açarsın.
@@ -100,10 +108,56 @@ Tek statik dosya, sistem fontları, tek küçük JS (kopyala butonu). Üstten al
    kanıt üç ayrı satır (git diff / test çıktısı / insan onayı) · en önemli tek
    bilinmeyen · tek fiil + çalıştırılabilir komut · neden bu · bitti sayılma koşulu ·
    "Doğrulamayı başlat" kutusu (`topbeam verify <id>` kopyalanabilir).
-2. **Log history**: zaman çizgisi — git/test gerçekleri, Claude'un beyanları
+2. **Teslim sözleri + BAR** (kartın hemen altında, kart baskın kalır):
+   `goal.md`'deki her `- [ ]` satırı bir bölme. Sayım "3 / 7 madde onaylandı" —
+   **yüzde yok**, kısmi doluluk yok. Bölme yalnız `passport.jsonl` defterindeki
+   terminal imzalı insan onayıyla dolar. Söz yoksa bar **hiç çizilmez**
+   ("Teslim sözlerini `.ocean/goal.md`'ye yaz, bar orada dolsun") — boş bar
+   sahte affordance olurdu.
+3. **Bu panonun kapsamı**: neyin, kaç tanesinin elendiği (iz bırakarak).
+4. **Log history**: zaman çizgisi — git/test gerçekleri, Claude'un beyanları
    ("beyan" rozetiyle; kanıt değil), insan onayları.
-3. **Pasaport**: tik listesi + dürüst sayım ("1/2 doğrulandı" — yüzde-progress-bar
-   yok). Tüm maddeler insan onaylıysa kutlama bandı.
+5. **Defter**: oturum kayıtları arşivi — nötr sayım ("11 oturum kaydı ·
+   *bu bir ilerleme ölçüsü değildir*"). Satırlarında `verify` komutu öne
+   çıkarılmaz: 99 dosyalık bir arşiv birimine onay istemek lastik damga üretir.
+
+## Bar neden `goal.md`'den geliyor? (Sisifos barı)
+
+Eskiden bar birimi bir **Claude Code oturumuydu**. Sonuç: her yeni kodlama
+oturumu paydayı büyütüyordu — bugün 0/11, yarın çalışırsan 0/12. Çalıştıkça bar
+senden uzaklaşıyordu. Üstelik "2026-07-11 · 99 dosya · 40 test koşumu" bir ürün
+sözü değil, arşiv kaydıdır; 99 dosyalık bir birime onay istemek lastik damga
+üretir ve insan onayını değersizleştirir.
+
+Şimdi **birim = insanın yazdığı söz**: `.ocean/goal.md` içindeki `- [ ]`
+satırları. Sonlu, kilitli, insan tanımlı. Oturum eklemek paydayı büyütmez; payda
+ancak sen yeni bir söz yazınca büyür.
+
+### Kanıt eşleme kuralları (deterministik, LLM yok)
+
+Bir söz satırı, kayıtlara şu ipuçlarıyla bağlanır:
+
+| İpucu | Yazım | Ne eşleşir |
+|-------|-------|------------|
+| yol | `src/auth`, `src/cli.ts`, `README.md` | O yola (ya da o dizinin altına) dokunan kayıtlar |
+| test | satır `test:` ile başlar | Yalnız test koşumu kayıtları |
+| etiket | satır içinde `#odeme` | Kaydın metninde ya da yolunda geçen etiket |
+
+- Bir sözün **seviyesi** = eşleşen kayıtların **en yüksek** kanıt seviyesi.
+- İpucu yoksa ya da hiçbir kayıt eşleşmezse madde **"kanıt yok"** durur —
+  eşleşme asla uydurulmaz.
+- Yol ipuçları ASCII'dir: "giriş/çıkış" gibi Türkçe ifadeler yol sanılmaz.
+- `test:` + yol birlikte yazılırsa ikisi de sağlanmalıdır.
+- `- [x]` diye elle atılan tik bir **beyandır**, barı doldurmaz (öyle işaretlenir).
+- Söz metnini değiştirirsen id değişir: eski onay yeni cümleyi kapsamaz
+  (kayıt `passport.jsonl` defterinde durmaya devam eder).
+
+## Mühür (`.ocean/muhur.md`)
+
+Bar dolduğunda — "topping out": inşaatta son kirişin tepeye çakılması — bir kez
+yazılır. Kapsamı dürüstçe söyler: kaç söz, ne zaman kilitlendi, hangi kayıtlara
+ve hangi imzalara dayanıyor; ve **ne demek olmadığını** ("ürün hatasız" demek
+değildir). Mühür yalnız son **onay** anında yazılır — söz silerek mühür alınamaz.
 
 ## Kart neyi seçer? (kural merdiveni)
 

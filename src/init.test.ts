@@ -31,6 +31,26 @@ test('sıfırdan init: state + goal + notes + CLAUDE.md bölümü kurulur', asyn
   assert.ok(claudeMd.includes('.ocean/goal.md'));
   assert.ok(claudeMd.includes('.ocean/notes.md'));
   assert.ok(claudeMd.includes('doğrulanmadı')); // dürüstlük talimatı
+  // Sözler İNSANINDIR: Claude'a açıkça "ekleme, silme" denir (moat koruması)
+  assert.ok(claudeMd.includes('teslim\n   sözleri kullanıcınındır'));
+});
+
+test('goal.md şablonu: 7 evrensel teslim kapısı + yönerge; hedef satırı sızmaz', async () => {
+  const { parseGoalItems } = await import('./goal.ts');
+  const { readGoal } = await import('./state.ts');
+  const dir = await tmpProj();
+  await runInit(dir);
+
+  const goal = await readFile(join(dir, '.ocean', 'goal.md'), 'utf8');
+  const items = parseGoalItems(goal);
+  assert.equal(items.length, 7, 'şablon 5-7 evrensel teslim kapısı kurmalı');
+  assert.ok(items.every((i) => !i.checked), 'şablon hiçbir sözü onaylı göstermez');
+  assert.ok(items.some((i) => i.hints.testOnly), '`test:` öneki örneği olmalı');
+  assert.ok(items.some((i) => i.hints.paths.length > 0), 'yol ipucu örneği olmalı');
+  assert.ok(goal.includes('kendi sözlerini yaz'), 'kullanıcıya sözün ONUN olduğu söylenir');
+
+  // Yönerge satırları panonun HEDEF cümlesi yerine geçmez (alıntı ile yazılı).
+  assert.equal(await readGoal(dir), null);
 });
 
 test('idempotent: ikinci init hiçbir şeyi ezmez, bölümü çiftlemez', async () => {

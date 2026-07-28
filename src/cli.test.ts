@@ -101,6 +101,10 @@ test('tam akış: init → sync → open (izole dizin, transcript yok senaryosu)
   assert.equal(sync.code, 0, sync.stderr);
   assert.ok(sync.stdout.includes('Topbeam senkron tamam'));
   assert.ok(sync.stdout.includes('Pano'));
+  // İlerleme dili YALNIZ teslim sözlerinde; defter nötr sayılır.
+  assert.ok(sync.stdout.includes('Teslim sözü: 0 / 7 madde onaylandı'));
+  assert.ok(sync.stdout.includes('Defter     : 0 oturum kaydı (ilerleme ölçüsü değil)'));
+  assert.equal(/\d+\/\d+ doğrulandı/.test(sync.stdout), false, 'eski ilerleme dili kalkmalı');
   await access(join(dir, '.ocean', 'pano.html'));
 
   const open = run(['open'], { cwd: dir });

@@ -13,7 +13,14 @@
  * Şema değişirse SCHEMA_VERSION'ı artır (BuildPassport konvansiyonu).
  */
 
-export const SCHEMA_VERSION = 1;
+/**
+ * 2: pasaport maddesi artık bir OTURUM birimi değil, `.ocean/goal.md`
+ * içindeki insan yazımı TESLİM SÖZÜdür (id `soz-…`). Alan şekli aynı kaldı;
+ * anlamı değişti — bu yüzden sürüm artırıldı. Eski state.json'lar okunmaya
+ * devam eder: eski `birim-…` maddeleri listeden düşer, ama onayları
+ * .ocean/passport.jsonl defterinde (append-only) durmaya devam eder.
+ */
+export const SCHEMA_VERSION = 2;
 
 /** Araç sürümü — TEK kaynak. UI/altbilgi/CLI buradan okur. */
 export const TOOL_VERSION = '0.1.0';
@@ -291,14 +298,17 @@ export interface Verification {
 }
 
 /**
- * PassportItem — BP BriefItem şemasına uyumlu pasaport maddesi.
- * "İşler sırasıyla BuildPassport'a dolar" akışının veri birimi.
+ * PassportItem — BP BriefItem şemasına uyumlu TESLİM SÖZÜ maddesi.
+ *
+ * Kaynağı `.ocean/goal.md` içindeki `- [ ]` satırlarıdır (goal.ts): sonlu,
+ * kilitli, İNSANIN YAZDIĞI söz. Oturum eklemek madde sayısını büyütmez —
+ * barın Sisifos'a dönmemesinin yapısal sebebi budur.
  * Kural (BP konvansiyonu): status varsayılanı 'not_verified' — araç ASLA
  * "tamamlandı" tahmin etmez; 'completed' yalnız insan kararıyla gelir.
  */
 export interface PassportItem {
   id: string;
-  /** Normalize kısa başlık. */
+  /** Sözün kendi metni (insanın cümlesi) — normalize edilmiş kısa başlık. */
   title: string;
   /** Kullanıcının kendi cümlesi (varsa). */
   clientText?: string;
@@ -425,7 +435,7 @@ export interface OceanState {
   log: LogEntry[];
   /** Deterministik motorun ürettiği iddialar. */
   claims: Claim[];
-  /** BP-uyumlu pasaport maddeleri. */
+  /** BP-uyumlu teslim sözü maddeleri (kaynak: .ocean/goal.md `- [ ]`). */
   passport: PassportItem[];
   /** Güncel sıradaki-tek-hareket kartı (yoksa henüz sync koşmadı). */
   card?: Card;
@@ -438,7 +448,7 @@ export interface OceanState {
   sessionsSeen: string[];
   /** Son sync zamanı (varsa). */
   lastSyncedAt?: string;
-  /** Pasaport FULL-TİK olduğunda "ürün geliştirildi" bildirimi verildi mi. */
+  /** Bar dolduğunda (mühür yazıldığında) "ürün geliştirildi" bildirimi verildi mi. */
   fullTickNotifiedAt?: string;
 }
 

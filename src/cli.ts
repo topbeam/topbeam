@@ -32,8 +32,8 @@ Komutlar:
   init            Bu projeyi Topbeam'e bağla (.ocean/ kurulumu + CLAUDE.md entegrasyonu)
   sync            Claude Code transcript + git gerçeklerinden log ve kartı güncelle
   verify <id>     Bir işi doğrula (insan onayı kaydet — kanıt seviyesi yükselir)
-                  <id> tek kayıt ya da pasaport iş birimi (birim-…) olabilir;
-                  birim verirsen o oturumun tüm kayıtları tek onayla geçer
+                  <id> tek kayıt ya da teslim sözü (soz-…) olabilir; söz
+                  verirsen o söze eşleşen tüm kayıtlar tek onayla geçer
                   YALNIZ terminalden: cevap pipe/otomasyondan gelirse onay
                   kaydedilmez (insan onayı = gerçek insan)
   open            Pano yolunu göster (tarayıcıyı otomatik AÇMAZ)
@@ -81,15 +81,22 @@ async function cmdSync(_args: Args): Promise<void> {
     ),
     ...(kaynaksiz > 0 ? [`${kaynaksiz} kanal kaydı yok`] : []),
   ].join(' · ');
-  // Rapor da panoyla AYNI kapıdan geçer: "doğrulandı" sayısı passport.jsonl
-  // defterine dayanır, pasaportun kendi 'completed' iddiasına değil.
-  const verified = res.dogrulananBirim ?? 0;
+  // Rapor da panoyla AYNI kapıdan geçer: onay sayısı passport.jsonl defterine
+  // dayanır, maddenin kendi 'completed' iddiasına değil.
+  const sozOnayli = res.sozOnayli ?? 0;
+  const sozToplam = res.sozToplam ?? 0;
 
   out(`Topbeam senkron tamam — ${st.projectName}`);
   out(`  Transcript : ${res.transcriptsFound ?? 0} oturum tarandı`);
   out(`  Claim      : ${st.claims.length}${levelSummary !== '' ? ` (${levelSummary})` : ''}`);
   out(`  Log        : ${st.log.length} satır`);
-  out(`  Pasaport   : ${verified}/${st.passport.length} doğrulandı`);
+  out(
+    sozToplam > 0
+      ? `  Teslim sözü: ${sozOnayli} / ${sozToplam} madde onaylandı`
+      : "  Teslim sözü: yok — sözlerini .ocean/goal.md'ye yaz, bar orada dolsun",
+  );
+  // Defter ARŞİVDİR: sayılır ama ilerleme diye sunulmaz (payda büyüsün diye değil).
+  out(`  Defter     : ${res.defterKaydi ?? 0} oturum kaydı (ilerleme ölçüsü değil)`);
   if (st.card !== undefined) {
     out(`  Kart       : ${st.card.action.verb}${st.card.action.command !== undefined ? `  →  ${st.card.action.command}` : ''}`);
   }

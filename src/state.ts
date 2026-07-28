@@ -12,6 +12,8 @@ import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { OCEAN_DIR, STATE_FILE, type OceanState, type PassportLogRecord } from './types.ts';
 import { buildLedger, BOS_LEDGER, type VerificationLedger } from './ledger.ts';
+import { parseGoalItems, type GoalItem } from './goal.ts';
+import { MUHUR_FILE } from './muhur.ts';
 import { redactDeep } from './redact.ts';
 
 export type { PassportLogRecord } from './types.ts';
@@ -38,6 +40,9 @@ export function panoPath(cwd: string): string {
 }
 export function passportLogPath(cwd: string): string {
   return join(oceanDir(cwd), PASSPORT_LOG_FILE);
+}
+export function muhurPath(cwd: string): string {
+  return join(oceanDir(cwd), MUHUR_FILE);
 }
 
 /** .ocean/state.json oku. Yoksa ya da parse edilemiyorsa null (dürüst). */
@@ -128,7 +133,12 @@ export async function readLedger(cwd: string): Promise<VerificationLedger> {
 
 // ── goal.md / notes.md okuma ─────────────────────────────────────────────────
 
-/** goal.md'nin ilk anlamlı satırı (başlık/parantez-yönerge/boş satır atlanır). */
+/**
+ * goal.md'nin ilk anlamlı HEDEF satırı — panonun başlığındaki tek cümle.
+ * Atlananlar: başlık (`#`), parantez/HTML yönergesi, alıntı (`>`) ve LİSTE
+ * satırları (`- …`, `* …`). Liste satırları teslim SÖZLERİDİR (goal.ts) —
+ * biri hedef cümlesi yerine geçemez.
+ */
 export async function readGoal(cwd: string): Promise<string | null> {
   let raw: string;
   try {
@@ -138,10 +148,41 @@ export async function readGoal(cwd: string): Promise<string | null> {
   }
   for (const line of raw.split('\n')) {
     const t = line.trim();
-    if (t === '' || t.startsWith('#') || t.startsWith('(') || t.startsWith('<!--')) continue;
+    if (
+      t === '' ||
+      t.startsWith('#') ||
+      t.startsWith('(') ||
+      t.startsWith('<!--') ||
+      t.startsWith('>') ||
+      t.startsWith('- ') ||
+      t.startsWith('* ')
+    ) {
+      continue;
+    }
     return t;
   }
   return null;
+}
+
+/**
+ * goal.md'deki teslim sözleri (`- [ ]` satırları) — BARIN TEK KAYNAĞI.
+ * Dosya yoksa boş liste: bar gösterilmez (boş bar sahte affordance olurdu).
+ */
+export async function readGoalItems(cwd: string): Promise<GoalItem[]> {
+  let raw: string;
+  try {
+    raw = await readFile(goalPath(cwd), 'utf8');
+  } catch {
+    return [];
+  }
+  return parseGoalItems(raw);
+}
+
+/** Mührü yaz — redactDeep zorunlu geçit (mühür de diske giden metindir). */
+export async function writeMuhur(cwd: string, text: string): Promise<void> {
+  await mkdir(oceanDir(cwd), { recursive: true });
+  const { value } = redactDeep(text);
+  await writeFile(muhurPath(cwd), value, 'utf8');
 }
 
 export interface ParsedNote {

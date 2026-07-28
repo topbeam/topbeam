@@ -1,27 +1,24 @@
 /**
- * Pasaport İŞ BİRİMİ katmanı — claim'leri insanın onaylayabileceği birimlere toplar.
+ * DEFTER — oturum kayıtları. Bir ARŞİVDİR, bir ilerleme ölçüsü DEĞİLDİR.
  *
- * NEDEN VAR: her claim'in ayrı pasaport maddesi olduğu sürüm dogfood'da 278
- * madde üretti; her test koşumu ayrı satırdı, FULL-TİK pratikte erişilemezdi.
- * Kimse 278 kere "evet gördüm" demez — erişilemeyen bir tik, tik değildir.
- * Birim = bir Claude Code OTURUMU: insanın kafasında da tek bir iş öbeğidir
- * ("dün akşam login ekranını yaptığımız oturum").
+ * NEDEN BURASI ARTIK BAR DEĞİL (Sisifos barı): birim bir Claude Code
+ * OTURUMUNA bağlıyken her yeni kodlama oturumu paydayı büyütüyordu — bugün
+ * 0/11, yarın çalışırsan 0/12: çalıştıkça bar senden uzaklaşıyordu. Üstelik
+ * "2026-07-11 · 99 dosya · 40 test koşumu" bir ürün SÖZÜ değil arşiv kaydıdır;
+ * 99 dosyalık bir birime onay istemek lastik damga üretirdi.
+ *
+ * Bar artık `.ocean/goal.md`'deki insan sözlerinden kurulur (goal.ts). Burası
+ * yalnız "hangi oturumda ne ölçüldü" kaydını verir: sayılır, gösterilir, ama
+ * ilerleme diye SUNULMAZ ve satırlarında `topbeam verify` öne çıkarılmaz.
  *
  * DETERMİNİZM: birim id'si `birim-<sessionId>` — oturum kimliği transcript
  * dosya adıdır, yeniden sync'te değişmez. Oturumsuz claim (örn. verify'ın
  * ürettiği "çalışıyor" kaydı) kendi id'siyle tek başına birim olur.
  *
- * DÜRÜSTLÜK (ihlal = red):
- * - Birimin seviyesi EN ZAYIF claim'in seviyesidir. Bir kayıt doğrulanmamışsa
- *   birim doğrulanmamıştır — gruplama kanıt yükseltmez, kanıtı SEYRELTMEZ.
- * - 'completed' yalnız birimdeki TÜM claim'ler insan-onaylıysa. Araç asla
- *   "tamam" tahmin etmez.
- * - Onaydan sonra birime yeni kayıt düşerse madde 'partial' olur ve bunu
- *   açıkça söyler — eski onay yeni işi kapsıyormuş gibi gösterilmez.
- * - İnsan kararı KAYBOLMAZ: verification taşınır; taşınamayan eski madde
- *   (claim'i düşmüş) iz olarak listede kalır.
+ * DÜRÜSTLÜK: birimin seviyesi EN ZAYIF claim'in seviyesidir — gruplama kanıt
+ * yükseltmez, kanıtı seyreltmez.
  */
-import type { Claim, EvidenceLevel, PassportItem, PassportItemStatus } from './types.ts';
+import type { Claim, EvidenceLevel } from './types.ts';
 
 /** Birim id öneki — claim id'leriyle karışmasın diye ayrı ad alanı. */
 export const UNIT_PREFIX = 'birim-';
@@ -78,12 +75,11 @@ function unitOlcum(claims: readonly Claim[]): { dosya: number; test: number; orn
 /**
  * Birim başlığı — ÖLÇÜLMÜŞ sayılardan kurulur (uydurma özet yok, LLM yok):
  *   "2026-07-28 · 16 dosya · 4 test koşumu (src/a.ts, src/b.ts +14)"
- * Kayıt metnini kopyalamak yerine sayı vermek pasaportu okunur kılar; iddia
- * metinlerinin tamamı claim'lerde durur (birim onaylanırken hepsi gösterilir).
+ * Bu bir ARŞİV SATIRIDIR, bir ürün sözü değildir — defterde öyle sunulur.
  * Dosya kaydı olmayan birimde (örn. yalnız "çalışıyor" kaydı) temsilci
  * claim'in kendi metni kullanılır.
  */
-function unitTitle(claims: readonly Claim[], firstTs: string): string {
+export function unitTitle(claims: readonly Claim[], firstTs: string): string {
   const { dosya, test, ornek } = unitOlcum(claims);
   const tarih = gun(firstTs);
   const on = tarih !== null ? `${tarih} · ` : '';
@@ -105,7 +101,7 @@ function unitTitle(claims: readonly Claim[], firstTs: string): string {
   return claimTitle(`${on}${parcalar.join(' · ')}${kuyruk}`);
 }
 
-interface Unit {
+export interface Unit {
   id: string;
   claims: Claim[];
   /** Birimdeki en erken kayıt zamanı — deterministik sıralama anahtarı. */
@@ -134,95 +130,27 @@ export function groupIntoUnits(claims: readonly Claim[]): Unit[] {
   return units;
 }
 
+/** Defterde gösterilen tek oturum kaydı — salt gösterim, onay hedefi DEĞİL. */
+export interface DefterKaydi {
+  id: string;
+  /** Ölçülmüş başlık: "2026-07-28 · 16 dosya · 4 test koşumu (…)". */
+  title: string;
+  /** Birimin EN ZAYIF kanıt seviyesi. */
+  level: EvidenceLevel;
+  claimIds: string[];
+}
+
 /**
- * Claim listesinden pasaportu (yeniden) kur.
+ * Claim'lerden defteri kur — oturum başına bir satır, deterministik sırayla.
  *
- * existing: önceki pasaport — insan kararları (verification, clientText)
- * buradan taşınır; otomatik üretilmiş eski maddeler tazelenir.
+ * Burada 'status'/'verification' YOKTUR: defter bir ilerleme listesi değildir.
+ * İnsan onayı ve bar goal.md sözlerinde ölçülür (goal.ts).
  */
-export function buildPassport(
-  existing: readonly PassportItem[],
-  claims: readonly Claim[],
-): PassportItem[] {
-  const units = groupIntoUnits(claims);
-  const unitIds = new Set(units.map((u) => u.id));
-
-  // Eski maddelerin insan kararlarını birimlere taşı: aynı id'li madde ya da
-  // claim'leri tamamen bu birimin içinde kalan (eski, claim-başına) madde.
-  const carried = new Map<string, PassportItem>();
-  const attached = new Set<string>();
-  const claimToUnit = new Map<string, string>();
-  for (const u of units) for (const c of u.claims) claimToUnit.set(c.id, u.id);
-  for (const prev of existing) {
-    let hedef: string | undefined;
-    if (unitIds.has(prev.id)) hedef = prev.id;
-    else if (prev.claimIds.length > 0) {
-      const hedefler = new Set(prev.claimIds.map((cid) => claimToUnit.get(cid)));
-      const tek = [...hedefler];
-      if (tek.length === 1 && tek[0] !== undefined) hedef = tek[0];
-    }
-    if (hedef === undefined) continue;
-    attached.add(prev.id);
-    const onceki = carried.get(hedef);
-    // Birden çok aday varsa EN SON insan kararı kazanır (deterministik: at, sonra id).
-    if (
-      onceki === undefined ||
-      (prev.verification !== undefined &&
-        (onceki.verification === undefined ||
-          prev.verification.at > onceki.verification.at ||
-          (prev.verification.at === onceki.verification.at && prev.id.localeCompare(onceki.id) > 0)))
-    ) {
-      carried.set(hedef, prev);
-    }
-  }
-
-  const out: PassportItem[] = [];
-  for (const u of units) {
-    const prev = carried.get(u.id);
-    const level = unitLevel(u.claims);
-    const humanCount = u.claims.filter((c) => c.level === 'insan-onayi').length;
-    const n = u.claims.length;
-    const verification = prev?.verification;
-
-    /**
-     * Durum sözlüğü (yuvarlama YOK):
-     *  completed    = birimdeki HER kayıt insan onaylı,
-     *  partial      = bir kısmı onaylı (ya da onaydan sonra yeni kayıt düştü),
-     *  not_verified = hiçbir kayıt insan onaylı değil (varsayılan).
-     */
-    let status: PassportItemStatus;
-    let reason: string | undefined;
-    if (level === 'insan-onayi') {
-      status = 'completed';
-      reason = n > 1 ? `${n} kaydın hepsi insan onaylı.` : undefined;
-    } else if (verification !== undefined) {
-      // Onay vardı ama birim artık tam onaylı değil → sessizce "tamam" gösterilmez.
-      status = 'partial';
-      reason = `Onaydan sonra bu birime yeni kayıt eklendi — ${humanCount}/${n} kayıt insan onaylı.`;
-    } else if (humanCount > 0) {
-      status = 'partial';
-      reason = `${humanCount}/${n} kayıt insan onaylı — birim henüz tamam değil.`;
-    } else {
-      status = 'not_verified';
-    }
-
-    out.push({
-      id: u.id,
-      title: unitTitle(u.claims, u.firstTs),
-      status,
-      claimIds: u.claims.map((c) => c.id),
-      level,
-      ...(reason !== undefined ? { reason } : {}),
-      ...(prev?.clientText !== undefined ? { clientText: prev.clientText } : {}),
-      ...(verification !== undefined ? { verification } : {}),
-    });
-  }
-
-  // Birime taşınamayan ESKİ İNSAN KARARLARI iz olarak korunur (onay kaybolmaz).
-  // Taşınanlar burada tekrar edilmez; taşınamayan (claim'i düşmüş) madde kalır.
-  const orphans = existing
-    .filter((p) => p.verification !== undefined && !attached.has(p.id))
-    .sort((a, b) => a.id.localeCompare(b.id));
-
-  return [...out, ...orphans];
+export function buildDefter(claims: readonly Claim[]): DefterKaydi[] {
+  return groupIntoUnits(claims).map((u) => ({
+    id: u.id,
+    title: unitTitle(u.claims, u.firstTs),
+    level: unitLevel(u.claims),
+    claimIds: u.claims.map((c) => c.id),
+  }));
 }

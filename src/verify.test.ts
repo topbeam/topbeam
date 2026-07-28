@@ -12,17 +12,34 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { mkdir } from 'node:fs/promises';
 import { newOceanState, type Claim, type Verification } from './types.ts';
-import { writeState, readState, passportLogPath } from './state.ts';
-import { buildPassport } from './passport.ts';
-import { approveClaim, insanKapisi, runVerify, type VerifyDeps } from './verify.ts';
+import { writeState, readState, passportLogPath, goalPath, oceanDir, muhurPath } from './state.ts';
+import { writeFile } from 'node:fs/promises';
+import { buildTeslim, parseGoalItems } from './goal.ts';
+import { KALABALIK_ESIK, approveClaim, insanKapisi, runVerify, type VerifyDeps } from './verify.ts';
 
 const NOW = new Date('2026-07-28T15:00:00.000Z');
+
+/**
+ * Teslim sözleri — barın kaynağı. Testlerdeki iki claim'i kapsayan sözler:
+ *   soz #1 → dosya kaydı (src/a.ts yolu), soz #2 → test koşumu kayıtları.
+ */
+const GOAL_IKI_SOZ = `# Proje Hedefi
+
+## Teslim sözleri
+
+- [ ] Giriş ekranı hazır src/a.ts
+- [ ] test: testler yeşil
+`;
+/** Tek söz: iki kaydı da kapsar (dosya yolu + test ipucu aynı satırda). */
+const GOAL_TEK_SOZ = `- [ ] Dikey dilim bitti src/a.ts #test\n`;
 
 function claims2(): Claim[] {
   return [
     {
       id: 'dosya-git-s1', text: '1 dosya değişti: src/a.ts', level: 'dosya-kaniti', kind: 'dosya',
+      signals: { fileCount: 1, paths: ['src/a.ts'] },
       evidence: [
         { kind: 'transcript-tool-use', summary: 'Transcript: hatasız edit.' },
         { kind: 'git-diff', summary: 'git: çalışma ağacında kayıt var.' },
@@ -37,18 +54,25 @@ function claims2(): Claim[] {
   ];
 }
 
-/** Aynı iki claim, ama AYNI oturuma bağlı → tek iş birimi (birim-s1). */
+/** Aynı iki claim, ama AYNI oturuma bağlı (oturum artık pasaportu ETKİLEMEZ). */
 function claimsBirimli(): Claim[] {
   return claims2().map((c) => ({ ...c, sessionId: 's1' }));
 }
 
-async function makeStateDir(claims: Claim[] = claims2()): Promise<string> {
+async function makeStateDir(claims: Claim[] = claims2(), goal = GOAL_IKI_SOZ): Promise<string> {
   const dir = await mkdtemp(join(tmpdir(), 'topbeam-verify-'));
+  await mkdir(oceanDir(dir), { recursive: true });
+  await writeFile(goalPath(dir), goal, 'utf8');
   const st = newOceanState('Verify Proje', NOW);
   st.claims = claims;
-  st.passport = buildPassport([], st.claims);
+  st.passport = buildTeslim([], st.claims, parseGoalItems(goal));
   await writeState(dir, st);
   return dir;
+}
+
+/** goal.md'deki n. sözün id'si (0 tabanlı) — pano/CLI'da görünen `soz-…`. */
+function sozId(goal: string, n = 0): string {
+  return parseGoalItems(goal)[n]?.id ?? '';
 }
 
 interface FakeDeps extends VerifyDeps {
@@ -118,7 +142,8 @@ test('onay (e): insan-onayı + pasaport completed + append-only log + kanıt gö
   assert.equal(c?.level, 'insan-onayi');
   assert.ok(c?.evidence.some((e) => e.kind === 'human'));
 
-  const item = st?.passport.find((p) => p.id === 'dosya-git-s1');
+  // Onay, o kaydı kapsayan TESLİM SÖZÜNE yazılır (oturuma değil).
+  const item = st?.passport.find((p) => p.id === sozId(GOAL_IKI_SOZ, 0));
   assert.equal(item?.status, 'completed');
   assert.equal(item?.verification?.by, 'ekin');
 
@@ -128,15 +153,16 @@ test('onay (e): insan-onayı + pasaport completed + append-only log + kanıt gö
   assert.equal(rec.levelBefore, 'dosya-kaniti');
   assert.equal(rec.levelAfter, 'insan-onayi');
 
-  // full-tik olmadan bildirim YOK
+  // bar dolmadan bildirim YOK, mühür de YOK
   assert.equal(deps.notifications.length, 0);
+  await assert.rejects(() => readFile(muhurPath(dir), 'utf8'));
 
   // pano tazelendi
   const html = await readFile(join(dir, '.ocean', 'pano.html'), 'utf8');
-  assert.ok(html.includes('1/2 doğrulandı'));
+  assert.ok(html.includes('1 / 2 madde onaylandı'));
 });
 
-test('tüm maddeler onaylanınca FULL-TİK: bildirim BİR KEZ, tekrarlanmaz', async () => {
+test('BAR DOLUNCA: mühür yazılır + bildirim BİR KEZ, tekrarlanmaz', async () => {
   const dir = await makeStateDir();
   const d1 = fakeDeps('e');
   await runVerify(dir, 'dosya-git-s1', d1);
@@ -150,12 +176,19 @@ test('tüm maddeler onaylanınca FULL-TİK: bildirim BİR KEZ, tekrarlanmaz', as
 
   const st = await readState(dir);
   assert.ok(st?.fullTickNotifiedAt);
-  assert.ok(st?.log.some((e) => e.source === 'ocean' && e.text.includes('FULL-TİK')));
+  assert.ok(st?.log.some((e) => e.source === 'ocean' && e.text.includes('Bar doldu')));
 
-  // pano kutlama bandı
+  // MÜHÜR: kapsam dürüstçe yazılı
+  const muhur = await readFile(muhurPath(dir), 'utf8');
+  assert.ok(muhur.includes('Kapsam    : 2 teslim sözü — hepsi insan onaylı.'));
+  assert.ok(muhur.includes('- Giriş ekranı hazır src/a.ts'));
+  assert.ok(muhur.includes('## Bu mühür ne demek DEĞİL'));
+  assert.ok(d2.lines.some((l) => l.includes('Mühür yazıldı')));
+
+  // pano tören bandı
   const html = await readFile(join(dir, '.ocean', 'pano.html'), 'utf8');
   assert.ok(html.includes('Ürün geliştirildi 🎉'));
-  assert.ok(html.includes('2/2 doğrulandı'));
+  assert.ok(html.includes('2 / 2 madde onaylandı'));
 
   // zaten onaylı claim'i tekrar verify → yeniden onay istenmez, bildirim yok
   const d3 = fakeDeps('e');
@@ -165,19 +198,20 @@ test('tüm maddeler onaylanınca FULL-TİK: bildirim BİR KEZ, tekrarlanmaz', as
   assert.ok(d3.lines.some((l) => l.includes('zaten insan onaylı')));
 });
 
-// ── iş birimi onayı (FULL-TİK'i erişilebilir kılan yol) ─────────────────────
+// ── teslim sözü onayı (barı dolduran tek yol) ───────────────────────────────
 
-test('iş birimi id\'si ile onay: birimdeki TÜM kayıtlar tek soruda geçer, hepsi ekrana dökülür', async () => {
-  const dir = await makeStateDir(claimsBirimli());
+test('teslim sözü id\'si ile onay: söze eşleşen TÜM kayıtlar tek soruda geçer', async () => {
+  const dir = await makeStateDir(claimsBirimli(), GOAL_TEK_SOZ);
+  const soz = sozId(GOAL_TEK_SOZ);
   const deps = fakeDeps('e');
-  const res = await runVerify(dir, 'birim-s1', deps);
+  const res = await runVerify(dir, soz, deps);
   assert.equal(res.ok, true);
   assert.equal(res.approved, true);
 
   // KÖR ONAY YOK: iki iddia da soru sorulmadan önce gösterildi
   assert.ok(deps.lines.some((l) => l.includes('1 dosya değişti')));
   assert.ok(deps.lines.some((l) => l.includes('19 test geçti')));
-  assert.ok(deps.lines.some((l) => l.includes('İş birimi')));
+  assert.ok(deps.lines.some((l) => l.includes('Teslim sözü: Dikey dilim bitti')));
 
   const st = await readState(dir);
   assert.ok(st?.claims.every((c) => c.level === 'insan-onayi'));
@@ -193,13 +227,13 @@ test('iş birimi id\'si ile onay: birimdeki TÜM kayıtlar tek soruda geçer, he
     ['dosya-git-s1', 'test-s1-0'],
   );
 
-  // tek birim tamamen onaylandı → FULL-TİK
+  // tek söz tamamen onaylandı → bar doldu
   assert.equal(res.fullTick, true);
   assert.equal(res.notified, true);
 });
 
-test('birimin tek kaydını onaylamak birimi "tamam" YAPMAZ (partial, dürüst sayım)', async () => {
-  const dir = await makeStateDir(claimsBirimli());
+test('sözün tek kaydını onaylamak sözü "tamam" YAPMAZ (partial, dürüst sayım)', async () => {
+  const dir = await makeStateDir(claimsBirimli(), GOAL_TEK_SOZ);
   const res = await runVerify(dir, 'dosya-git-s1', fakeDeps('e'));
   assert.equal(res.approved, true);
   assert.equal(res.fullTick, false);
@@ -209,24 +243,62 @@ test('birimin tek kaydını onaylamak birimi "tamam" YAPMAZ (partial, dürüst s
   assert.equal(st?.passport[0]?.status, 'partial');
   assert.ok(st?.passport[0]?.reason?.includes('1/2'));
   const html = await readFile(join(dir, '.ocean', 'pano.html'), 'utf8');
-  assert.ok(html.includes('0/1 doğrulandı')); // yarısı onaylı birim "doğrulandı" sayılmaz
+  // yarısı onaylı söz bölmeyi DOLDURMAZ
+  assert.ok(html.includes('0 / 1 madde onaylandı'));
+  assert.equal(html.includes('class="seg on"'), false);
 });
 
-test('birim onayında red (H): hiçbir kayıt yükselmez', async () => {
-  const dir = await makeStateDir(claimsBirimli());
-  const res = await runVerify(dir, 'birim-s1', fakeDeps('h'));
+test('söz onayında red (H): hiçbir kayıt yükselmez', async () => {
+  const dir = await makeStateDir(claimsBirimli(), GOAL_TEK_SOZ);
+  const res = await runVerify(dir, sozId(GOAL_TEK_SOZ), fakeDeps('h'));
   assert.equal(res.approved, false);
   const st = await readState(dir);
   assert.ok(st?.claims.every((c) => c.level !== 'insan-onayi'));
   await assert.rejects(() => readFile(passportLogPath(dir), 'utf8'));
 });
 
-test('bilinmeyen id hatası iş birimlerini de gösterir (yol tarif eder)', async () => {
-  const dir = await makeStateDir(claimsBirimli());
+test('bilinmeyen id hatası teslim sözlerini de gösterir (yol tarif eder)', async () => {
+  const dir = await makeStateDir(claimsBirimli(), GOAL_TEK_SOZ);
   const res = await runVerify(dir, 'olmayan-id', fakeDeps('e'));
   assert.equal(res.ok, false);
-  assert.ok(res.error?.includes('birim-s1'));
+  assert.ok(res.error?.includes(sozId(GOAL_TEK_SOZ)));
   assert.ok(res.error?.includes('2 kayıt'));
+  assert.ok(res.error?.includes('Dikey dilim bitti'));
+});
+
+test('KAYDI OLMAYAN söz onaylanamaz: "kanıt yok" der, lastik damga vurdurmaz', async () => {
+  const goal = '- [ ] Belgeler hazır\n';
+  const dir = await makeStateDir(claims2(), goal);
+  const deps = fakeDeps('e');
+  const res = await runVerify(dir, sozId(goal), deps);
+  assert.equal(res.ok, false);
+  assert.ok(res.error?.includes('bağlanan kayıt yok'));
+  assert.ok(res.error?.includes('ipucu'), 'ne yapacağı söylenmeli');
+  await assert.rejects(() => readFile(passportLogPath(dir), 'utf8'));
+});
+
+test('SİSİFOS: yeni oturumun kayıtları PAYDAYI büyütmez (madde sayısı goal.md\'den)', async () => {
+  const dir = await makeStateDir(claimsBirimli(), GOAL_TEK_SOZ);
+  const once = (await readState(dir))?.passport.length;
+  assert.equal(once, 1);
+
+  // ertesi gün başka bir oturum daha çalıştı
+  const st = await readState(dir);
+  assert.ok(st);
+  st.claims = [
+    ...st.claims,
+    {
+      id: 'dosya-git-s2', text: '9 dosya değişti: src/a.ts', level: 'dosya-kaniti', kind: 'dosya',
+      sessionId: 's2', signals: { fileCount: 9, paths: ['src/a.ts'] },
+      evidence: [{ kind: 'git-diff', summary: 'git kaydı' }],
+      createdAt: '2026-07-29T10:00:00Z',
+    },
+  ];
+  await writeState(dir, st);
+
+  await runVerify(dir, 'dosya-git-s1', fakeDeps('e'));
+  const sonra = await readState(dir);
+  assert.equal(sonra?.passport.length, 1, 'oturum eklendi ama bar UZAMADI');
 });
 
 // ── İNSAN KAPISI (ürünün en kutsal kuralı: insan onayı = GERÇEK insan) ──────
@@ -278,7 +350,7 @@ test('BOT ONAYI ENGELLENDİ: etkileşimsiz "e" cevabı seviyeyi YÜKSELTMEZ, log
   assert.equal(c?.level, 'dosya-kaniti');
   assert.equal(c?.evidence.some((e) => e.kind === 'human'), false);
   // pasaport yükselmedi + değişmez log HİÇ oluşmadı
-  assert.notEqual(st?.passport.find((p) => p.id === 'dosya-git-s1')?.status, 'completed');
+  assert.notEqual(st?.passport.find((p) => p.id === sozId(GOAL_IKI_SOZ, 0))?.status, 'completed');
   await assert.rejects(() => readFile(passportLogPath(dir), 'utf8'));
 
   // kullanıcıya neden söylenir (sessiz yutma yok)
@@ -301,7 +373,10 @@ test('terminal onayı kanalını KAYDEDER: verification.source + jsonl source = 
   await runVerify(dir, 'dosya-git-s1', fakeDeps('e'));
 
   const st = await readState(dir);
-  assert.equal(st?.passport.find((p) => p.id === 'dosya-git-s1')?.verification?.source, 'terminal');
+  assert.equal(
+    st?.passport.find((p) => p.id === sozId(GOAL_IKI_SOZ, 0))?.verification?.source,
+    'terminal',
+  );
 
   const rec = JSON.parse((await readFile(passportLogPath(dir), 'utf8')).trim()) as {
     by: string;
@@ -350,13 +425,38 @@ test('DEFTERSİZ "insan-onayi" seviyesi onaylı SAYILMAZ: dürüstçe işaretlen
   assert.equal(d2.lines.some((l) => l.includes('kanal kaydı yok')), false);
 });
 
-test('rapor sayısı DEFTERDEN: dayanaksız "completed" madde "doğrulandı" diye sayılmaz', async () => {
-  const dir = await makeStateDir(claimsBirimli());
+test('rapor sayısı DEFTERDEN: dayanaksız "completed" madde onaylandı diye sayılmaz', async () => {
+  const dir = await makeStateDir(claimsBirimli(), GOAL_TEK_SOZ);
   const deps = fakeDeps('e');
-  await runVerify(dir, 'dosya-git-s1', deps); // birimin YALNIZ bir kaydı onaylı
-  assert.ok(deps.lines.some((l) => l.includes('Pasaport: 0/1 doğrulandı')));
+  await runVerify(dir, 'dosya-git-s1', deps); // sözün YALNIZ bir kaydı onaylı
+  assert.ok(deps.lines.some((l) => l.includes('Teslim sözü: 0 / 1 madde onaylandı')));
 
   const d2 = fakeDeps('e');
-  await runVerify(dir, 'test-s1-0', d2); // birim tamamlandı → defterle 1/1
-  assert.ok(d2.lines.some((l) => l.includes('Pasaport: 1/1 doğrulandı')));
+  await runVerify(dir, 'test-s1-0', d2); // söz tamamlandı → defterle 1/1
+  assert.ok(d2.lines.some((l) => l.includes('Teslim sözü: 1 / 1 madde onaylandı')));
+});
+
+test('GENİŞ SÖZ uyarısı: eşiği aşan kayıt sayısında soru öncesi lastik-damga uyarısı', async () => {
+  const goal = '- [ ] test: testler yeşil\n';
+  const cok: Claim[] = Array.from({ length: KALABALIK_ESIK + 1 }, (_, i) => ({
+    id: `test-${i}`,
+    text: `${i} test geçti (npm test).`,
+    level: 'test-kaniti',
+    kind: 'test',
+    evidence: [{ kind: 'test-output', summary: '# pass' }],
+    createdAt: `2026-07-28T10:${String(i).padStart(2, '0')}:00Z`,
+  }));
+  const dir = await makeStateDir(cok, goal);
+  const deps = fakeDeps('h'); // uyarıyı görüp REDDEDEN insan
+  const res = await runVerify(dir, sozId(goal), deps);
+
+  assert.equal(res.approved, false);
+  assert.ok(deps.lines.some((l) => l.includes(`bu söz ${KALABALIK_ESIK + 1} kaydı kapsıyor`)));
+  assert.ok(deps.lines.some((l) => l.includes('onay olmaktan çıkar')));
+
+  // eşiğin altında uyarı YOK (gürültü yapmaz)
+  const az = await makeStateDir(cok.slice(0, 2), goal);
+  const d2 = fakeDeps('h');
+  await runVerify(az, sozId(goal), d2);
+  assert.equal(d2.lines.some((l) => l.includes('kaydı kapsıyor')), false);
 });

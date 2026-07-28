@@ -16,8 +16,9 @@
  *   transcript değiştiyse iddia da düşer — pasaport maddesi iz olarak kalır).
  * - Log yeniden kurulur: kanıtlı gerçekler + beyanlar + korunan insan/ocean
  *   satırları. Tekrarlar (ts+source+text) ayıklanır, ardışık tekrarlar "×N".
- * - Pasaport claim başına değil İŞ BİRİMİ (oturum) başına kurulur; insan
- *   kararları taşınır (passport.ts).
+ * - Pasaport TESLİM SÖZLERİNDEN kurulur (.ocean/goal.md `- [ ]` satırları);
+ *   insan kararları aynı id'li sözden taşınır (goal.ts). Oturum eklemek
+ *   madde sayısını BÜYÜTMEZ — bar sonlu ve insan tanımlıdır.
  */
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -25,11 +26,13 @@ import { collectClaude } from './collect/claude.ts';
 import { collectGit } from './collect/git.ts';
 import { buildTruth, collapseRepeats } from './truth.ts';
 import { buildCard, scriptsFromPackageJson } from './card.ts';
-import { buildPassport } from './passport.ts';
+import { buildTeslim } from './goal.ts';
+import { buildDefter } from './passport.ts';
 import { renderPano } from './pano.ts';
 import {
   panoPath,
   readGoal,
+  readGoalItems,
   readLedger,
   readNotes,
   readState,
@@ -51,10 +54,15 @@ export interface SyncResult {
   redactHits?: number;
   transcriptsFound?: number;
   /**
-   * DEFTERLE DESTEKLENEN "doğrulandı" sayısı (passport.jsonl). Pasaportun kendi
-   * 'completed' iddiası buraya girmez — CLI ve pano aynı sayıyı gösterir.
+   * DEFTERLE DESTEKLENEN insan onaylı TESLİM SÖZÜ sayısı (passport.jsonl).
+   * Maddenin kendi 'completed' iddiası buraya girmez — CLI ve pano aynı sayıyı
+   * gösterir. Barın dolu bölme sayısı budur.
    */
-  dogrulananBirim?: number;
+  sozOnayli?: number;
+  /** goal.md'deki teslim sözü sayısı = barın bölme sayısı (0 → bar yok). */
+  sozToplam?: number;
+  /** Defterdeki oturum kaydı sayısı — ARŞİV sayımı, ilerleme ölçüsü DEĞİL. */
+  defterKaydi?: number;
   /** Defterde geçerli terminal onayı BULUNAN claim sayısı ("insan onayı" der). */
   onayliClaim?: number;
   /**
@@ -159,9 +167,13 @@ export async function runSync(cwd: string, opts: { now?: Date } = {}): Promise<S
     tutulan: log.length,
   };
 
-  // Pasaport: claim başına değil, İŞ BİRİMİ (oturum) başına madde — insanın
-  // onaylayabileceği ölçek. İnsan kararları taşınır (passport.ts).
-  const passport = buildPassport(state.passport, merged);
+  /**
+   * PASAPORT = TESLİM SÖZLERİ (goal.md). Oturum başına DEĞİL: yeni bir kodlama
+   * oturumu paydayı büyütmez — Sisifos barının yapısal panzehiri. İnsan
+   * kararları aynı id'li sözden taşınır (goal.ts).
+   */
+  const goalItems = await readGoalItems(cwd);
+  const passport = buildTeslim(state.passport, merged, goalItems);
 
   // 5) Kart — package.json scripts önerisi (fs okuma burada; card.ts saf).
   let scripts: Record<string, string> = {};
@@ -209,13 +221,19 @@ export async function runSync(cwd: string, opts: { now?: Date } = {}): Promise<S
   await writePano(cwd, renderPano(next, { goalText, ledger }));
 
   if (hits > 0) notes.push(`${hits} parça olası gizli bilgi maskelendi (state/pano).`);
+  if (goalItems.length === 0) {
+    notes.push(
+      'goal.md içinde `- [ ]` teslim sözü yok — bar gösterilmiyor (boş bar sahte affordance olurdu). ' +
+        'Teslim sözlerini .ocean/goal.md dosyasına yaz, bar orada dolsun.',
+    );
+  }
   // Dayanağı düşmüş onay iddiası SESSİZ kalmaz — sayıyla söylenir.
   const kaynaksizMadde = passport.filter(
     (p) => p.level === 'insan-onayi' && !p.claimIds.every((cid) => ledger.gecerli.has(cid)),
   ).length;
   if (kaynaksizMadde > 0) {
     notes.push(
-      `${kaynaksizMadde} pasaport maddesi kendini insan onaylı sayıyor ama passport.jsonl defterinde ` +
+      `${kaynaksizMadde} teslim sözü kendini insan onaylı sayıyor ama passport.jsonl defterinde ` +
         `terminal imzalı bir doğrulama kaydına bağlanamadı — panoda "kanal kaydı yok" diye işaretlendi (silinmedi).`,
     );
   }
@@ -233,7 +251,9 @@ export async function runSync(cwd: string, opts: { now?: Date } = {}): Promise<S
     panoPath: panoPath(cwd),
     redactHits: hits,
     transcriptsFound: claude.transcriptsFound,
-    dogrulananBirim: dogrulananSayisi(passport, ledger),
+    sozOnayli: dogrulananSayisi(passport, ledger),
+    sozToplam: passport.length,
+    defterKaydi: buildDefter(merged).length,
     onayliClaim,
     kaynaksizClaim,
   };

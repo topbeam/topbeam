@@ -22,7 +22,10 @@ export const CLAUDE_MD_SECTION = `
 Bu proje Topbeam ile izleniyor — dürüst proje panosu (\`.ocean/pano.html\`).
 
 Claude, bu projede çalışırken şu alışkanlıkları uygula:
-1. **Hedef:** Proje hedefi değiştiğinde \`.ocean/goal.md\` dosyasını güncel tut (kısa, tek paragraf).
+1. **Hedef:** Proje hedefi değiştiğinde \`.ocean/goal.md\` dosyasının "Proje Hedefi"
+   paragrafını güncel tut (kısa, tek paragraf). Aynı dosyadaki \`- [ ]\` **teslim
+   sözleri kullanıcınındır — ekleme, silme, yeniden yazma.** Bar o satırlardan kurulur;
+   sözü yazan da onaylayan da insandır.
 2. **Not:** Önemli her adımda \`.ocean/notes.md\` dosyasına 1 satırlık Türkçe not EKLE (append, eskiyi silme):
    \`- YYYY-MM-DD HH:MM — ne yapıldı\` biçiminde.
 3. **Dürüstlük:** Kanıt görmeden "çalışıyor / bitti" deme; "uygulandı görünüyor, doğrulanmadı" de.
@@ -30,9 +33,40 @@ Claude, bu projede çalışırken şu alışkanlıkları uygula:
 4. **Senkron:** Anlamlı bir iş bitince \`topbeam sync\` çalıştır — pano ve kart güncellensin.
 `;
 
+/**
+ * goal.md şablonu — İKİ bölüm:
+ *  1. Proje Hedefi : tek paragraf, panonun başlığında görünür (Claude günceller).
+ *  2. Teslim sözleri: `- [ ]` satırları — BARIN TEK KAYNAĞI, insanın kendi sözü.
+ *
+ * Yönerge satırları `>` (alıntı) ile yazılır: readGoal bunları atlar, böylece
+ * şablon panonun hedef satırına sızmaz. Örnek sözler bilinçli olarak EVRENSEL
+ * teslim kapılarıdır — kullanıcı siler, kendi cümlelerini yazar.
+ */
 const GOAL_TEMPLATE = `# Proje Hedefi
 
-(Claude: bu dosyayı güncel tut — tek paragraf, şu anki gerçek hedef. Topbeam panoda gösterir.)
+> (Buraya tek paragraf yaz: bu proje şu an neyi hedefliyor. Panonun başlığında görünür.)
+
+## Teslim sözleri
+
+> Her \`- [ ]\` satırı bir teslim kapısıdır — barın bir bölmesi.
+> Bar sonludur: kaç satır yazarsan o kadar bölme olur, oturum sayısı barı BÜYÜTMEZ.
+> Bölme yalnız kendi terminalinden verdiğin insan onayıyla dolar: \`topbeam verify <söz-id>\`.
+>
+> Aşağıdakiler ÖRNEKTİR. Sil, kendi sözlerini yaz — kısa, tek cümle, teslim edilebilir.
+
+- [ ] Kurulum tek komutla çalışıyor
+- [ ] Ana akış baştan sona hatasız gidiyor
+- [ ] test: testler yeşil
+- [ ] Hata durumları insan diliyle anlatılıyor
+- [ ] README okununca ne olduğu anlaşılıyor \`README.md\`
+- [ ] Gizli anahtar ve sırlar depoda değil
+- [ ] Teslim paketi hazır: kim sahibi, nerede duruyor
+
+> Eşleme ipuçları (isteğe bağlı — kayıtları bir söze bağlamak için):
+>   yol      \`src/auth\` ya da \`src/cli.ts\` → o yola dokunan kayıtlar
+>   test     satır \`test:\` ile başlarsa → yalnız test koşumu kayıtları
+>   etiket   \`#odeme\` → kaydın metninde ya da yolunda geçen etiket
+> İpucu yoksa madde "kanıt yok" durur — Topbeam eşleşme uydurmaz.
 `;
 
 const NOTES_TEMPLATE = `# Topbeam Notları

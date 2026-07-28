@@ -21,7 +21,8 @@ import {
 } from './types.ts';
 
 test('şema sabitleri', () => {
-  assert.equal(SCHEMA_VERSION, 1);
+  // 2: pasaport maddesi = oturum birimi DEĞİL, goal.md teslim sözü (soz-…)
+  assert.equal(SCHEMA_VERSION, 2);
   assert.match(TOOL_VERSION, /^\d+\.\d+\.\d+$/);
   assert.equal(OCEAN_DIR, '.ocean');
   assert.equal(STATE_FILE, 'state.json');

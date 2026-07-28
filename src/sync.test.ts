@@ -11,9 +11,34 @@ import { join } from 'node:path';
 import { slugifyCwd } from './collect/claude.ts';
 import { runInit } from './init.ts';
 import { runSync, mergeClaims } from './sync.ts';
-import { buildPassport } from './passport.ts';
-import { appendPassportLog, readState, writeState } from './state.ts';
+import { buildTeslim, parseGoalItems } from './goal.ts';
+import { appendPassportLog, goalPath, readState, writeState } from './state.ts';
 import type { Claim } from './types.ts';
+
+/**
+ * Teslim sözleri — barın kaynağı. makeProject'in ürettiği iki kaydı kapsar:
+ *   söz 1 → src/login.ts yoluna dokunan dosya kaydı,
+ *   söz 2 → `test:` öneki ile test koşumu kayıtları,
+ *   söz 3 → ipucusuz (kanıt yok olarak DURMALI).
+ */
+const GOAL = `# Proje Hedefi
+
+## Teslim sözleri
+
+- [ ] Giriş formu çalışıyor src/login.ts
+- [ ] test: testler yeşil
+- [ ] Teslim paketi hazır
+`;
+
+/** goal.md yaz — init'in şablonunu ezerek testin sözlerini kur. */
+async function goalYaz(proj: string, icerik = GOAL): Promise<void> {
+  await writeFile(goalPath(proj), icerik, 'utf8');
+}
+
+/** goal.md'deki n. sözün id'si. */
+function sozId(n: number, icerik = GOAL): string {
+  return parseGoalItems(icerik)[n]?.id ?? '';
+}
 
 const NOW = new Date('2026-07-28T12:00:00.000Z');
 const S1 = 'sess-sync-1';
@@ -98,6 +123,7 @@ test('sync init olmadan dürüstçe reddeder', async () => {
 test('tam boru hattı: collect → truth → card → state + pano', async () => {
   const { proj, claudeDir } = await makeProject();
   await runInit(proj, { now: NOW });
+  await goalYaz(proj);
 
   const res = await withClaudeDir(claudeDir, () => runSync(proj, { now: NOW }));
   assert.equal(res.ok, true);
@@ -112,11 +138,14 @@ test('tam boru hattı: collect → truth → card → state + pano', async () =>
   assert.ok(testC, 'test-kaniti claim üretilmeli');
   assert.equal(testC.level, 'test-kaniti');
 
-  // pasaport: iki claim TEK iş biriminde (oturum) toplanır; doğrulanmamış
-  // (araç "tamam" TAHMİN ETMEZ) ve id oturumdan gelir → kararlı.
-  assert.equal(st.passport.length, 1);
-  assert.equal(st.passport[0]?.id, `birim-${S1}`);
-  assert.deepEqual([...(st.passport[0]?.claimIds ?? [])].sort(), [`dosya-git-${S1}`, `test-${S1}-0`]);
+  // pasaport = TESLİM SÖZLERİ (goal.md): madde sayısı satır sayısıdır, oturum
+  // sayısı DEĞİL. Kayıtlar ipuçlarıyla eşleşir; eşleşmeyen söz "kanıt yok" durur.
+  assert.equal(st.passport.length, 3);
+  assert.deepEqual(st.passport.map((p) => p.id), [sozId(0), sozId(1), sozId(2)]);
+  assert.deepEqual(st.passport[0]?.claimIds, [`dosya-git-${S1}`]);
+  assert.deepEqual(st.passport[1]?.claimIds, [`test-${S1}-0`]);
+  assert.deepEqual(st.passport[2]?.claimIds, [], 'ipucusuz söz kanıt yok kalmalı');
+  assert.ok(st.passport[2]?.reason?.startsWith('Kanıt yok'));
   assert.ok(st.passport.every((p) => p.status === 'not_verified'));
 
   // kart: doğrulanmamış yok → kanıtlı-en-yeni için insan onayı istenir
@@ -182,28 +211,41 @@ test('mergeClaims: yeniden üretilmeyen kanıtsız eski claim düşer (sayılır
   assert.equal(droppedStale, 1);
 });
 
-test('buildPassport: insan kararı korunur ama seviye claim\'in GERÇEĞİNİ söyler', () => {
+test('buildTeslim: insan kararı korunur ama seviye claim\'in GERÇEĞİNİ söyler', () => {
+  const items = parseGoalItems('- [ ] test: testler yeşil\n');
+  const soz = items[0]?.id ?? '';
   const verified = {
-    id: 'a', title: 'A', status: 'completed' as const, claimIds: ['a'],
+    id: soz, title: 'test: testler yeşil', status: 'completed' as const, claimIds: ['a'],
     level: 'insan-onayi' as const,
     verification: { by: 'ekin', at: '2026-07-28T10:00:00Z', decision: 'approved' as const },
   };
   // Aynı id'li claim artık doğrulanmamış seviyede (transcript değişti):
-  // eski onay kaydı DURUR, ama madde "tamam" gibi gösterilmez.
+  // eski onay kaydı DURUR, ama söz "tamam" gibi gösterilmez.
   const freshClaim: Claim = {
-    id: 'a', text: 'A yeni metin', level: 'dogrulanmadi',
+    id: 'a', text: 'A yeni metin', level: 'dogrulanmadi', kind: 'test',
     evidence: [{ kind: 'transcript-tool-use', summary: 't' }], createdAt: '2026-07-28T11:00:00Z',
   };
-  const out = buildPassport([verified], [freshClaim]);
+  const out = buildTeslim([verified], [freshClaim], items);
   assert.equal(out.length, 1);
   assert.equal(out[0]?.verification?.by, 'ekin'); // insan kararı kaybolmadı
   assert.equal(out[0]?.status, 'partial'); // ama completed diye yalan söylenmiyor
   assert.equal(out[0]?.level, 'dogrulanmadi');
 });
 
-test('sync: pasaport claim başına DEĞİL oturum başına dolar (iki oturum → iki madde)', async () => {
+/**
+ * SİSİFOS REGRESYONU (uçtan uca) — ürünün en kritik kusurunun testi.
+ * Eskiden birim = oturumdu: ikinci oturum paydayı 1 → 2 yapıyor, çalıştıkça
+ * bar uzuyordu. Artık payda goal.md'den gelir ve YERİNDE KALIR.
+ */
+test('SİSİFOS: ikinci oturum PAYDAYI BÜYÜTMEZ (defter büyür, bar büyümez)', async () => {
   const { proj, claudeDir } = await makeProject();
   await runInit(proj, { now: NOW });
+  await goalYaz(proj);
+
+  const ilk = await withClaudeDir(claudeDir, () => runSync(proj, { now: NOW }));
+  assert.equal(ilk.sozToplam, 3);
+  assert.equal(ilk.defterKaydi, 1);
+
   // ikinci oturum: aynı projede ayrı transcript
   const S2 = 'sess-sync-2';
   const slugDir = join(claudeDir, 'projects', slugifyCwd(proj));
@@ -228,9 +270,49 @@ test('sync: pasaport claim başına DEĞİL oturum başına dolar (iki oturum �
   await writeFile(join(slugDir, `${S2}.jsonl`), `${lines.join('\n')}\n`, 'utf8');
 
   const res = await withClaudeDir(claudeDir, () => runSync(proj, { now: NOW }));
-  const ids = res.state?.passport.map((p) => p.id) ?? [];
-  assert.deepEqual([...ids].sort(), [`birim-${S1}`, `birim-${S2}`]);
-  assert.ok((res.state?.claims.length ?? 0) > ids.length, 'claim sayısı madde sayısından fazla olmalı');
+  assert.equal(res.sozToplam, 3, 'yeni oturum barı UZATMAMALI');
+  assert.deepEqual(res.state?.passport.map((p) => p.id), [sozId(0), sozId(1), sozId(2)]);
+  assert.equal(res.defterKaydi, 2, 'defter (arşiv) büyür — ama ilerleme sayılmaz');
+  // kayıt sayısı arttı ama madde sayısı sabit — barın uzamamasının kanıtı
+  assert.ok((res.state?.claims.length ?? 0) >= (ilk.state?.claims.length ?? 0));
+
+  // Payda yalnız insan yeni bir SÖZ yazınca büyür.
+  await goalYaz(proj, `${GOAL}- [ ] Bir söz daha\n`);
+  const sonra = await withClaudeDir(claudeDir, () => runSync(proj, { now: NOW }));
+  assert.equal(sonra.sozToplam, 4);
+});
+
+test('goal.md\'de teslim sözü YOKSA: pasaport boş + dürüst yönerge (bar yok)', async () => {
+  const { proj, claudeDir } = await makeProject();
+  await runInit(proj, { now: NOW });
+  await goalYaz(proj, '# Proje Hedefi\n\nMVP dikey dilimini bitir.\n');
+
+  const res = await withClaudeDir(claudeDir, () => runSync(proj, { now: NOW }));
+  assert.equal(res.sozToplam, 0);
+  assert.equal(res.state?.passport.length, 0);
+  assert.ok(res.notes.some((n) => n.includes('bar orada dolsun')));
+
+  const html = await readFile(join(proj, '.ocean', 'pano.html'), 'utf8');
+  assert.equal(html.includes('<div class="bar"'), false, 'boş bar çizilmemeli');
+  assert.ok(html.includes('bar orada dolsun'));
+  // hedef satırı hâlâ okunur (liste satırı değil, düz paragraf)
+  assert.ok(html.includes('MVP dikey dilimini bitir.'));
+});
+
+test('init şablonu tek başına çalışır: 7 evrensel teslim kapısı + test: eşleşmesi', async () => {
+  const { proj, claudeDir } = await makeProject();
+  await runInit(proj, { now: NOW }); // goal.md ŞABLONU ile kurulur, elle yazılmaz
+  const res = await withClaudeDir(claudeDir, () => runSync(proj, { now: NOW }));
+
+  assert.equal(res.sozToplam, 7, 'şablon 7 teslim kapısı kurmalı');
+  const eslesen = res.state?.passport.filter((p) => p.claimIds.length > 0) ?? [];
+  assert.equal(eslesen.length, 1, 'yalnız `test:` satırı bu projede kayıt bulmalı');
+  assert.ok(eslesen[0]?.title.startsWith('test:'));
+  assert.equal(res.sozOnayli, 0, 'kanıt insan onayı değildir — bar boş kalır');
+
+  // şablonun yönerge satırları hedef cümlesi sanılmaz
+  const html = await readFile(join(proj, '.ocean', 'pano.html'), 'utf8');
+  assert.equal(html.includes('Her `- [ ]` satırı'), false);
 });
 
 test('git deposu OLMAYAN proje: kart "git status" ÖNERMEZ', async () => {
@@ -348,12 +430,13 @@ async function botIddiasiYaz(proj: string): Promise<void> {
 test('DEFTERSİZ "insan onayı" iddiası: sync sonrası panoda rozet YOK, sayıyla söylenir', async () => {
   const { proj, claudeDir } = await makeProject();
   await runInit(proj, { now: NOW });
+  await goalYaz(proj);
   await withClaudeDir(claudeDir, () => runSync(proj, { now: NOW }));
   await botIddiasiYaz(proj); // bot imzalı "onay" — passport.jsonl'e hiçbir satır yazılmadı
 
   const res = await withClaudeDir(claudeDir, () => runSync(proj, { now: NOW }));
   assert.equal(res.ok, true);
-  assert.equal(res.dogrulananBirim, 0, 'defter desteklemeyen madde doğrulandı sayılmaz');
+  assert.equal(res.sozOnayli, 0, 'defter desteklemeyen madde onaylandı sayılmaz');
   assert.equal(res.kaynaksizClaim, 2, 'dayanaksız iddia sayısı dürüstçe raporlanır');
   assert.equal(res.onayliClaim, 0);
   assert.ok(res.notes.some((n) => n.includes('kanal kaydı yok')));
@@ -363,7 +446,7 @@ test('DEFTERSİZ "insan onayı" iddiası: sync sonrası panoda rozet YOK, sayıy
   assert.equal(html.includes('>insan<'), false, 'bot imzalı log satırı insan rozeti alamaz');
   assert.equal(html.includes('>insan-onayı<'), false, 'dayanaksız seviye rozeti çıkamaz');
   assert.ok(html.includes('kanal kaydı yok'));
-  assert.ok(html.includes('0/1 doğrulandı'));
+  assert.ok(html.includes('0 / 3 madde onaylandı'));
   // sessiz silme yok: satır panoda duruyor
   assert.ok(html.includes('Doğrulandı: her şey çalışıyor'));
   // state'in kendi iddiası korunur (veri yok edilmez) — yalnız gösterim gerçeğe bağlı
@@ -374,6 +457,7 @@ test('DEFTERSİZ "insan onayı" iddiası: sync sonrası panoda rozet YOK, sayıy
 test('GERÇEK terminal kaydı defterdeyse aynı state rozeti ALIR (kapı çift yönlü)', async () => {
   const { proj, claudeDir } = await makeProject();
   await runInit(proj, { now: NOW });
+  await goalYaz(proj);
   await withClaudeDir(claudeDir, () => runSync(proj, { now: NOW }));
   await botIddiasiYaz(proj);
 
@@ -393,11 +477,11 @@ test('GERÇEK terminal kaydı defterdeyse aynı state rozeti ALIR (kapı çift y
   }
 
   const res = await withClaudeDir(claudeDir, () => runSync(proj, { now: NOW }));
-  assert.equal(res.dogrulananBirim, 1);
+  assert.equal(res.sozOnayli, 2, 'iki sözün kayıtları defterde onaylı');
   assert.equal(res.kaynaksizClaim, 0);
   assert.equal(res.onayliClaim, 2);
   const html = await readFile(res.panoPath ?? '', 'utf8');
   assert.ok(html.includes('>insan-onayı<'));
-  assert.ok(html.includes('1/1 doğrulandı'));
+  assert.ok(html.includes('2 / 3 madde onaylandı'));
   assert.equal(html.includes('kanal kaydı yok'), false);
 });
