@@ -54,6 +54,32 @@ Tek statik dosya, sistem fontları, tek küçük JS (kopyala butonu). Üstten al
 3. **Pasaport**: tik listesi + dürüst sayım ("1/2 doğrulandı" — yüzde-progress-bar
    yok). Tüm maddeler insan onaylıysa kutlama bandı.
 
+## Kart neyi seçer? (kural merdiveni)
+
+Kart, doğrulanmamış işler arasından **riski en yükseğini** seçer ve "Neden bu?"
+satırında gerekçesini söyler. Sıra sabittir, ilk eşleşen kazanır — hepsi
+deterministik, LLM yok:
+
+| # | Kural | Ne zaman | Gerekçe cümlesi neyi söyler |
+|---|-------|----------|------------------------------|
+| 1 | `kirik-test` | Test çıktısında okunmuş başarısız sayısı ya da gerçek hata çıkışı (exit 1–127) | kaç test başarısız / hangi exit |
+| 2 | `kritik-dosya` | Doğrulanmamış iş ödeme · kimlik/oturum · veri şeması · yapılandırma dosyasına dokunmuş | tür + dosya adı |
+| 3 | `kayip-riski` | 4+ dosyalık küme, git kaydında izi yok | kümenin dosya sayısı |
+| 4 | `bayat` | Doğrulanmamış işlerin **hepsi** 3+ gün eski (taze iş yok) | en uzun bekleyen kaç gün |
+| 5 | `kume` | Aynı oturumda 2+ doğrulanmamış kayıt | kümedeki kayıt sayısı + kapsam |
+| 6 | `en-yeni` | Temel kural / geri sarma | "en son dokunulan doğrulanmamış iş" |
+
+Sınırlar açıkça çizilidir:
+- Kural yalnız **ölçülmüş** sinyalden çalışır (dosya sayısı, yol, git izi, okunan
+  test sayıları). Sinyal yoksa kural susar, kart `en-yeni`'ye geri sarar —
+  iddia metni ayrıştırılmaz (metin eşleştirme yanlış pozitif üretir).
+- Kritik dosya eşleşmesi **token tamlığı** ister: `src/auth/login.ts` kritik,
+  `src/author.ts` ve `tokens.css` değil. Kaçırmak, yanlış suçlamaktan iyidir.
+- Sinyalle ölen koşum (exit ≥ 128: zaman aşımı, Ctrl-C) **kırık test sayılmaz** —
+  o bir kesintidir.
+- Hiçbir kural kanıt seviyesini değiştirmez: `doğrulanmadı` → `doğrulanmadı` kalır.
+  Kurallar yalnız **sırayı ve gerekçeyi** belirler.
+
 ## Dürüstlük İlkesi (ürünün anayasası)
 
 - **Kanıtsız iddia gösterilmez.** Kanıt seviyeleri: `dosya-kanıtı` (transcript ∩ git),

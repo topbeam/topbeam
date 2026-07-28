@@ -173,6 +173,17 @@ test('isTestLikeCommand: test komutlarını tanır, sıradan komutu tanımaz', (
   assert.equal(isTestLikeCommand('npx tsc --noEmit'), true);
   assert.equal(isTestLikeCommand('ls -la && cat dosya.txt'), false);
   assert.equal(isTestLikeCommand('npm run build'), false);
+  // Yol/argüman içinde geçen ad test koşumu DEĞİL (dogfood'da çıkan gerçek
+  // yanlış pozitifler — ikisi de kartın tepesine "kırık test" diye çıkmıştı).
+  assert.equal(isTestLikeCommand('CHROME="$HOME/Library/Caches/ms-playwright/chromium/chrome" "$CHROME" --headless'), false);
+  assert.equal(isTestLikeCommand('ls /Applications/ | grep -iE "chrome|chromium|edge|brave"'), false);
+  assert.equal(isTestLikeCommand('cat notes/jest-notlari.md'), false);
+  assert.equal(isTestLikeCommand('rm -rf node_modules/.vitest-cache'), false);
+  // Gerçek çağrılar tanınmaya devam eder: zincir, env, çalıştırıcı, yol öneki.
+  assert.equal(isTestLikeCommand('./node_modules/.bin/jest --ci'), true);
+  assert.equal(isTestLikeCommand('cd ~/proje && npm test 2>&1 | tail -3'), true);
+  assert.equal(isTestLikeCommand('CI=1 npx vitest run'), true);
+  assert.equal(isTestLikeCommand('python -m pytest tests/'), true);
 });
 
 test('extractTestStats: TAP / jest / pytest desenleri; bulunamazsa null (uydurma yok)', () => {

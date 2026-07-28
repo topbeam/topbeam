@@ -229,6 +229,56 @@ test('aynı komutun tekrar koşumları → yalnız SON koşum claim olur', () =>
   assert.equal(tests[0]?.createdAt, '2026-07-28T10:45:00.000Z');
 });
 
+// ── kart sinyalleri (motor → kart sözleşmesi) ────────────────────────────────
+
+test('sinyaller: dosya claim\'lerinde fileCount/paths ölçülür, noGitTrace yalnız BİLİNİYORSA yazılır', () => {
+  const claude = collect([
+    session('s1', {
+      changedFiles: [
+        file(`${CWD}/src/a.ts`),
+        file(`${CWD}/salt.ts`),
+        file(`${CWD}/belirsiz.ts`, { edits: 0, unknownEdits: 1 }),
+      ],
+    }),
+  ]);
+  const git = gitFacts({
+    diffStat: { filesChanged: 1, insertions: 3, deletions: 1, files: [{ path: 'src/a.ts', added: 3, removed: 1 }] },
+  });
+  const { claims } = buildTruth(claude, git, { now: NOW });
+
+  const kanitli = claims.find((c) => c.id === 'dosya-git-s1');
+  assert.deepEqual(kanitli?.signals, { fileCount: 1, paths: ['src/a.ts'], noGitTrace: false });
+
+  const saltTranscript = claims.find((c) => c.id === 'dosya-transcript-s1');
+  assert.deepEqual(saltTranscript?.signals, { fileCount: 1, paths: ['salt.ts'], noGitTrace: true });
+
+  // Belirsiz kovada git kesişimi hiç sorulmadı → noGitTrace YAZILMAZ (bilinmiyor ≠ yok).
+  const belirsiz = claims.find((c) => c.id === 'dosya-belirsiz-s1');
+  assert.equal(belirsiz?.signals?.noGitTrace, undefined);
+  assert.deepEqual(belirsiz?.signals, { fileCount: 1, paths: ['belirsiz.ts'] });
+});
+
+test('sinyaller: test claim\'inde OKUNAN sayılar + GERÇEK sıfır-dışı exit', () => {
+  const claude = collect([
+    session('s1', {
+      testSignals: [signal('npm test', { passed: 17, failed: 2, summaryLine: '# fail 2', exitCode: 1 })],
+    }),
+  ]);
+  const { claims } = buildTruth(claude, gitFacts(), { now: NOW });
+  const t = claims.find((c) => c.kind === 'test');
+  assert.deepEqual(t?.signals, { passedTests: 17, failedTests: 2, nonZeroExit: 1 });
+});
+
+test('sinyaller: VARSAYILAN exit 0 sinyal üretmez, okunamayan sayı uydurulmaz', () => {
+  const claude = collect([
+    session('s1', { testSignals: [signal('npx vitest run', { exitCode: 0 })] }), // exitAssumed olabilir
+  ]);
+  const { claims } = buildTruth(claude, gitFacts(), { now: NOW });
+  const t = claims.find((c) => c.kind === 'test');
+  assert.equal(t?.level, 'dogrulanmadi');
+  assert.deepEqual(t?.signals, {}); // hiçbir sinyal yok — kart zeki kuralları susar
+});
+
 // ── DÜRÜSTLÜK İNVARYANTLARI ──────────────────────────────────────────────────
 
 test('İNVARYANT: kanıtsız claim yok — her seviyenin kanıt türü yerinde', () => {

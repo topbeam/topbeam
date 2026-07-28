@@ -86,6 +86,33 @@ export function toBpLevel(level: EvidenceLevel): BpEvidenceLevel {
  */
 export type ClaimKind = 'dosya' | 'test' | 'durum';
 
+/**
+ * Claim'e bağlı YAPISAL sinyaller — kart heuristiğinin okuduğu tek girdi.
+ *
+ * Neden ayrı alan: kart, iddia METNİNİ ayrıştırmaz (metin ayrıştırma yanlış
+ * pozitif üretir, dürüstlüğü aşındırır). Motor (truth.ts) neyi ölçtüyse onu
+ * buraya yazar; kart yalnız buradan karar verir.
+ *
+ * Hepsi OPSİYONEL ve hepsi ölçülmüş gerçektir. Sinyal yoksa alan da yoktur
+ * (0/false varsayımı YOK) — sinyalsiz claim'de zeki kurallar sessizce düşer,
+ * kart temel kurala (en-yeni) geri sarar. Eski state.json'lardan okunan
+ * claim'ler bu yüzden bozulmadan çalışır.
+ */
+export interface ClaimSignals {
+  /** Claim'in kapsadığı dosya sayısı (dosya claim'leri). */
+  fileCount?: number;
+  /** Proje köküne göre kısa yollar (uzun listeler kırpılır — fileCount tam kalır). */
+  paths?: string[];
+  /** true = transcript'te düzenleme var, git kaydında izi YOK (kesin ölçüm). */
+  noGitTrace?: boolean;
+  /** Test çıktısından OKUNMUŞ başarısız test sayısı (uydurulmaz). */
+  failedTests?: number;
+  /** Test çıktısından OKUNMUŞ geçen test sayısı. */
+  passedTests?: number;
+  /** GERÇEK (varsayılmamış) sıfır-dışı exit kodu — komut hata ile bitti. */
+  nonZeroExit?: number;
+}
+
 /** Bir iddiayı destekleyen tekil kanıt parçası. */
 export interface ClaimEvidence {
   /** Kanıtın türü — nereden geldiği. */
@@ -109,6 +136,8 @@ export interface Claim {
   evidence: ClaimEvidence[];
   /** Claim türü (kart heuristiği için yapısal sinyal). */
   kind?: ClaimKind;
+  /** Ölçülmüş yapısal sinyaller (kart heuristiği bunları okur — metni değil). */
+  signals?: ClaimSignals;
   /** Kaynak Claude Code oturumu (transcript dosya adı = sessionId). */
   sessionId?: string;
   createdAt: string; // ISO-8601
@@ -153,6 +182,31 @@ export interface CardEvidence {
   humanApproval: string | null;
 }
 
+/**
+ * Kartı HANGİ kuralın seçtiği. "Neden bu?" cümlesinin makine karşılığı:
+ * kural değişince gerekçe cümlesi de değişir (zekâ orada hissedilir).
+ * Öncelik sırası card.ts → RULE_ORDER; her kuralın kendi fixture testi var.
+ *
+ * - kirik-test  : test çıktısında başarısız/hata kaydı — her şeyin önünde
+ * - kritik-dosya: doğrulanmamış iş kimlik/ödeme/şema/yapılandırma dosyasına dokunmuş
+ * - kayip-riski : büyük değişiklik kümesi, git kaydında izi yok
+ * - bayat       : doğrulanmamış işlerin hepsi eski — en uzun bekleyen
+ * - kume        : aynı oturumdaki doğrulanmamış kümenin en kapsamlısı
+ * - en-yeni     : en son dokunulan doğrulanmamış iş (temel kural / geri sarma)
+ * - insan-onayi-bekliyor : doğrulanmamış iş kalmadı, kanıtlı iş onay bekliyor
+ * - kayit-yok / tamam    : boş ve tam kartlar
+ */
+export type CardRule =
+  | 'kirik-test'
+  | 'kritik-dosya'
+  | 'kayip-riski'
+  | 'bayat'
+  | 'kume'
+  | 'en-yeni'
+  | 'insan-onayi-bekliyor'
+  | 'kayit-yok'
+  | 'tamam';
+
 /** (d) Sıradaki tek hareket — tek fiil + mümkünse çalıştırılabilir komut. */
 export interface NextAction {
   /** Tek fiil cümlesi. Örn: "Testleri çalıştır." */
@@ -183,6 +237,8 @@ export interface Card {
   why: string;
   /** (f) Bitti sayılması için — açık doğrulama koşulu. */
   doneWhen: string;
+  /** Kartı seçen kural (why cümlesinin makine karşılığı; UI göstermek zorunda değil). */
+  rule: CardRule;
   /** Bağlı pasaport maddesi (varsa). */
   passportItemId?: string;
   updatedAt: string; // ISO-8601

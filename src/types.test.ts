@@ -99,6 +99,7 @@ test('Card şekli — GPT spec alanları derlenir ve taşınır', () => {
     action: { verb: 'Doğrulamayı başlat.', command: 'ocean verify gorev-3' },
     why: 'Tek bilinmeyen test sonucu; onu kapatmadan sonraki adım anlamsız.',
     doneWhen: 'Test çıktı kaydında GEÇTİ görünmeli.',
+    rule: 'en-yeni',
     updatedAt: new Date().toISOString(),
   };
   assert.equal(card.evidence.testOutput, null); // null = "kayıt yok", sakin gösterim

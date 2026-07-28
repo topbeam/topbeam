@@ -49,9 +49,28 @@ const CAPS = {
 /** Dosya değiştiren araçlar (keşif: NotebookEdit/MultiEdit görülmedi ama aynı kalıp — toleranslı). */
 const EDIT_TOOLS: ReadonlySet<string> = new Set(['Edit', 'Write', 'NotebookEdit', 'MultiEdit']);
 
-/** Test-benzeri komut deseni (keşif §4.5 reçetesi + node --test). */
+/**
+ * Test-benzeri komut deseni (keşif §4.5 reçetesi + node --test) — KOMUT
+ * KONUMUNDA aranır, metnin herhangi bir yerinde değil.
+ *
+ * Dogfood dersi (gerçek yanlış pozitifler, ikisi de kartın tepesine çıkmıştı):
+ *   `... "$HOME/Library/Caches/ms-playwright/..." --print-to-pdf ...`  → PDF render
+ *   `ls /Applications/ | grep -iE "chrome|chromium|edge|brave"`        → grep exit 1
+ * İkisi de "test koşumu" sayılıp exit kodları "kırık test" gibi okunuyordu.
+ * Çözüm: kabuk zinciri parçalanır, her parçanın BAŞINDA test ikilisi aranır
+ * (env atamaları ve npx/sudo gibi çalıştırıcı önekleri soyulduktan sonra).
+ * Kaçırmak, yanlış suçlamaktan iyidir: `do npm test; done` gibi gömülü
+ * kullanımlar bilinçli olarak dışarıda kalır.
+ */
 const TEST_CMD_RE =
-  /\b(npm (?:run )?test|pnpm (?:run )?test|yarn (?:run )?test|bun test|vitest|jest|pytest|go test|cargo test|playwright|node --test|tsc\b|eslint)\b/;
+  /^(npm (?:run )?test|pnpm (?:run )?test|yarn (?:run )?test|bun test|vitest|jest|pytest|go test|cargo test|playwright|node --test|tsc|eslint)(?![\w-])/;
+
+/** Kabuk zincirini komut konumlarına ayıran ayraçlar. */
+const SHELL_SPLIT_RE = /(?:\|\||&&|;|\||\n)+/;
+
+/** Soyulabilir önekler: env ataması + çalıştırıcı sarmalayıcılar. */
+const RUNNER_PREFIX_RE =
+  /^(?:(?:[A-Za-z_][A-Za-z0-9_]*=\S*|sudo|time|npx|bunx|pnpm (?:exec|dlx)|yarn (?:exec|dlx)|npm exec|poetry run|uv run|pipenv run|python3? -m)\s+)+/;
 
 // ── dış tipler ───────────────────────────────────────────────────────────────
 
@@ -197,9 +216,20 @@ function normalizeName(name: string): string {
   return name.replace(/[^a-zA-Z0-9]/g, '-');
 }
 
-/** Komut test-benzeri mi (keşif reçetesindeki desen)? */
+/**
+ * Komut test-benzeri mi? Zincirdeki HERHANGİ bir parça gerçekten bir test
+ * ikilisi çağırıyorsa true. Argüman/yol içinde geçen ad sayılmaz.
+ */
 export function isTestLikeCommand(command: string): boolean {
-  return TEST_CMD_RE.test(command);
+  for (const raw of command.split(SHELL_SPLIT_RE)) {
+    const seg = raw
+      .trim()
+      .replace(/^[({]\s*/, '') // alt-kabuk / blok açıcı
+      .replace(RUNNER_PREFIX_RE, '') // CI=1 npx …
+      .replace(/^\S*\//, ''); // ./node_modules/.bin/jest → jest
+    if (TEST_CMD_RE.test(seg)) return true;
+  }
+  return false;
 }
 
 /**

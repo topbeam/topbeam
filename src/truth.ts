@@ -28,6 +28,7 @@ import { isAbsolute, relative, resolve, sep } from 'node:path';
 import type {
   Claim,
   ClaimEvidence,
+  ClaimSignals,
   LogEntry,
   Verification,
 } from './types.ts';
@@ -48,6 +49,12 @@ const LIMITS = {
   cmdLen: 60,
   /** Toplam log satırı (aşım notes'a düşer). */
   logMax: 500,
+  /**
+   * Claim.signals.paths içinde saklanan yol sayısı (state.json şişmesin).
+   * fileCount TAM sayıyı taşır; kırpma yalnız ad listesini etkiler — kart
+   * kritik-dosya taraması bu listede döner, ötesi kaçabilir (bilinen sınır).
+   */
+  signalPaths: 50,
 } as const;
 
 // ── dış tipler ───────────────────────────────────────────────────────────────
@@ -169,6 +176,18 @@ function fileClaims(
     return { a, r };
   };
 
+  /**
+   * Kartın okuyacağı YAPISAL sinyaller. Yalnız ölçülmüş gerçek: dosya sayısı,
+   * kısa yollar, git izi. noGitTrace SADECE kesin bilindiğinde yazılır
+   * (belirsiz kova için hiç yazılmaz — bilinmiyor ≠ yok).
+   */
+  const fileSignals = (files: readonly ChangedFile[], noGitTrace?: boolean): ClaimSignals => {
+    const all = names(files);
+    const s: ClaimSignals = { fileCount: files.length, paths: all.slice(0, LIMITS.signalPaths) };
+    if (noGitTrace !== undefined) s.noGitTrace = noGitTrace;
+    return s;
+  };
+
   if (buckets.verified.length > 0) {
     const n = buckets.verified.length;
     const { a, r } = lineTotals(buckets.verified);
@@ -189,6 +208,7 @@ function fileClaims(
       text: `${n} dosya değişti: ${nameList(names(buckets.verified))}`,
       level: 'dosya-kaniti',
       kind: 'dosya',
+      signals: fileSignals(buckets.verified, false), // git kaydı VAR (kesişim)
       evidence,
       sessionId: session.sessionId,
       createdAt: ts,
@@ -205,6 +225,7 @@ function fileClaims(
         nameList(names(buckets.transcriptOnly)),
       level: 'dogrulanmadi',
       kind: 'dosya',
+      signals: fileSignals(buckets.transcriptOnly, true), // git'te izi YOK (kesin)
       evidence: [
         {
           kind: 'transcript-tool-use',
@@ -226,6 +247,8 @@ function fileClaims(
         `başarı sayılmaz, doğrulanmadı: ${nameList(names(buckets.unknownOnly))}`,
       level: 'dogrulanmadi',
       kind: 'dosya',
+      // noGitTrace YAZILMAZ: bu kovada git kesişimi hiç sorulmadı — bilinmiyor.
+      signals: fileSignals(buckets.unknownOnly),
       evidence: [
         {
           kind: 'transcript-tool-use',
@@ -257,6 +280,15 @@ function testClaims(session: SessionSummary, fallbackTs: string): Claim[] {
     const id = `test-${session.sessionId}-${i}`;
     const hasNumbers = sig.passed !== null || sig.failed !== null;
 
+    /**
+     * Kart sinyalleri — yalnız ÇIKTIDAN OKUNMUŞ sayılar ve GERÇEK sıfır-dışı
+     * exit. exitCode 0 varsayım olabilir (exitAssumed) → asla sinyal yazılmaz.
+     */
+    const signals: ClaimSignals = {};
+    if (sig.passed !== null) signals.passedTests = sig.passed;
+    if (sig.failed !== null) signals.failedTests = sig.failed;
+    if (sig.exitCode !== null && sig.exitCode !== 0) signals.nonZeroExit = sig.exitCode;
+
     if (hasNumbers) {
       // Çıktıdan OKUNMUŞ sayı var → test-kanıtı (geçse de kalsa da kanıtlı gerçek).
       let text: string;
@@ -286,6 +318,7 @@ function testClaims(session: SessionSummary, fallbackTs: string): Claim[] {
         text,
         level: 'test-kaniti',
         kind: 'test',
+        signals,
         evidence,
         sessionId: session.sessionId,
         createdAt: ts,
@@ -299,6 +332,7 @@ function testClaims(session: SessionSummary, fallbackTs: string): Claim[] {
         text: `Test komutu koşuldu (${cmd}) ama sonuç çıktıdan okunamadı — doğrulanmadı.${suffix}`,
         level: 'dogrulanmadi',
         kind: 'test',
+        signals,
         evidence: [
           {
             kind: 'transcript-tool-use',
