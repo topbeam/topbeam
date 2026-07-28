@@ -11,6 +11,7 @@ import { join } from 'node:path';
 import {
   collectClaude,
   extractTestStats,
+  isCheckLikeCommand,
   isTestLikeCommand,
   slugifyCwd,
   summarizeTranscript,
@@ -170,7 +171,6 @@ test('isTestLikeCommand: test komutlarını tanır, sıradan komutu tanımaz', (
   assert.equal(isTestLikeCommand('npx vitest run'), true);
   assert.equal(isTestLikeCommand('pytest -q tests/'), true);
   assert.equal(isTestLikeCommand('node --test "src/**/*.test.ts"'), true);
-  assert.equal(isTestLikeCommand('npx tsc --noEmit'), true);
   assert.equal(isTestLikeCommand('ls -la && cat dosya.txt'), false);
   assert.equal(isTestLikeCommand('npm run build'), false);
   // Yol/argüman içinde geçen ad test koşumu DEĞİL (dogfood'da çıkan gerçek
@@ -184,6 +184,24 @@ test('isTestLikeCommand: test komutlarını tanır, sıradan komutu tanımaz', (
   assert.equal(isTestLikeCommand('cd ~/proje && npm test 2>&1 | tail -3'), true);
   assert.equal(isTestLikeCommand('CI=1 npx vitest run'), true);
   assert.equal(isTestLikeCommand('python -m pytest tests/'), true);
+});
+
+test('isCheckLikeCommand: tsc/eslint TEST DEĞİL, kontrol komutu (sayı üretmez)', () => {
+  // Dogfood gürültüsünün kaynağı: bunlar "test" sayılıp her koşumda
+  // "sonuç okunamadı — doğrulanmadı" claim'i doğuruyordu (200+ satır).
+  assert.equal(isTestLikeCommand('npx tsc --noEmit'), false);
+  assert.equal(isCheckLikeCommand('npx tsc --noEmit'), true);
+  assert.equal(isTestLikeCommand('eslint src --max-warnings 0'), false);
+  assert.equal(isCheckLikeCommand('eslint src --max-warnings 0'), true);
+  assert.equal(isCheckLikeCommand('npm run typecheck'), true);
+  assert.equal(isCheckLikeCommand('npm run lint'), true);
+  assert.equal(isCheckLikeCommand('prettier --write .'), true);
+  // Kontrol DEĞİL: gerçek test koşumu ve sıradan komutlar
+  assert.equal(isCheckLikeCommand('npm test'), false);
+  assert.equal(isCheckLikeCommand('cat tsconfig.json'), false);
+  assert.equal(isCheckLikeCommand('git status'), false);
+  // Zincirde ikisi birden: test sınıfı kaybolmaz
+  assert.equal(isTestLikeCommand('npm test && npx tsc --noEmit'), true);
 });
 
 test('extractTestStats: TAP / jest / pytest desenleri; bulunamazsa null (uydurma yok)', () => {

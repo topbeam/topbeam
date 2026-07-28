@@ -10,7 +10,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { slugifyCwd } from './collect/claude.ts';
 import { runInit } from './init.ts';
-import { runSync, mergeClaims, upsertPassport } from './sync.ts';
+import { runSync, mergeClaims } from './sync.ts';
+import { buildPassport } from './passport.ts';
 import { readState } from './state.ts';
 import type { Claim } from './types.ts';
 
@@ -111,8 +112,11 @@ test('tam boru hattı: collect → truth → card → state + pano', async () =>
   assert.ok(testC, 'test-kaniti claim üretilmeli');
   assert.equal(testC.level, 'test-kaniti');
 
-  // pasaport: iki madde, hiçbiri doğrulanmamış (araç "tamam" TAHMİN ETMEZ)
-  assert.equal(st.passport.length, 2);
+  // pasaport: iki claim TEK iş biriminde (oturum) toplanır; doğrulanmamış
+  // (araç "tamam" TAHMİN ETMEZ) ve id oturumdan gelir → kararlı.
+  assert.equal(st.passport.length, 1);
+  assert.equal(st.passport[0]?.id, `birim-${S1}`);
+  assert.deepEqual([...(st.passport[0]?.claimIds ?? [])].sort(), [`dosya-git-${S1}`, `test-${S1}-0`]);
   assert.ok(st.passport.every((p) => p.status === 'not_verified'));
 
   // kart: doğrulanmamış yok → kanıtlı-en-yeni için insan onayı istenir
@@ -178,19 +182,92 @@ test('mergeClaims: yeniden üretilmeyen kanıtsız eski claim düşer (sayılır
   assert.equal(droppedStale, 1);
 });
 
-test('upsertPassport: verification\'lı maddeye sync dokunmaz', () => {
+test('buildPassport: insan kararı korunur ama seviye claim\'in GERÇEĞİNİ söyler', () => {
   const verified = {
     id: 'a', title: 'A', status: 'completed' as const, claimIds: ['a'],
     level: 'insan-onayi' as const,
     verification: { by: 'ekin', at: '2026-07-28T10:00:00Z', decision: 'approved' as const },
   };
+  // Aynı id'li claim artık doğrulanmamış seviyede (transcript değişti):
+  // eski onay kaydı DURUR, ama madde "tamam" gibi gösterilmez.
   const freshClaim: Claim = {
     id: 'a', text: 'A yeni metin', level: 'dogrulanmadi',
     evidence: [{ kind: 'transcript-tool-use', summary: 't' }], createdAt: '2026-07-28T11:00:00Z',
   };
-  const out = upsertPassport([verified], [freshClaim]);
+  const out = buildPassport([verified], [freshClaim]);
   assert.equal(out.length, 1);
-  assert.equal(out[0]?.status, 'completed');
-  assert.equal(out[0]?.level, 'insan-onayi');
-  assert.equal(out[0]?.title, 'A'); // insan kararının kaydı ezilmedi
+  assert.equal(out[0]?.verification?.by, 'ekin'); // insan kararı kaybolmadı
+  assert.equal(out[0]?.status, 'partial'); // ama completed diye yalan söylenmiyor
+  assert.equal(out[0]?.level, 'dogrulanmadi');
+});
+
+test('sync: pasaport claim başına DEĞİL oturum başına dolar (iki oturum → iki madde)', async () => {
+  const { proj, claudeDir } = await makeProject();
+  await runInit(proj, { now: NOW });
+  // ikinci oturum: aynı projede ayrı transcript
+  const S2 = 'sess-sync-2';
+  const slugDir = join(claudeDir, 'projects', slugifyCwd(proj));
+  const lines = [
+    j({
+      type: 'user', cwd: proj, sessionId: S2, uuid: 'v1', timestamp: '2026-07-28T13:00:00.000Z',
+      message: { role: 'user', content: 'Bir şey daha yap' },
+    }),
+    j({
+      type: 'assistant', cwd: proj, sessionId: S2, uuid: 'b1', timestamp: '2026-07-28T13:01:00.000Z',
+      message: {
+        id: 'm3', role: 'assistant',
+        content: [{ type: 'tool_use', id: 't9', name: 'Write', input: { file_path: join(proj, 'src', 'yeni.ts') } }],
+      },
+    }),
+    j({
+      type: 'user', cwd: proj, sessionId: S2, uuid: 'v2', timestamp: '2026-07-28T13:01:05.000Z',
+      message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't9', is_error: false, content: 'ok' }] },
+      toolUseResult: { filePath: join(proj, 'src', 'yeni.ts'), structuredPatch: [], userModified: false },
+    }),
+  ];
+  await writeFile(join(slugDir, `${S2}.jsonl`), `${lines.join('\n')}\n`, 'utf8');
+
+  const res = await withClaudeDir(claudeDir, () => runSync(proj, { now: NOW }));
+  const ids = res.state?.passport.map((p) => p.id) ?? [];
+  assert.deepEqual([...ids].sort(), [`birim-${S1}`, `birim-${S2}`]);
+  assert.ok((res.state?.claims.length ?? 0) > ids.length, 'claim sayısı madde sayısından fazla olmalı');
+});
+
+test('git deposu OLMAYAN proje: kart "git status" ÖNERMEZ', async () => {
+  const proj = await realpath(await mkdtemp(join(tmpdir(), 'ocean-nogit-')));
+  const claudeDir = await mkdtemp(join(tmpdir(), 'ocean-nogit-claude-'));
+  await mkdir(join(proj, 'src'), { recursive: true });
+  await writeFile(join(proj, 'src', 'a.ts'), 'export const a = 1;\n', 'utf8'); // package.json YOK
+
+  const slugDir = join(claudeDir, 'projects', slugifyCwd(proj));
+  await mkdir(slugDir, { recursive: true });
+  const sid = 'sess-nogit';
+  const lines = [
+    j({
+      type: 'user', cwd: proj, sessionId: sid, uuid: 'u1', timestamp: '2026-07-28T10:00:00.000Z',
+      message: { role: 'user', content: 'dosyayı yaz' },
+    }),
+    j({
+      type: 'assistant', cwd: proj, sessionId: sid, uuid: 'a1', timestamp: '2026-07-28T10:01:00.000Z',
+      message: {
+        id: 'm1', role: 'assistant',
+        content: [{ type: 'tool_use', id: 't1', name: 'Write', input: { file_path: join(proj, 'src', 'a.ts') } }],
+      },
+    }),
+    j({
+      type: 'user', cwd: proj, sessionId: sid, uuid: 'u2', timestamp: '2026-07-28T10:01:05.000Z',
+      message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't1', is_error: false, content: 'ok' }] },
+      toolUseResult: { filePath: join(proj, 'src', 'a.ts'), structuredPatch: [], userModified: false },
+    }),
+  ];
+  await writeFile(join(slugDir, `${sid}.jsonl`), `${lines.join('\n')}\n`, 'utf8');
+
+  await runInit(proj, { now: NOW });
+  const res = await withClaudeDir(claudeDir, () => runSync(proj, { now: NOW }));
+  const card = res.state?.card;
+  assert.ok(card);
+  assert.notEqual(card.action.command, 'git status', 'çalışmayacak komut önerilemez');
+  assert.equal(card.action.command, `ocean verify ${card.id}`);
+  assert.ok(card.action.verb.includes('git deposu değil'));
+  assert.ok(card.fact.includes('git deposu değil'));
 });

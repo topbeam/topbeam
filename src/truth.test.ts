@@ -4,9 +4,26 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import type { ChangedFile, ClaudeCollectResult, SessionSummary, TestSignal } from './collect/claude.ts';
+import type { BashRun, ChangedFile, ClaudeCollectResult, SessionSummary, TestSignal } from './collect/claude.ts';
 import type { GitFacts } from './collect/git.ts';
-import { buildCalisiyorClaim, buildTruth } from './truth.ts';
+import type { LogEntry } from './types.ts';
+import { buildCalisiyorClaim, buildTruth, collapseRepeats, isInsideProject } from './truth.ts';
+
+function bash(command: string, description: string | null, over: Partial<BashRun> = {}): BashRun {
+  return {
+    command,
+    description,
+    ts: '2026-07-28T10:15:00.000Z',
+    exitCode: 0,
+    exitAssumed: true,
+    resultKind: 'ok',
+    timedOut: false,
+    isTestLike: false,
+    isCheckLike: false,
+    fromSubagent: false,
+    ...over,
+  };
+}
 
 const CWD = '/proj/ornek';
 const NOW = new Date('2026-07-28T12:00:00.000Z');
@@ -346,19 +363,7 @@ test('log varsayılanı SADECE kanıtlı gerçekler — beyan girmez', () => {
   const claude = collect([
     session('s1', {
       changedFiles: [file(`${CWD}/src/a.ts`)],
-      bashRuns: [
-        {
-          command: 'npm test',
-          description: 'Testleri çalıştır',
-          ts: '2026-07-28T10:15:00.000Z',
-          exitCode: 0,
-          exitAssumed: true,
-          resultKind: 'ok',
-          timedOut: false,
-          isTestLike: true,
-          fromSubagent: false,
-        },
-      ],
+      bashRuns: [bash('npm test', 'Testleri çalıştır', { isTestLike: true })],
       testSignals: [signal('npm test', { passed: 4, failed: 0, summaryLine: '# pass 4' })],
     }),
   ]);
@@ -380,19 +385,8 @@ test('log varsayılanı SADECE kanıtlı gerçekler — beyan girmez', () => {
 test('includeBeyan=true → "Beyan:" öneki + claude-beyan kaynağı + komut ref\'i YOK', () => {
   const claude = collect([
     session('s1', {
-      bashRuns: [
-        {
-          command: 'curl -H "Authorization: Bearer cok-gizli"',
-          description: 'Bağımlılığı indir',
-          ts: '2026-07-28T10:20:00.000Z',
-          exitCode: 0,
-          exitAssumed: true,
-          resultKind: 'ok',
-          timedOut: false,
-          isTestLike: false,
-          fromSubagent: false,
-        },
-      ],
+      // npm = anlamlı araç → beyan tutulur (komut metni yine log'a girmez)
+      bashRuns: [bash('npm install jsonwebtoken', 'Bağımlılığı indir', { ts: '2026-07-28T10:20:00.000Z' })],
     }),
   ]);
   const { log } = buildTruth(claude, gitFacts(), { now: NOW, includeBeyan: true });
@@ -400,6 +394,164 @@ test('includeBeyan=true → "Beyan:" öneki + claude-beyan kaynağı + komut ref
   assert.ok(beyan);
   assert.equal(beyan.text, 'Beyan: Bağımlılığı indir');
   assert.equal(beyan.ref, undefined); // komut metni (secret riski) log'a sızmaz
+});
+
+// ── GÜRÜLTÜ KESME ────────────────────────────────────────────────────────────
+
+test('proje DIŞI dosyalar claim/log dışında kalır + sayısı not olarak söylenir', () => {
+  const claude = collect([
+    session('s1', {
+      changedFiles: [
+        file(`${CWD}/src/a.ts`),
+        file('/Users/biri/.claude/CLAUDE.md'),
+        file('/Users/biri/Desktop/baska-proje/src/x.ts'),
+      ],
+    }),
+  ]);
+  const { claims, notes } = buildTruth(claude, gitFacts(), { now: NOW });
+
+  const metin = claims.map((c) => c.text).join('\n');
+  assert.equal(metin.includes('CLAUDE.md'), false, 'proje dışı yol claim metnine sızmamalı');
+  assert.equal(metin.includes('baska-proje'), false);
+  // Kalan tek dosya iddiası proje içindeki dosyayı anlatır.
+  const dosya = claims.find((c) => c.kind === 'dosya');
+  assert.ok(dosya);
+  assert.equal(dosya.signals?.fileCount, 1);
+  assert.deepEqual(dosya.signals?.paths, ['src/a.ts']);
+  // Kapsam daralması SESSİZ olamaz.
+  assert.ok(notes.some((n) => n.includes('proje kökü dışındaki')));
+});
+
+test('proje dışı yol signals.paths\'e de girmez (kart kritik-dosya taraması temiz kalır)', () => {
+  const claude = collect([
+    session('s1', { changedFiles: [file('/baska/yer/config/auth.ts'), file(`${CWD}/src/ui.ts`)] }),
+  ]);
+  const { claims } = buildTruth(claude, gitFacts(), { now: NOW });
+  for (const c of claims) {
+    for (const p of c.signals?.paths ?? []) {
+      assert.equal(p.startsWith('/'), false, `mutlak (proje dışı) yol sızdı: ${p}`);
+      assert.equal(p.includes('..'), false);
+    }
+  }
+});
+
+test('isInsideProject: kök altı true, dışı/kökün kendisi false', () => {
+  assert.equal(isInsideProject(`${CWD}/src/a.ts`, CWD), true);
+  assert.equal(isInsideProject('src/a.ts', CWD), true); // göreli yol köke bağlanır
+  assert.equal(isInsideProject('/Users/x/.claude/CLAUDE.md', CWD), false);
+  assert.equal(isInsideProject(CWD, CWD), false); // kökün kendisi dosya değil
+  assert.equal(isInsideProject('/proj/ornek-yedek/a.ts', CWD), false); // önek benzerliği yetmez
+});
+
+test('kontrol komutu (tsc/eslint) claim ÜRETMEZ; gerçek test claim\'i durur', () => {
+  const claude = collect([
+    session('s1', {
+      testSignals: [
+        signal('npx tsc --noEmit'),
+        signal('eslint src'),
+        signal('npm test', { passed: 12, failed: 0, summaryLine: '# pass 12' }),
+      ],
+    }),
+  ]);
+  const { claims, notes } = buildTruth(claude, gitFacts(), { now: NOW });
+  const testler = claims.filter((c) => c.kind === 'test');
+  assert.equal(testler.length, 1, 'yalnız gerçek test koşumu claim üretmeli');
+  assert.equal(testler[0]?.level, 'test-kaniti');
+  assert.ok(notes.some((n) => n.includes('kontrol komutu')));
+});
+
+test('beyan seyreltme: projeyle ilişkisiz beyan düşer, ilişkili olan durur', () => {
+  const claude = collect([
+    session('s1', {
+      changedFiles: [file(`${CWD}/src/login.ts`)],
+      bashRuns: [
+        bash('osascript -e \'tell application "Chrome" to activate\'', 'Click ChatGPT send button'),
+        bash('say bitti', 'Sesli bildirim ver'),
+        bash('git add -A && git commit -m "x"', "Değişiklikleri commit'le"),
+        bash(`cat ${CWD}/src/login.ts`, 'Login dosyasını oku'),
+      ],
+    }),
+  ]);
+  const { log, notes } = buildTruth(claude, gitFacts(), { now: NOW, includeBeyan: true });
+  const beyanlar = log.filter((l) => l.source === 'claude-beyan').map((l) => l.text);
+  assert.equal(beyanlar.some((t) => t.includes('ChatGPT')), false, 'projeyle ilgisiz beyan log\'u boğmamalı');
+  assert.equal(beyanlar.some((t) => t.includes('Sesli bildirim')), false);
+  assert.ok(beyanlar.some((t) => t.includes("commit'le")));
+  assert.ok(beyanlar.some((t) => t.includes('Login dosyasını oku')));
+  assert.ok(notes.some((n) => n.includes('beyan satırı projeyle ilişkilendirilemedi')));
+});
+
+test('ardışık aynı beyan tek satıra iner: ×N', () => {
+  const claude = collect([
+    session('s1', {
+      bashRuns: [
+        bash('git status', 'Durumu kontrol et', { ts: '2026-07-28T10:00:00.000Z' }),
+        bash('git status', 'Durumu kontrol et', { ts: '2026-07-28T10:00:01.000Z' }),
+        bash('git status', 'Durumu kontrol et', { ts: '2026-07-28T10:00:02.000Z' }),
+      ],
+    }),
+  ]);
+  const { log } = buildTruth(claude, gitFacts(), { now: NOW, includeBeyan: true });
+  const beyanlar = log.filter((l) => l.source === 'claude-beyan');
+  assert.equal(beyanlar.length, 1);
+  assert.equal(beyanlar[0]?.text, 'Beyan: Durumu kontrol et ×3');
+  assert.equal(beyanlar[0]?.ts, '2026-07-28T10:00:00.000Z'); // ilk görülme zamanı
+});
+
+test('collapseRepeats: sayaç toplanır (idempotent), ayrık tekrarlar birleşmez', () => {
+  const e = (ts: string, text: string, source: 'claude-beyan' | 'git' = 'claude-beyan'): LogEntry => ({
+    ts,
+    text,
+    source,
+  });
+  const bir = collapseRepeats([e('1', 'Beyan: X'), e('2', 'Beyan: x'), e('3', 'Beyan: X')]);
+  assert.equal(bir.length, 1);
+  assert.equal(bir[0]?.text, 'Beyan: X ×3');
+  // ikinci geçiş sayıyı BOZMAZ (×3 ×2 olmaz)
+  assert.deepEqual(collapseRepeats(bir), bir);
+  // araya kanıt satırı girerse ayrı olaylardır → birleşmez
+  const ayrik = collapseRepeats([e('1', 'Beyan: X'), e('2', 'Commit: y', 'git'), e('3', 'Beyan: X')]);
+  assert.equal(ayrik.length, 3);
+});
+
+test('log sınırı KANIT ÖNCELİKLİ: beyanlar düşer, kanıt satırları kalır', () => {
+  const commits = Array.from({ length: 520 }, (_, i) => ({
+    hash: `h${i}`,
+    date: `2026-07-28T${String(i % 24).padStart(2, '0')}:00:00.000Z`,
+    subject: `commit ${i}`,
+  }));
+  const bashRuns = Array.from({ length: 200 }, (_, i) =>
+    bash(`npm run build -- ${i}`, `Build ${i}`, { ts: '2026-07-28T23:59:00.000Z' }),
+  );
+  const claude = collect([session('s1', { bashRuns })]);
+  const { log, notes } = buildTruth(claude, gitFacts({ recentCommits: commits }), {
+    now: NOW,
+    includeBeyan: true,
+  });
+  assert.equal(log.length, 500);
+  assert.equal(log.filter((l) => l.source === 'claude-beyan').length, 0, 'sınırda önce beyan düşer');
+  assert.ok(notes.some((n) => n.includes('kanıt taşıyan satırlar önce tutuldu')));
+});
+
+// ── git-yok senaryosu ────────────────────────────────────────────────────────
+
+test('git deposu olmayan dizin: "git\'te izi yok" DEMEZ, noGitTrace sinyali YAZMAZ', () => {
+  const claude = collect([session('s1', { changedFiles: [file(`${CWD}/src/a.ts`)] })]);
+  const git = gitFacts({
+    isGit: false,
+    root: null,
+    headHash: null,
+    headShort: null,
+    recentCommits: [],
+    notes: ['Bu dizin bir git çalışma ağacı değil — git kanıtı yok.'],
+  });
+  const { claims } = buildTruth(claude, git, { now: NOW });
+  const c = claims.find((x) => x.kind === 'dosya');
+  assert.ok(c);
+  assert.equal(c.level, 'dogrulanmadi');
+  assert.ok(c.text.includes('git deposu değil'));
+  assert.equal(c.text.includes("git'te izi yok"), false); // ölçüm yapılmadı ≠ ölçüm başarısız
+  assert.equal(c.signals?.noGitTrace, undefined); // bilinmiyor → sinyal yazılmaz
 });
 
 // ── oturum filtreleri ────────────────────────────────────────────────────────

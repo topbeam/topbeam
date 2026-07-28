@@ -63,7 +63,20 @@ const EDIT_TOOLS: ReadonlySet<string> = new Set(['Edit', 'Write', 'NotebookEdit'
  * kullanımlar bilinçli olarak dışarıda kalır.
  */
 const TEST_CMD_RE =
-  /^(npm (?:run )?test|pnpm (?:run )?test|yarn (?:run )?test|bun test|vitest|jest|pytest|go test|cargo test|playwright|node --test|tsc|eslint)(?![\w-])/;
+  /^(npm (?:run )?test|pnpm (?:run )?test|yarn (?:run )?test|bun test|vitest|jest|pytest|go test|cargo test|playwright|node --test)(?![\w-])/;
+
+/**
+ * KONTROL komutu deseni — derleyici/linter/biçimlendirici. Bunlar "kaç test
+ * geçti" gibi bir SAYI üretmez; sessiz çıkarlar.
+ *
+ * Dogfood dersi (gürültü kaynağı #1): tsc/eslint TEST_CMD_RE içindeydi →
+ * her koşum "sonuç çıktıdan okunamadı — doğrulanmadı" claim'i doğuruyordu
+ * (200+ gürültü claim). Sayı üretmeyen komuttan sayı beklemek ölçüm hatasıdır;
+ * bunlar artık AYRI sınıf: kayda geçer (BashRun.isCheckLike), claim ÜRETMEZ.
+ * Kanıt seviyesi gevşemez — tersine, uydurulmuş "doğrulanmadı" iddiası biter.
+ */
+const CHECK_CMD_RE =
+  /^((?:npm|pnpm|yarn|bun) (?:run )?(?:lint|typecheck|type-check|check|format)|tsc|eslint|prettier|biome|stylelint|mypy|ruff|flake8|pylint)(?![\w-])/;
 
 /** Kabuk zincirini komut konumlarına ayıran ayraçlar. */
 const SHELL_SPLIT_RE = /(?:\|\||&&|;|\||\n)+/;
@@ -97,6 +110,8 @@ export interface BashRun {
   resultKind: BashResultKind;
   timedOut: boolean;
   isTestLike: boolean;
+  /** Kontrol komutu (tsc/eslint/prettier…): sayı üretmez → claim üretilmez. */
+  isCheckLike: boolean;
   fromSubagent: boolean;
 }
 
@@ -217,17 +232,39 @@ function normalizeName(name: string): string {
 }
 
 /**
+ * Kabuk zincirini KOMUT KONUMLARINA ayırır: her parça çalıştırıcı önekleri
+ * (env ataması, npx/sudo…) ve yol öneki soyulmuş haldedir. Sınıflandırma yapan
+ * herkes (test/kontrol/anlamlı-komut) aynı parçalara bakar.
+ */
+export function commandSegments(command: string): string[] {
+  return command.split(SHELL_SPLIT_RE).map((raw) =>
+    raw
+      .trim()
+      .replace(/^[({]\s*/, '') // alt-kabuk / blok açıcı
+      .replace(RUNNER_PREFIX_RE, '') // CI=1 npx …
+      .replace(/^\S*\//, ''), // ./node_modules/.bin/jest → jest
+  );
+}
+
+/**
  * Komut test-benzeri mi? Zincirdeki HERHANGİ bir parça gerçekten bir test
  * ikilisi çağırıyorsa true. Argüman/yol içinde geçen ad sayılmaz.
  */
 export function isTestLikeCommand(command: string): boolean {
-  for (const raw of command.split(SHELL_SPLIT_RE)) {
-    const seg = raw
-      .trim()
-      .replace(/^[({]\s*/, '') // alt-kabuk / blok açıcı
-      .replace(RUNNER_PREFIX_RE, '') // CI=1 npx …
-      .replace(/^\S*\//, ''); // ./node_modules/.bin/jest → jest
+  for (const seg of commandSegments(command)) {
     if (TEST_CMD_RE.test(seg)) return true;
+  }
+  return false;
+}
+
+/**
+ * Komut KONTROL komutu mu (tsc/eslint/prettier…)? Sayı üretmez → claim üretmez.
+ * Test ikilisiyle aynı zincirde geçebilir (`npm test && tsc`); o durumda
+ * test sınıfı kazanır (çağıran taraf isTestLikeCommand'ı önce sorar).
+ */
+export function isCheckLikeCommand(command: string): boolean {
+  for (const seg of commandSegments(command)) {
+    if (CHECK_CMD_RE.test(seg)) return true;
   }
   return false;
 }
@@ -489,6 +526,7 @@ function finalizeBash(acc: Acc, p: Pending, isError: boolean, tur: unknown, ts: 
     resultKind: kind,
     timedOut,
     isTestLike: testLike,
+    isCheckLike: !testLike && isCheckLikeCommand(command),
     fromSubagent: p.fromSubagent,
   };
   acc.bashRunCount++;
@@ -518,6 +556,7 @@ function flushPending(acc: Acc, pending: Map<string, Pending>): void {
   for (const p of pending.values()) {
     if (p.name === 'Bash') {
       const command = p.command ?? '';
+      const testLike = isTestLikeCommand(command);
       acc.bashRunCount++;
       if (acc.bashRuns.length < CAPS.bashMax) {
         acc.bashRuns.push({
@@ -528,7 +567,8 @@ function flushPending(acc: Acc, pending: Map<string, Pending>): void {
           exitAssumed: false,
           resultKind: 'unknown',
           timedOut: false,
-          isTestLike: isTestLikeCommand(command),
+          isTestLike: testLike,
+          isCheckLike: !testLike && isCheckLikeCommand(command),
           fromSubagent: p.fromSubagent,
         });
       }

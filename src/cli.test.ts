@@ -118,7 +118,7 @@ test('verify: olmayan id ile exit 1 + dürüst mesaj (subprocess)', async () => 
   run(['init'], { cwd: dir });
   const r = run(['verify', 'gorev-3'], { cwd: dir, input: 'h\n' });
   assert.equal(r.code, 1);
-  assert.match(r.stderr, /Claim bulunamadı: gorev-3/);
+  assert.match(r.stderr, /Kayıt bulunamadı: gorev-3/);
 });
 
 test('verify subprocess: piped onay (e) çalışır — readline pipe bug kilidi', async () => {

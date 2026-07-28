@@ -1,7 +1,13 @@
 /**
  * ocean verify <id> — insan onayı akışı. "Çalışıyor"nun tek meşru kapısı.
  *
- * Akış: claim'i göster → kanıtları listele → kullanıcı onayı sor (e/H) →
+ * <id> ya tek bir CLAIM ya da bir İŞ BİRİMİ (pasaport maddesi, `birim-…`)
+ * olabilir. Birim verilirse birimdeki TÜM doğrulanmamış kayıtlar ekrana
+ * dökülür ve TEK soruyla birlikte onaylanır — 278 kere "evet" demek zorunda
+ * kalmadan FULL-TİK'e erişilebilsin diye. Kör onay yok: onaylanan her kayıt
+ * (iddia + kanıtları) soru sorulmadan ÖNCE gösterilir.
+ *
+ * Akış: claim'leri göster → kanıtları listele → kullanıcı onayı sor (e/H) →
  * onaylanırsa:
  *   - claim insan-onayi seviyesine yükselir (approveClaim — verify akışının
  *     TEK yükseltme kapısı; motor asla kendisi yükseltmez),
@@ -27,6 +33,7 @@ import {
   type Verification,
 } from './types.ts';
 import { buildCard, scriptsFromPackageJson } from './card.ts';
+import { buildPassport, claimTitle } from './passport.ts';
 import { renderPano } from './pano.ts';
 import { notifyMac } from './notify.ts';
 import {
@@ -90,34 +97,67 @@ export async function runVerify(cwd: string, id: string, deps: VerifyDeps): Prom
     return { ok: false, error: "Bu proje Ocean'a bağlı değil. Önce: ocean init" };
   }
 
-  const idx = state.claims.findIndex((c) => c.id === id);
-  const claim = idx >= 0 ? state.claims[idx] : undefined;
-  if (claim === undefined) {
+  // ── hedefi çöz: tek claim mi, iş birimi mi? ──
+  const byIdx = new Map<string, number>(state.claims.map((c, i) => [c.id, i]));
+  const unit = state.passport.find((p) => p.id === id);
+  let hedefIdx: number[];
+  let hedefAdi: string;
+  if (byIdx.has(id)) {
+    hedefIdx = [byIdx.get(id) as number];
+    hedefAdi = id;
+  } else if (unit !== undefined) {
+    hedefIdx = unit.claimIds.map((cid) => byIdx.get(cid)).filter((i): i is number => i !== undefined);
+    hedefAdi = unit.title;
+  } else {
+    hedefIdx = [];
+    hedefAdi = id;
+  }
+
+  if (hedefIdx.length === 0) {
+    const birimler = state.passport.slice(-3).map((p) => `  - ${p.id}  (${p.claimIds.length} kayıt)`);
     const known = state.claims.slice(-5).map((c) => `  - ${c.id}`);
     return {
       ok: false,
       error:
-        `Claim bulunamadı: ${id}\n` +
+        `Kayıt bulunamadı: ${id}\n` +
         (known.length > 0
-          ? `Kayıtlı son claim id'leri:\n${known.join('\n')}`
+          ? `Kayıtlı son claim id'leri:\n${known.join('\n')}` +
+            (birimler.length > 0 ? `\nPasaport iş birimleri (hepsini tek onayla):\n${birimler.join('\n')}` : '')
           : "Henüz hiç claim yok — önce: ocean sync"),
     };
   }
 
-  // ── göster: iddia + seviye + kanıtlar (karar insanın) ──
-  deps.out('');
-  deps.out(`İddia   : ${claim.text}`);
-  deps.out(`Seviye  : ${EVIDENCE_LEVEL_LABELS_TR[claim.level]}`);
-  deps.out('Kanıtlar:');
-  for (const line of evidenceLines(claim)) deps.out(line);
+  // ── göster: her iddia + seviye + kanıtlar (karar insanın, kör onay yok) ──
+  const hedefler = hedefIdx.map((i) => state.claims[i] as Claim);
+  if (unit !== undefined && hedefler.length > 1) {
+    deps.out('');
+    deps.out(`İş birimi: ${hedefAdi}`);
+    deps.out(`Kayıt    : ${hedefler.length} adet — hepsi aşağıda`);
+  }
+  for (const c of hedefler) {
+    deps.out('');
+    deps.out(`İddia   : ${c.text}`);
+    deps.out(`Seviye  : ${EVIDENCE_LEVEL_LABELS_TR[c.level]}`);
+    deps.out('Kanıtlar:');
+    for (const line of evidenceLines(c)) deps.out(line);
+  }
   deps.out('');
 
-  if (claim.level === 'insan-onayi') {
-    deps.out('Bu iddia zaten insan onaylı — yeniden onay gerekmiyor.');
+  const bekleyenIdx = hedefIdx.filter((i) => (state.claims[i] as Claim).level !== 'insan-onayi');
+  if (bekleyenIdx.length === 0) {
+    deps.out(
+      hedefler.length > 1
+        ? 'Bu birimdeki tüm kayıtlar zaten insan onaylı — yeniden onay gerekmiyor.'
+        : 'Bu iddia zaten insan onaylı — yeniden onay gerekmiyor.',
+    );
     return { ok: true, approved: false };
   }
 
-  const answer = (await deps.ask('Bu işi kendi gözünle doğruladın mı? [e/H] ')).trim().toLowerCase();
+  const soru =
+    bekleyenIdx.length > 1
+      ? `Bu ${bekleyenIdx.length} kaydın hepsini kendi gözünle doğruladın mı? [e/H] `
+      : 'Bu işi kendi gözünle doğruladın mı? [e/H] ';
+  const answer = (await deps.ask(soru)).trim().toLowerCase();
   if (!YES.has(answer)) {
     deps.out('Onay kaydedilmedi — seviye değişmedi. (Doğrulamadan onay yok: dürüstlük böyle çalışır.)');
     return { ok: true, approved: false };
@@ -126,39 +166,50 @@ export async function runVerify(cwd: string, id: string, deps: VerifyDeps): Prom
   // ── onay: tek yönlü yükseltme + değişmez log ──
   const by = deps.by ?? userInfo().username;
   const verification: Verification = { by, at: now.toISOString(), decision: 'approved' };
-  const approved = approveClaim(claim, verification);
   const claims = [...state.claims];
-  claims[idx] = approved;
+  const onaylananlar: Claim[] = [];
+  for (const i of bekleyenIdx) {
+    const c = state.claims[i] as Claim;
+    claims[i] = approveClaim(c, verification);
+    onaylananlar.push(c);
+  }
 
-  const title = claim.text.replace(/\s+/g, ' ').trim().slice(0, 90);
-  const passport: PassportItem[] = [...state.passport];
-  const pIdx = passport.findIndex((p) => p.id === claim.id);
-  const item: PassportItem = {
-    id: claim.id,
-    title,
-    status: 'completed',
-    claimIds: [claim.id],
-    verification,
-    level: 'insan-onayi',
-  };
-  const existingItem = pIdx >= 0 ? passport[pIdx] : undefined;
-  if (existingItem !== undefined) passport[pIdx] = { ...existingItem, ...item };
-  else passport.push(item);
+  const title = claimTitle(hedefler.length > 1 ? hedefAdi : (hedefler[0] as Claim).text);
+  // passport.jsonl KAYIT BAŞINA satır: değişmez log tek tek izlenebilir kalır.
+  for (const c of onaylananlar) {
+    await appendPassportLog(cwd, {
+      schema_version: SCHEMA_VERSION,
+      at: verification.at,
+      claimId: c.id,
+      title: claimTitle(c.text),
+      decision: verification.decision,
+      by,
+      levelBefore: c.level,
+      levelAfter: 'insan-onayi',
+    });
+  }
 
-  await appendPassportLog(cwd, {
-    schema_version: SCHEMA_VERSION,
-    at: verification.at,
-    claimId: claim.id,
-    title,
-    decision: verification.decision,
-    by,
-    levelBefore: claim.level,
-    levelAfter: 'insan-onayi',
-  });
+  // Pasaport iş birimleri claim'lerden yeniden kurulur; bu onay ilgili birime yazılır.
+  const onayliIds = new Set(claims.filter((c) => c.level === 'insan-onayi').map((c) => c.id));
+  const onaylananIds = new Set(onaylananlar.map((c) => c.id));
+  const passport: PassportItem[] = buildPassport(state.passport, claims).map((p) =>
+    p.verification === undefined &&
+    p.claimIds.some((cid) => onaylananIds.has(cid)) &&
+    p.claimIds.every((cid) => onayliIds.has(cid))
+      ? { ...p, verification }
+      : p,
+  );
 
   const log = [
     ...state.log,
-    { ts: verification.at, text: `Doğrulandı: ${title} (${by})`, source: 'insan' as const },
+    {
+      ts: verification.at,
+      text:
+        onaylananlar.length > 1
+          ? `Doğrulandı: ${title} — ${onaylananlar.length} kayıt (${by})`
+          : `Doğrulandı: ${title} (${by})`,
+      source: 'insan' as const,
+    },
   ];
 
   // ── full-tik kontrolü (bildirim BİR KEZ) ──
@@ -198,7 +249,11 @@ export async function runVerify(cwd: string, id: string, deps: VerifyDeps): Prom
   await writePano(cwd, renderPano(next, { goalText }));
 
   deps.out('');
-  deps.out(`Onay kaydedildi: ${claim.id} → insan-onayı (${by}).`);
+  deps.out(
+    onaylananlar.length > 1
+      ? `Onay kaydedildi: ${onaylananlar.length} kayıt → insan-onayı (${by}).`
+      : `Onay kaydedildi: ${(onaylananlar[0] as Claim).id} → insan-onayı (${by}).`,
+  );
   deps.out(`Pasaport: ${passport.filter((p) => p.status === 'completed' && p.level === 'insan-onayi').length}/${passport.length} doğrulandı.`);
   if (fullTick) deps.out('Pasaport FULL-TİK — ürün geliştirildi 🎉');
 

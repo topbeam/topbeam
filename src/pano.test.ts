@@ -88,14 +88,33 @@ test('yüzde-progress-bar YOK; dürüst sayım VAR', () => {
   assert.ok(html.includes('1/2 doğrulandı'));
 });
 
-test('log: beyan rozeti + kaynak rozetleri + en yeni üstte', () => {
+test('log: kanıt ÜSTTE ve açık, beyan ALTTA ve katlı (beyan kanıt değildir)', () => {
   const html = renderPano(stateFixture());
   assert.ok(html.includes('>beyan<'));
   assert.ok(html.includes('>git<'));
-  // en yeni (09:30 beyan) git satırından (09:00) önce render edilir
-  const beyanPos = html.indexOf('Beyan: Testleri çalıştır');
+
+  // Kanıt satırı, beyan bloğundan ÖNCE gelir — beyan altta.
   const gitPos = html.indexOf('Commit: iskelet');
-  assert.ok(beyanPos > -1 && gitPos > -1 && beyanPos < gitPos);
+  const beyanBlokPos = html.indexOf('<details class="beyanlar">');
+  const beyanPos = html.indexOf('Beyan: Testleri çalıştır');
+  assert.ok(gitPos > -1 && beyanBlokPos > -1 && beyanPos > -1);
+  assert.ok(gitPos < beyanBlokPos, 'kanıt satırları beyan bloğunun üstünde olmalı');
+  assert.ok(beyanBlokPos < beyanPos, 'beyan satırı katlı bloğun içinde olmalı');
+
+  // Kat VARSAYILAN OLARAK KAPALI: <details> open değil.
+  assert.equal(/<details class="beyanlar"[^>]*\sopen/.test(html), false);
+  // Ama kayıt silinmiş gibi de yapılmaz: sayısı açıkça yazar.
+  assert.ok(html.includes("Claude'un beyanları (1)"));
+  assert.ok(html.includes('1 kanıt · 1 beyan'));
+});
+
+test('log: satır sayıları dürüst — beyan gizlense de sayılır', () => {
+  const st = stateFixture();
+  for (let i = 0; i < 5; i++) {
+    st.log.push({ ts: `2026-07-28T10:0${i}:00Z`, text: `Beyan: iş ${i}`, source: 'claude-beyan' });
+  }
+  const html = renderPano(st);
+  assert.ok(html.includes('1 kanıt · 6 beyan'));
 });
 
 test('full-tik değilse kutlama bandı YOK; full-tik ise VAR', () => {
@@ -107,6 +126,25 @@ test('full-tik değilse kutlama bandı YOK; full-tik ise VAR', () => {
     p.level = 'insan-onayi';
   }
   assert.ok(renderPano(st).includes('Ürün geliştirildi 🎉'));
+});
+
+test('pasaport: doğrulanmamış birimde verify komutu + kayıt sayısı görünür', () => {
+  const st = stateFixture();
+  st.passport[0] = {
+    id: 'birim-s1',
+    title: 'oturum işi',
+    status: 'not_verified',
+    claimIds: ['a', 'b', 'c'],
+    level: 'dogrulanmadi',
+    reason: '1/3 kayıt insan onaylı — birim henüz tamam değil.',
+  };
+  const html = renderPano(st);
+  assert.ok(html.includes('ocean verify birim-s1'));
+  assert.ok(html.includes('3 kayıt'));
+  assert.ok(html.includes('1/3 kayıt insan onaylı'));
+  // onaylanmış maddede tekrar "verify" çağrısı GÖSTERİLMEZ (yapılacak iş yok):
+  // pasaportta iki madde var, yalnız biri komut taşır.
+  assert.equal(html.match(/class="pid mono"/g)?.length, 1);
 });
 
 test('escape: kötü niyetli claim metni HTML/JS enjekte edemez', () => {

@@ -15,14 +15,17 @@
  * - Yeniden üretilmeyen kanıtsız eski claim'ler düşer (kanıtı transcript'ti;
  *   transcript değiştiyse iddia da düşer — pasaport maddesi iz olarak kalır).
  * - Log yeniden kurulur: kanıtlı gerçekler + beyanlar + korunan insan/ocean
- *   satırları. Tekrarlar (ts+source+text) ayıklanır.
+ *   satırları. Tekrarlar (ts+source+text) ayıklanır, ardışık tekrarlar "×N".
+ * - Pasaport claim başına değil İŞ BİRİMİ (oturum) başına kurulur; insan
+ *   kararları taşınır (passport.ts).
  */
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { collectClaude } from './collect/claude.ts';
 import { collectGit } from './collect/git.ts';
-import { buildTruth } from './truth.ts';
+import { buildTruth, collapseRepeats } from './truth.ts';
 import { buildCard, scriptsFromPackageJson } from './card.ts';
+import { buildPassport } from './passport.ts';
 import { renderPano } from './pano.ts';
 import {
   panoPath,
@@ -32,7 +35,7 @@ import {
   writePano,
   writeState,
 } from './state.ts';
-import type { Claim, LogEntry, OceanState, PassportItem } from './types.ts';
+import type { Claim, LogEntry, OceanState } from './types.ts';
 
 export interface SyncResult {
   ok: boolean;
@@ -45,13 +48,6 @@ export interface SyncResult {
   /** Kaç secret parçası maskelendi (şeffaflık). */
   redactHits?: number;
   transcriptsFound?: number;
-}
-
-const TITLE_LEN = 90;
-
-function claimTitle(text: string): string {
-  const t = text.replace(/\s+/g, ' ').trim();
-  return t.length > TITLE_LEN ? `${t.slice(0, TITLE_LEN)}…` : t;
 }
 
 /** Eski + taze claim birleşimi: onaylı eskiler kazanır, kalanlar tazeden gelir. */
@@ -74,37 +70,7 @@ export function mergeClaims(
   return { merged, droppedStale };
 }
 
-/** Pasaport upsert: doğrulanmış maddeye DOKUNMA; diğerlerini claim'den tazele. */
-export function upsertPassport(
-  existing: readonly PassportItem[],
-  claims: readonly Claim[],
-): PassportItem[] {
-  const out: PassportItem[] = [...existing];
-  const idx = new Map<string, number>(out.map((p, i) => [p.id, i]));
-  for (const c of claims) {
-    const i = idx.get(c.id);
-    const fresh: PassportItem = {
-      id: c.id,
-      title: claimTitle(c.text),
-      status: c.level === 'insan-onayi' ? 'completed' : 'not_verified',
-      claimIds: [c.id],
-      level: c.level,
-    };
-    if (i === undefined) {
-      idx.set(c.id, out.length);
-      out.push(fresh);
-    } else {
-      const cur = out[i];
-      if (cur !== undefined && cur.verification === undefined) {
-        out[i] = { ...fresh, ...(cur.clientText !== undefined ? { clientText: cur.clientText } : {}) };
-      }
-      // verification'lı madde = insan kararı — sync dokunmaz.
-    }
-  }
-  return out;
-}
-
-/** ts+source+text üzerinden tekrar ayıkla, sırala. */
+/** ts+source+text üzerinden tekrar ayıkla, sırala, ardışık tekrarları "×N" yap. */
 function dedupeSortLog(entries: readonly LogEntry[]): LogEntry[] {
   const seen = new Set<string>();
   const out: LogEntry[] = [];
@@ -115,7 +81,9 @@ function dedupeSortLog(entries: readonly LogEntry[]): LogEntry[] {
     out.push(e);
   }
   out.sort((x, y) => (x.ts < y.ts ? -1 : x.ts > y.ts ? 1 : x.text.localeCompare(y.text)));
-  return out;
+  // Birleşme sonrası yan yana gelen tekrarlar da tekilleşir (truth katmanında
+  // ayrı ayrı sıkışan satırlar burada komşu olabilir).
+  return collapseRepeats(out);
 }
 
 export async function runSync(cwd: string, opts: { now?: Date } = {}): Promise<SyncResult> {
@@ -157,7 +125,9 @@ export async function runSync(cwd: string, opts: { now?: Date } = {}): Promise<S
   const keptHuman = state.log.filter((e) => e.source === 'insan' || e.source === 'ocean');
   const log = dedupeSortLog([...truth.log, ...noteEntries, ...keptHuman]);
 
-  const passport = upsertPassport(state.passport, merged);
+  // Pasaport: claim başına değil, İŞ BİRİMİ (oturum) başına madde — insanın
+  // onaylayabileceği ölçek. İnsan kararları taşınır (passport.ts).
+  const passport = buildPassport(state.passport, merged);
 
   // 5) Kart — package.json scripts önerisi (fs okuma burada; card.ts saf).
   let scripts: Record<string, string> = {};
@@ -166,7 +136,8 @@ export async function runSync(cwd: string, opts: { now?: Date } = {}): Promise<S
   } catch {
     // package.json yoksa öneri git status'a düşer — sorun değil.
   }
-  const card = buildCard(merged, { scripts, now });
+  // isGitRepo: kart, çalışmayacak git komutu önermesin (git yoksa insan onayı).
+  const card = buildCard(merged, { scripts, now, isGitRepo: git.isGit });
 
   // 6) State + pano yaz.
   const sessionsSeen = [...new Set([...state.sessionsSeen, ...claude.sessions.map((s) => s.sessionId)])];

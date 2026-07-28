@@ -21,10 +21,24 @@
  * Claude'un niyet beyanları (Bash description) ancak includeBeyan=true ile,
  * 'claude-beyan' kaynağı ve "Beyan:" önekiyle girer — kanıt değil, beyan.
  *
+ * GÜRÜLTÜ KESME (ürünün vaadi: gürültüyü kesmek — kendisi gürültü üretemez):
+ * - PROJE KAPSAMI: transcript'teki düzenlemelerin yalnız PROJE KÖKÜ ALTINDAKİ
+ *   dosyaları claim/log'a girer. Başka projenin ya da ~/.claude altındaki
+ *   dosyaların yolu bu projenin panosunda işi yoktur (sayısı not'a düşer —
+ *   kapsam daralması sessiz kalmaz).
+ * - KONTROL KOMUTU: tsc/eslint gibi sayı üretmeyen komutlar claim üretmez
+ *   (isCheckLikeCommand). Sayı üretmeyen komuttan "sonuç okunamadı" iddiası
+ *   çıkarmak ölçüm hatasıydı.
+ * - BEYAN SEYRELTME: bir beyan yalnız komutu projeye dokunuyorsa/anlamlı bir
+ *   araç çağırıyorsa log'a girer; ardışık tekrarlar "×N" ile tekilleşir.
+ * - LOG SINIRI: 500 satır dolduğunda önce KANIT taşıyan satırlar tutulur,
+ *   beyanlar düşer.
+ * Bunların hiçbiri kanıt seviyesini yükseltmez; yalnız gürültüyü eler.
+ *
  * Not (persist katmanına): evidence.ref komut metni içerebilir; state.json'a
  * yazan modül BP redact desenini kurmadan bu alanı diske YAZMAMALI.
  */
-import { isAbsolute, relative, resolve, sep } from 'node:path';
+import { basename, isAbsolute, relative, resolve, sep } from 'node:path';
 import type {
   Claim,
   ClaimEvidence,
@@ -32,11 +46,15 @@ import type {
   LogEntry,
   Verification,
 } from './types.ts';
-import type {
-  ChangedFile,
-  ClaudeCollectResult,
-  SessionSummary,
-  TestSignal,
+import {
+  commandSegments,
+  isCheckLikeCommand,
+  isTestLikeCommand,
+  type BashRun,
+  type ChangedFile,
+  type ClaudeCollectResult,
+  type SessionSummary,
+  type TestSignal,
 } from './collect/claude.ts';
 import type { GitFacts } from './collect/git.ts';
 
@@ -55,7 +73,20 @@ const LIMITS = {
    * kritik-dosya taraması bu listede döner, ötesi kaçabilir (bilinen sınır).
    */
   signalPaths: 50,
+  /** Beyan eşleştirmesinde bakılan proje dosya adı sayısı (O(n·m) sınırı). */
+  beyanNames: 200,
+  /** Beyan eşleştirmesinde anlamlı sayılan en kısa dosya adı (rastgele eşleşme olmasın). */
+  beyanNameMin: 4,
 } as const;
+
+/**
+ * Beyanı ayakta tutan araç ikilileri: sürüm kontrolü, paket/çalıştırma,
+ * derleme/test, dağıtım. Bunların dışındaki komutlar (osascript, open, say,
+ * sleep, echo…) proje dosyasına dokunmadıkça beyan olarak log'a girmez —
+ * dogfood'daki "Beyan: Click ChatGPT send button" gürültüsünün kaynağı buydu.
+ */
+const ANLAMLI_BIN_RE =
+  /^(git|npm|pnpm|yarn|bun|node|deno|tsc|eslint|prettier|biome|stylelint|jest|vitest|pytest|mocha|python3?|pip3?|poetry|uv|pipenv|cargo|go|rustc|make|cmake|docker|docker-compose|gradle|mvn|dotnet|swift|xcodebuild|expo|eas|next|vite|rollup|esbuild|webpack|tsx|ts-node|prisma|supabase|wrangler|vercel|netlify|surge|ocean|buildpassport)(?![\w-])/;
 
 // ── dış tipler ───────────────────────────────────────────────────────────────
 
@@ -86,10 +117,20 @@ function absPath(p: string, base: string): string {
   return isAbsolute(p) ? resolve(p) : resolve(base, p);
 }
 
-/** Kullanıcıya gösterilecek kısa yol (proje köküne göre; dışarıysa olduğu gibi). */
-function shortPath(abs: string, projectCwd: string): string {
+/**
+ * Proje köküne göre kısa yol — YALNIZ kök altındaki dosyalar için.
+ * Dışarıdaki yol null döner: proje dışı mutlak yol bu panonun metnine
+ * (ve dolayısıyla state.json'a) hiç girmez.
+ */
+function projectRelative(abs: string, projectCwd: string): string | null {
   const rel = relative(resolve(projectCwd), abs);
-  return rel && !rel.startsWith(`..${sep}`) && rel !== '..' ? rel : abs;
+  if (rel === '' || rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel)) return null;
+  return rel;
+}
+
+/** Dosya proje kökünün ALTINDA mı (kökün kendisi dosya değildir → false). */
+export function isInsideProject(path: string, projectCwd: string): boolean {
+  return projectRelative(absPath(path, projectCwd), projectCwd) !== null;
 }
 
 /** "a, b, c" listesi — LIMITS.nameList üstü "+N dosya daha". */
@@ -134,23 +175,33 @@ interface FileBuckets {
   transcriptOnly: ChangedFile[];
   /** Sonucu transcript'te hiç görülmeyen denemeler → ayrı, başarı sayılmaz. */
   unknownOnly: ChangedFile[];
+  /** Proje kökü DIŞINDA kalan düzenlemeler — sayılır, claim'e girmez. */
+  outsideCount: number;
 }
 
+/**
+ * Dosyaları kanıt kovalarına ayır. Proje kökü dışındaki dosyalar en başta
+ * elenir: bu pano yalnız BU projeyi anlatır (yol da metne sızmaz).
+ */
 function bucketFiles(
   session: SessionSummary,
   gitKnown: ReadonlySet<string>,
   projectCwd: string,
 ): FileBuckets {
-  const b: FileBuckets = { verified: [], transcriptOnly: [], unknownOnly: [] };
+  const b: FileBuckets = { verified: [], transcriptOnly: [], unknownOnly: [], outsideCount: 0 };
   for (const f of session.changedFiles) {
+    if (f.edits === 0 && f.unknownEdits === 0) continue; // yalnız failedEdits: iddia yok
+    const abs = absPath(f.path, projectCwd);
+    if (projectRelative(abs, projectCwd) === null) {
+      b.outsideCount++;
+      continue;
+    }
     if (f.edits > 0) {
-      const abs = absPath(f.path, projectCwd);
       if (gitKnown.has(abs)) b.verified.push(f);
       else b.transcriptOnly.push(f);
-    } else if (f.unknownEdits > 0) {
+    } else {
       b.unknownOnly.push(f);
     }
-    // edits=0 & yalnız failedEdits: değişiklik iddiası yok (hata sayacı ayrı).
   }
   return b;
 }
@@ -164,8 +215,12 @@ function fileClaims(
 ): Claim[] {
   const claims: Claim[] = [];
   const ts = session.lastTs ?? fallbackTs;
+  // Kovalardaki her dosya proje kökü altındadır (bucketFiles eledi) → rel yolu
+  // her zaman vardır; yine de son çare olarak dosya adına düşülür.
   const names = (files: readonly ChangedFile[]): string[] =>
-    files.map((f) => shortPath(absPath(f.path, projectCwd), projectCwd)).sort();
+    files
+      .map((f) => projectRelative(absPath(f.path, projectCwd), projectCwd) ?? basename(f.path))
+      .sort();
   const lineTotals = (files: readonly ChangedFile[]): { a: number; r: number } => {
     let a = 0;
     let r = 0;
@@ -217,19 +272,31 @@ function fileClaims(
 
   if (buckets.transcriptOnly.length > 0) {
     const n = buckets.transcriptOnly.length;
+    /**
+     * GİT-YOK AYRIMI. Git deposu olmayan dizinde kesişim hiç KURULAMAZ:
+     * "git'te izi yok" demek burada yanlış suçlamadır (ölçüm yapılmadı,
+     * ölçüm başarısız olmadı). Metin farklı, sinyal de farklı: noGitTrace
+     * YAZILMAZ → kart 'kayıp-riski' kuralını çalıştırıp git komutu önermez.
+     */
+    const gitsiz = !git.isGit;
     claims.push({
       id: `dosya-transcript-${session.sessionId}`,
-      text:
-        `${n} dosya için düzenleme kaydı var ama git'te izi yok ` +
-        `(commit'lenmiş ya da geri alınmış olabilir) — uygulandı görünüyor, doğrulanmadı: ` +
-        nameList(names(buckets.transcriptOnly)),
+      text: gitsiz
+        ? `${n} dosya düzenlendi ama bu dizin git deposu değil — değişiklik git ile karşılaştırılamadı, ` +
+          `uygulandı görünüyor, doğrulanmadı: ${nameList(names(buckets.transcriptOnly))}`
+        : `${n} dosya için düzenleme kaydı var ama git'te izi yok ` +
+          `(commit'lenmiş ya da geri alınmış olabilir) — uygulandı görünüyor, doğrulanmadı: ` +
+          nameList(names(buckets.transcriptOnly)),
       level: 'dogrulanmadi',
       kind: 'dosya',
-      signals: fileSignals(buckets.transcriptOnly, true), // git'te izi YOK (kesin)
+      // git varsa: izin YOKLUĞU ölçüldü (true). Git yoksa: ölçüm yapılamadı (yazılmaz).
+      signals: fileSignals(buckets.transcriptOnly, gitsiz ? undefined : true),
       evidence: [
         {
           kind: 'transcript-tool-use',
-          summary: `Transcript: ${n} dosyada Edit/Write sonucu hatasız görüldü; git diff/status kaydı yok.`,
+          summary: gitsiz
+            ? `Transcript: ${n} dosyada Edit/Write sonucu hatasız görüldü; dizin git deposu olmadığı için karşılaştırma yapılamadı.`
+            : `Transcript: ${n} dosyada Edit/Write sonucu hatasız görüldü; git diff/status kaydı yok.`,
           ref: session.sessionId,
         },
       ],
@@ -271,9 +338,20 @@ function lastSignalPerCommand(signals: readonly TestSignal[]): TestSignal[] {
   return [...byCmd.values()];
 }
 
-function testClaims(session: SessionSummary, fallbackTs: string): Claim[] {
+/**
+ * KONTROL komutu mu (tsc/eslint/prettier…)? Sayı üretmeyen komuttan sonuç
+ * beklenmez → claim de üretilmez. Test ikilisiyle aynı zincirdeyse (npm test
+ * && tsc) test sınıfı kazanır, claim üretilmeye devam eder.
+ */
+function kontrolKomutu(command: string): boolean {
+  return isCheckLikeCommand(command) && !isTestLikeCommand(command);
+}
+
+function testClaims(session: SessionSummary, fallbackTs: string): { claims: Claim[]; skipped: number } {
   const claims: Claim[] = [];
-  const signals = lastSignalPerCommand(session.testSignals);
+  const tumu = lastSignalPerCommand(session.testSignals);
+  const signals = tumu.filter((s) => !kontrolKomutu(s.command));
+  const skipped = tumu.length - signals.length;
   signals.forEach((sig, i) => {
     const ts = sig.ts ?? session.lastTs ?? fallbackTs;
     const cmd = shortCmd(sig.command);
@@ -345,7 +423,7 @@ function testClaims(session: SessionSummary, fallbackTs: string): Claim[] {
       });
     }
   });
-  return claims;
+  return { claims, skipped };
 }
 
 // ── log üretimi ──────────────────────────────────────────────────────────────
@@ -379,10 +457,62 @@ function claimLog(claims: readonly Claim[]): LogEntry[] {
   return entries;
 }
 
-function beyanLog(session: SessionSummary, fallbackTs: string): LogEntry[] {
+/**
+ * Beyan log'a girmeye değer mi? Beyan zaten KANIT DEĞİL; bu yüzden en azından
+ * PROJEYLE İLİŞKİLİ olmak zorunda. Ölçüt (sırayla):
+ *  1. koşum test/kontrol komutu → ilişkili,
+ *  2. komut metni proje kökünü ya da bu oturumda dokunulan bir proje dosyasını
+ *     anıyor → ilişkili,
+ *  3. komut anlamlı bir araç ikilisi çağırıyor (git/npm/node/docker…) → ilişkili.
+ * Hiçbiri değilse beyan düşer: "Beyan: Click ChatGPT send button" gibi satırlar
+ * bu projenin panosunda gerçeğin altını doldurmaz, üstünü örter.
+ */
+export function beyanAnlamli(
+  run: BashRun,
+  projectCwd: string,
+  projectNames: ReadonlySet<string>,
+): boolean {
+  if (run.isTestLike || run.isCheckLike) return true;
+  const cmd = run.command;
+  if (cmd.trim() === '') return false; // komut yok → bağlam yok → kanıt-dışı gürültü
+  if (cmd.includes(resolve(projectCwd))) return true;
+  for (const seg of commandSegments(cmd)) {
+    if (ANLAMLI_BIN_RE.test(seg)) return true;
+  }
+  for (const name of projectNames) {
+    if (cmd.includes(name)) return true;
+  }
+  return false;
+}
+
+/** Bu oturumda dokunulan PROJE dosyalarının eşleştirme adları (rel yol + dosya adı). */
+function projectFileNames(session: SessionSummary, projectCwd: string): Set<string> {
+  const out = new Set<string>();
+  for (const f of session.changedFiles) {
+    if (out.size >= LIMITS.beyanNames) break;
+    const rel = projectRelative(absPath(f.path, projectCwd), projectCwd);
+    if (rel === null) continue;
+    if (rel.length >= LIMITS.beyanNameMin) out.add(rel);
+    const base = basename(rel);
+    if (base.length >= LIMITS.beyanNameMin) out.add(base);
+  }
+  return out;
+}
+
+function beyanLog(
+  session: SessionSummary,
+  projectCwd: string,
+  fallbackTs: string,
+): { entries: LogEntry[]; dropped: number } {
   const entries: LogEntry[] = [];
+  const names = projectFileNames(session, projectCwd);
+  let dropped = 0;
   for (const run of session.bashRuns) {
     if (run.description === null) continue;
+    if (!beyanAnlamli(run, projectCwd, names)) {
+      dropped++;
+      continue;
+    }
     entries.push({
       ts: run.ts ?? session.lastTs ?? fallbackTs,
       text: `Beyan: ${run.description}`,
@@ -391,7 +521,74 @@ function beyanLog(session: SessionSummary, fallbackTs: string): LogEntry[] {
       // ref BİLEREK yok: komut metni secret içerebilir (redact persist katmanında).
     });
   }
-  return entries;
+  return { entries, dropped };
+}
+
+// ── tekrar sıkıştırma + log sınırı ───────────────────────────────────────────
+
+/** Metnin sonundaki "×N" sayacı (varsa) — tekrar birleştirmede toplanır. */
+const REPEAT_SUFFIX_RE = /\s×(\d+)$/;
+
+function splitRepeat(text: string): { base: string; n: number } {
+  const m = REPEAT_SUFFIX_RE.exec(text);
+  if (m?.[1] === undefined) return { base: text, n: 1 };
+  return { base: text.slice(0, m.index), n: Number(m[1]) };
+}
+
+/** Karşılaştırma anahtarı: kaynak + normalize metin (büyük/küçük ve boşluk farkı yutulur). */
+function repeatKey(source: string, base: string): string {
+  return `${source}|${base.trim().replace(/\s+/g, ' ').toLocaleLowerCase('tr-TR')}`;
+}
+
+/**
+ * ARDIŞIK tekrarları tek satıra indir: "Beyan: X" ×3 → "Beyan: X ×3".
+ * Kronolojik sıra korunur (birleşen satır EN ERKEN ts'i tutar); sayaç toplanır,
+ * yani ikinci kez çalıştırmak sayıyı bozmaz. Ardışık olmayan tekrarlar
+ * bilerek ayrı kalır — araları başka olayla dolu iki koşum aynı olay değildir.
+ */
+export function collapseRepeats(entries: readonly LogEntry[]): LogEntry[] {
+  const out: LogEntry[] = [];
+  const counts: number[] = [];
+  const keys: string[] = [];
+  for (const e of entries) {
+    const { base, n } = splitRepeat(e.text);
+    const key = repeatKey(e.source, base);
+    const last = out.length - 1;
+    if (last >= 0 && keys[last] === key) {
+      counts[last] = (counts[last] ?? 1) + n;
+      continue;
+    }
+    out.push({ ...e, text: base });
+    counts.push(n);
+    keys.push(key);
+  }
+  return out.map((e, i) => {
+    const n = counts[i] ?? 1;
+    return n > 1 ? { ...e, text: `${e.text} ×${n}` } : e;
+  });
+}
+
+/**
+ * Log sınırı — KANIT ÖNCELİKLİ. Sınır dolduğunda önce beyanlar düşer;
+ * git/test/insan/ocean satırları (gerçeğin kendisi) en sona kadar korunur.
+ */
+function capLog(log: readonly LogEntry[], notes: string[]): LogEntry[] {
+  if (log.length <= LIMITS.logMax) return [...log];
+  const kanit = log.filter((e) => e.source !== 'claude-beyan');
+  const beyan = log.filter((e) => e.source === 'claude-beyan');
+  const keptKanit = kanit.slice(-LIMITS.logMax);
+  const slot = LIMITS.logMax - keptKanit.length;
+  const keptBeyan = slot > 0 ? beyan.slice(-slot) : [];
+  notes.push(
+    `Log ${LIMITS.logMax} satırla sınırlandı (toplam ${log.length}): kanıt taşıyan satırlar önce tutuldu, ` +
+      `${beyan.length - keptBeyan.length} beyan ve ${kanit.length - keptKanit.length} kanıt satırı listeden düştü.`,
+  );
+  return sortLog([...keptKanit, ...keptBeyan]);
+}
+
+/** Deterministik log sıralaması: ts, eşitlikte metin. */
+function sortLog(entries: LogEntry[]): LogEntry[] {
+  return entries.sort((x, y) => (x.ts < y.ts ? -1 : x.ts > y.ts ? 1 : x.text.localeCompare(y.text)));
 }
 
 // ── dış API ──────────────────────────────────────────────────────────────────
@@ -410,7 +607,10 @@ export function buildTruth(
   const gitKnown = gitKnownPaths(git, claude.projectCwd);
 
   const claims: Claim[] = [];
-  let log: LogEntry[] = gitLog(git, nowIso);
+  const log: LogEntry[] = gitLog(git, nowIso);
+  let disKapsam = 0;
+  let kontrolAtlanan = 0;
+  let beyanDusen = 0;
 
   for (const session of claude.sessions) {
     if (session.cwdMismatch && session.cwd !== null && session.lastCwd !== null && session.cwd === session.lastCwd) {
@@ -421,25 +621,46 @@ export function buildTruth(
       continue;
     }
     const buckets = bucketFiles(session, gitKnown, claude.projectCwd);
+    disKapsam += buckets.outsideCount;
     claims.push(...fileClaims(session, buckets, git, claude.projectCwd, nowIso));
-    claims.push(...testClaims(session, nowIso));
-    if (opts.includeBeyan === true) log.push(...beyanLog(session, nowIso));
+    const t = testClaims(session, nowIso);
+    claims.push(...t.claims);
+    kontrolAtlanan += t.skipped;
+    if (opts.includeBeyan === true) {
+      const b = beyanLog(session, claude.projectCwd, nowIso);
+      log.push(...b.entries);
+      beyanDusen += b.dropped;
+    }
+  }
+
+  // Kapsam daralması SESSİZ kalmaz — neyin dışarıda tutulduğu sayıyla söylenir.
+  if (disKapsam > 0) {
+    notes.push(
+      `${disKapsam} düzenleme proje kökü dışındaki dosyalarda — claim ve log dışında tutuldu (bu pano yalnız bu projeyi anlatır).`,
+    );
+  }
+  if (kontrolAtlanan > 0) {
+    notes.push(
+      `${kontrolAtlanan} kontrol komutu (tsc/eslint gibi) claim üretmedi — bu komutlar geçti/kaldı sayısı üretmez.`,
+    );
+  }
+  if (beyanDusen > 0) {
+    notes.push(
+      `${beyanDusen} beyan satırı projeyle ilişkilendirilemedi ve log'a alınmadı (beyan zaten kanıt değildir).`,
+    );
   }
 
   log.push(...claimLog(claims));
 
   // Deterministik sıralama: ts, sonra metin (eşit ts'te sabit sıra).
-  log.sort((x, y) => (x.ts < y.ts ? -1 : x.ts > y.ts ? 1 : x.text.localeCompare(y.text)));
-  if (log.length > LIMITS.logMax) {
-    notes.push(`Log ${LIMITS.logMax} satırla sınırlandı (toplam ${log.length}).`);
-    log = log.slice(-LIMITS.logMax);
-  }
+  // Sonra ardışık tekrarlar "×N" ile tekilleşir, en son kanıt-öncelikli sınır.
+  const capped = capLog(collapseRepeats(sortLog(log)), notes);
 
   claims.sort((x, y) =>
     x.createdAt < y.createdAt ? -1 : x.createdAt > y.createdAt ? 1 : x.id.localeCompare(y.id),
   );
 
-  return { claims, log, notes };
+  return { claims, log: capped, notes };
 }
 
 /**

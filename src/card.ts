@@ -33,6 +33,9 @@
  *   başarısız test sayısı, gün farkı). Tahmin, yüzde, motivasyon yok.
  * - Sinyal yoksa kural sessizce düşer (0/false varsayılmaz) → kart temel
  *   kurala geri sarar. Sinyalsiz (eski) state.json'lar bu yüzden bozulmaz.
+ * - Çalışmayacak komut ÖNERİLMEZ: git deposu olmayan dizinde 'git status'
+ *   göstermek sahte affordance'tır (kullanıcıyı hata mesajına yollar) →
+ *   o dalda hareket insan onayına döner (CardOptions.isGitRepo === false).
  */
 import type { Card, CardRule, Claim, ClaimSignals, CardEvidence, NextAction } from './types.ts';
 
@@ -41,8 +44,21 @@ import type { Card, CardRule, Claim, ClaimSignals, CardEvidence, NextAction } fr
 export interface CardOptions {
   /** Projenin package.json scripts alanı (komut önerisi için; fs okuma sync katmanında). */
   scripts?: Readonly<Record<string, string>>;
+  /**
+   * Dizin git deposu mu (collectGit.isGit). undefined = BİLİNMİYOR — bu durumda
+   * kart eski davranışını sürdürür (varsayım yapılmaz). Yalnız KESİN false
+   * bilgisi git komutu önermeyi kapatır: çalıştırılınca hata veren komut
+   * sahte affordance'tır ("hiçbir yere gitmeyen çizgi").
+   */
+  isGitRepo?: boolean;
   /** updatedAt ve "bayat" hesabı için sabit zaman (test determinizmi). */
   now?: Date;
+}
+
+/** Kart montajının komut önerirken bildiği proje gerçekleri. */
+interface Cevre {
+  scripts: Readonly<Record<string, string>>;
+  isGitRepo?: boolean;
 }
 
 /** Kart ana butonunun göstereceği CLI komutu (pano statik — kullanıcı kopyalar). */
@@ -271,7 +287,8 @@ function kopyalanabilirKomut(cmd: string | undefined): string | undefined {
 }
 
 /** Doğrulanmamış claim için kanıt-yükseltme hareketi (package.json scriptlerinden). */
-function upgradeAction(claim: Claim, scripts: Readonly<Record<string, string>>): NextAction {
+function upgradeAction(claim: Claim, cevre: Cevre): NextAction {
+  const scripts = cevre.scripts;
   if (claim.kind === 'test') {
     // Test sonucu okunamamıştı → testi yeniden koş, okunur sonuç al.
     if (typeof scripts.test === 'string') {
@@ -288,6 +305,17 @@ function upgradeAction(claim: Claim, scripts: Readonly<Record<string, string>>):
   }
   if (typeof scripts.build === 'string') {
     return { verb: "Build alıp değişikliğin derlendiğini gör.", command: 'npm run build' };
+  }
+  /**
+   * GİT-YOK DALI. Git deposu olmayan dizinde 'git status' önermek kullanıcıyı
+   * hata mesajına yollar — çalışmayan komut, kartın güvenilirliğini yer.
+   * O durumda tek dürüst yükseltme yolu insan gözüdür.
+   */
+  if (cevre.isGitRepo === false) {
+    return {
+      verb: 'Bu dizin git deposu değil — değişikliği kendi gözünle aç, kontrol et ve onayla.',
+      command: verifyCommand(claim.id),
+    };
   }
   return { verb: "Değişikliğin git'te göründüğünü kontrol et.", command: 'git status' };
 }
@@ -310,9 +338,13 @@ function upgradeUnknown(claim: Claim): string {
   return "Bu değişikliklerin git'te karşılığı görünmüyor — gerçekten uygulandı mı belirsiz.";
 }
 
-function upgradeDoneWhen(claim: Claim): string {
+function upgradeDoneWhen(claim: Claim, cevre: Cevre): string {
   if (claim.kind === 'test') {
     return `Test çıktısından okunur bir geçti/kaldı sonucu alındığında (test-kanıtı) ya da '${verifyCommand(claim.id)}' ile sen onayladığında (insan-onayı) bitti sayılır.`;
+  }
+  // Git yoksa "git kaydında göründüğünde" koşulu ERİŞİLEMEZ bir koşuldur → söylenmez.
+  if (cevre.isGitRepo === false) {
+    return `Test yeşil sonuç verdiğinde (test-kanıtı) ya da '${verifyCommand(claim.id)}' ile sen onayladığında (insan-onayı) bitti sayılır — bu dizin git deposu olmadığı için dosya-kanıtı yolu kapalı.`;
   }
   return `Değişiklik git kaydında göründüğünde (dosya-kanıtı), test yeşil sonuç verdiğinde (test-kanıtı) ya da '${verifyCommand(claim.id)}' ile sen onayladığında (insan-onayı) bitti sayılır.`;
 }
@@ -329,12 +361,11 @@ interface Secim {
   doneWhen?: string;
 }
 
-interface Ctx {
+interface Ctx extends Cevre {
   /** Tüm claim'ler (insan-onaylı dâhil). */
   all: readonly Claim[];
   /** Doğrulanmamışlar — en yeni önce. */
   unverified: readonly Claim[];
-  scripts: Readonly<Record<string, string>>;
   now: Date;
 }
 
@@ -522,16 +553,16 @@ function secimYap(ctx: Ctx): Secim | null {
  * fact/factLevel/evidence buradan geçtiği için hiçbir kural seviye yükseltemez
  * ya da olmayan kanıt satırı uyduramaz.
  */
-function kartYap(secim: Secim, scripts: Readonly<Record<string, string>>, updatedAt: string): Card {
+function kartYap(secim: Secim, cevre: Cevre, updatedAt: string): Card {
   return {
     id: secim.claim.id,
     fact: secim.claim.text, // AYNEN
     factLevel: secim.claim.level, // AYNEN — yükseltme yok
     evidence: evidenceLines(secim.claim),
     unknown: secim.unknown ?? upgradeUnknown(secim.claim),
-    action: secim.action ?? upgradeAction(secim.claim, scripts),
+    action: secim.action ?? upgradeAction(secim.claim, cevre),
     why: secim.why,
-    doneWhen: secim.doneWhen ?? upgradeDoneWhen(secim.claim),
+    doneWhen: secim.doneWhen ?? upgradeDoneWhen(secim.claim, cevre),
     rule: secim.rule,
     updatedAt,
   };
@@ -547,6 +578,7 @@ export function buildCard(claims: readonly Claim[], opts: CardOptions = {}): Car
   const now = opts.now ?? new Date();
   const updatedAt = now.toISOString();
   const scripts = opts.scripts ?? {};
+  const cevre: Cevre = { scripts, ...(opts.isGitRepo !== undefined ? { isGitRepo: opts.isGitRepo } : {}) };
 
   // Durum 3a: hiç kayıt yok — sakin boş kart.
   if (claims.length === 0) {
@@ -566,13 +598,13 @@ export function buildCard(claims: readonly Claim[], opts: CardOptions = {}): Car
 
   // Durum 1: doğrulanmamış iş — kural motoru riske göre seçer.
   const ctx: Ctx = {
+    ...cevre,
     all: claims,
     unverified: newestFirst(claims.filter((c) => c.level === 'dogrulanmadi')),
-    scripts,
     now,
   };
   const secim = secimYap(ctx);
-  if (secim !== null) return kartYap(secim, scripts, updatedAt);
+  if (secim !== null) return kartYap(secim, cevre, updatedAt);
 
   // Durum 2: kanıtlı ama insan onayı yok → insan doğrulaması iste.
   // Burada da risk sırası geçerli: kritik dosyaya dokunan kanıtlı iş öne geçer.

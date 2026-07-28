@@ -10,7 +10,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { newOceanState, type Claim, type Verification } from './types.ts';
 import { writeState, readState, passportLogPath } from './state.ts';
-import { upsertPassport } from './sync.ts';
+import { buildPassport } from './passport.ts';
 import { approveClaim, runVerify, type VerifyDeps } from './verify.ts';
 
 const NOW = new Date('2026-07-28T15:00:00.000Z');
@@ -33,11 +33,16 @@ function claims2(): Claim[] {
   ];
 }
 
-async function makeStateDir(): Promise<string> {
+/** Aynı iki claim, ama AYNI oturuma bağlı → tek iş birimi (birim-s1). */
+function claimsBirimli(): Claim[] {
+  return claims2().map((c) => ({ ...c, sessionId: 's1' }));
+}
+
+async function makeStateDir(claims: Claim[] = claims2()): Promise<string> {
   const dir = await mkdtemp(join(tmpdir(), 'ocean-verify-'));
   const st = newOceanState('Verify Proje', NOW);
-  st.claims = claims2();
-  st.passport = upsertPassport([], st.claims);
+  st.claims = claims;
+  st.passport = buildPassport([], st.claims);
   await writeState(dir, st);
   return dir;
 }
@@ -153,6 +158,70 @@ test('tüm maddeler onaylanınca FULL-TİK: bildirim BİR KEZ, tekrarlanmaz', as
   assert.equal(res3.approved, false);
   assert.equal(d3.notifications.length, 0);
   assert.ok(d3.lines.some((l) => l.includes('zaten insan onaylı')));
+});
+
+// ── iş birimi onayı (FULL-TİK'i erişilebilir kılan yol) ─────────────────────
+
+test('iş birimi id\'si ile onay: birimdeki TÜM kayıtlar tek soruda geçer, hepsi ekrana dökülür', async () => {
+  const dir = await makeStateDir(claimsBirimli());
+  const deps = fakeDeps('e');
+  const res = await runVerify(dir, 'birim-s1', deps);
+  assert.equal(res.ok, true);
+  assert.equal(res.approved, true);
+
+  // KÖR ONAY YOK: iki iddia da soru sorulmadan önce gösterildi
+  assert.ok(deps.lines.some((l) => l.includes('1 dosya değişti')));
+  assert.ok(deps.lines.some((l) => l.includes('19 test geçti')));
+  assert.ok(deps.lines.some((l) => l.includes('İş birimi')));
+
+  const st = await readState(dir);
+  assert.ok(st?.claims.every((c) => c.level === 'insan-onayi'));
+  assert.equal(st?.passport.length, 1);
+  assert.equal(st?.passport[0]?.status, 'completed');
+  assert.equal(st?.passport[0]?.verification?.by, 'ekin');
+
+  // append-only log: KAYIT BAŞINA satır (izlenebilirlik kaybolmaz)
+  const satirlar = (await readFile(passportLogPath(dir), 'utf8')).trim().split('\n');
+  assert.equal(satirlar.length, 2);
+  assert.deepEqual(
+    satirlar.map((l) => (JSON.parse(l) as { claimId: string }).claimId).sort(),
+    ['dosya-git-s1', 'test-s1-0'],
+  );
+
+  // tek birim tamamen onaylandı → FULL-TİK
+  assert.equal(res.fullTick, true);
+  assert.equal(res.notified, true);
+});
+
+test('birimin tek kaydını onaylamak birimi "tamam" YAPMAZ (partial, dürüst sayım)', async () => {
+  const dir = await makeStateDir(claimsBirimli());
+  const res = await runVerify(dir, 'dosya-git-s1', fakeDeps('e'));
+  assert.equal(res.approved, true);
+  assert.equal(res.fullTick, false);
+
+  const st = await readState(dir);
+  assert.equal(st?.passport.length, 1);
+  assert.equal(st?.passport[0]?.status, 'partial');
+  assert.ok(st?.passport[0]?.reason?.includes('1/2'));
+  const html = await readFile(join(dir, '.ocean', 'pano.html'), 'utf8');
+  assert.ok(html.includes('0/1 doğrulandı')); // yarısı onaylı birim "doğrulandı" sayılmaz
+});
+
+test('birim onayında red (H): hiçbir kayıt yükselmez', async () => {
+  const dir = await makeStateDir(claimsBirimli());
+  const res = await runVerify(dir, 'birim-s1', fakeDeps('h'));
+  assert.equal(res.approved, false);
+  const st = await readState(dir);
+  assert.ok(st?.claims.every((c) => c.level !== 'insan-onayi'));
+  await assert.rejects(() => readFile(passportLogPath(dir), 'utf8'));
+});
+
+test('bilinmeyen id hatası iş birimlerini de gösterir (yol tarif eder)', async () => {
+  const dir = await makeStateDir(claimsBirimli());
+  const res = await runVerify(dir, 'olmayan-id', fakeDeps('e'));
+  assert.equal(res.ok, false);
+  assert.ok(res.error?.includes('birim-s1'));
+  assert.ok(res.error?.includes('2 kayıt'));
 });
 
 test('approveClaim: kanıt ekler, seviye yükseltir, orijinali MUTASYONA UĞRATMAZ', () => {

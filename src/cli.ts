@@ -32,6 +32,8 @@ Komutlar:
   init            Bu projeyi Ocean'a bağla (.ocean/ kurulumu + CLAUDE.md entegrasyonu)
   sync            Claude Code transcript + git gerçeklerinden log ve kartı güncelle
   verify <id>     Bir işi doğrula (insan onayı kaydet — kanıt seviyesi yükselir)
+                  <id> tek kayıt ya da pasaport iş birimi (birim-…) olabilir;
+                  birim verirsen o oturumun tüm kayıtları tek onayla geçer
   open            Pano yolunu göster (tarayıcıyı otomatik AÇMAZ)
 
 Seçenekler:

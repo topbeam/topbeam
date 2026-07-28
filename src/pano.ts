@@ -9,7 +9,9 @@
  *   başlat" kutusu: kopyalanabilir `ocean verify <id>` komutu).
  * - Yüzde-progress-bar YOK; pasaport "3/7 doğrulandı" dürüst sayımla verilir.
  * - Kanıt satırı yoksa "kayıt yok" — sakin gri, kırmızı alarm değil.
- * - Motivasyon sözü yok; beyan satırları "beyan" rozetiyle işaretli.
+ * - Motivasyon sözü yok; beyan satırları "beyan" rozetiyle işaretli VE
+ *   varsayılan olarak KATLI: kanıt üstte ve açık, beyan altta ve kapalı
+ *   (beyan kanıt değildir → görünürlüğü de kanıtla eşit olamaz).
  * - Tüm dinamik metin HTML-escape edilir; tek JS: kopyala butonu (opsiyonel,
  *   JS'siz de komut metni seçilip kopyalanabilir).
  */
@@ -113,25 +115,57 @@ function renderCard(card: Card): string {
 
 const LOG_SHOWN_MAX = 100;
 
-function renderLog(log: readonly LogEntry[]): string {
-  const total = log.length;
-  const shown = [...log].reverse().slice(0, LOG_SHOWN_MAX); // en yeni üstte
-  const items = shown
+function logItems(entries: readonly LogEntry[]): string {
+  return entries
     .map((e) => {
       const p = SOURCE_PILL[e.source];
       return `<li><span class="ts mono">${esc(fmtTs(e.ts))}</span><span class="pill ${p.cls}">${p.label}</span><span class="txt">${esc(e.text)}</span></li>`;
     })
     .join('\n');
-  const capNote =
-    total > LOG_SHOWN_MAX
-      ? `<p class="capnote">Son ${LOG_SHOWN_MAX} satır gösteriliyor (toplam ${total}).</p>`
+}
+
+/**
+ * Log — KANIT ÜSTTE VE AÇIK, BEYAN ALTTA VE KATLI.
+ *
+ * Gerekçe (dogfood): beyan satırları (Claude'un niyet cümleleri) sayıca kanıtı
+ * eziyordu; kart mükemmel olsa da altı kirliyse pano gürültü gibi okunuyor.
+ * Beyan kanıt değildir → varsayılan görünürlüğü de kanıtla eşit olamaz.
+ * Silmiyoruz (dürüstlük: kayıt duruyor), katlıyoruz — isteyen açar.
+ */
+function renderLog(log: readonly LogEntry[]): string {
+  const total = log.length;
+  const ters = [...log].reverse(); // en yeni üstte
+  const kanit = ters.filter((e) => e.source !== 'claude-beyan');
+  const beyan = ters.filter((e) => e.source === 'claude-beyan');
+
+  const kanitShown = kanit.slice(0, LOG_SHOWN_MAX);
+  const beyanShown = beyan.slice(0, LOG_SHOWN_MAX);
+
+  const capNote = (gosterilen: number, tumu: number, ad: string): string =>
+    tumu > gosterilen ? `<p class="capnote">Son ${gosterilen} ${ad} satırı gösteriliyor (toplam ${tumu}).</p>` : '';
+
+  const empty =
+    total === 0 ? '<p class="empty">Henüz log kaydı yok — <span class="mono">ocean sync</span> sonrası dolar.</p>' : '';
+  const kanitBos =
+    total > 0 && kanit.length === 0
+      ? '<p class="empty">Kanıt taşıyan satır yok — aşağıdaki beyanlar Claude\'un kendi ifadeleridir, kanıt değildir.</p>'
       : '';
-  const empty = total === 0 ? '<p class="empty">Henüz log kaydı yok — <span class="mono">ocean sync</span> sonrası dolar.</p>' : '';
+  const beyanBlok =
+    beyan.length > 0
+      ? `<details class="beyanlar">
+      <summary><span class="pill ev-none">beyan</span> Claude'un beyanları (${beyan.length}) — kanıt değil, katlı</summary>
+      <ul class="timeline">${logItems(beyanShown)}</ul>
+      ${capNote(beyanShown.length, beyan.length, 'beyan')}
+    </details>`
+      : '';
+
   return `<section class="panel" aria-label="Log history">
-    <div class="sechead"><span class="eyebrow">Log history</span><span class="count mono">${total} satır</span></div>
+    <div class="sechead"><span class="eyebrow">Log history</span><span class="count mono">${kanit.length} kanıt · ${beyan.length} beyan</span></div>
     ${empty}
-    <ul class="timeline">${items}</ul>
-    ${capNote}
+    ${kanitBos}
+    <ul class="timeline">${logItems(kanitShown)}</ul>
+    ${capNote(kanitShown.length, kanit.length, 'kanıt')}
+    ${beyanBlok}
   </section>`;
 }
 
@@ -145,7 +179,12 @@ function renderPassport(state: OceanState): string {
   const rows = items
     .map((i) => {
       const done = i.status === 'completed' && i.level === 'insan-onayi';
-      return `<li class="pitem"><span class="tick ${done ? 'on' : ''}">${done ? '✓' : '○'}</span><span class="ptitle">${esc(i.title)}</span>${levelPill(i.level)}</li>`;
+      // İş birimi = insanın tek seferde onaylayabileceği öbek → komutu görünür
+      // olsun ki FULL-TİK erişilebilir kalsın (kayıt sayısı da dürüstçe yazar).
+      const adet = i.claimIds.length > 1 ? `<span class="pcount mono">${i.claimIds.length} kayıt</span>` : '';
+      const cmd = done ? '' : `<code class="pid mono">ocean verify ${esc(i.id)}</code>`;
+      const reason = i.reason !== undefined ? `<span class="preason">${esc(i.reason)}</span>` : '';
+      return `<li class="pitem"><span class="tick ${done ? 'on' : ''}">${done ? '✓' : '○'}</span><span class="ptitle">${esc(i.title)}${reason}</span>${adet}${levelPill(i.level)}${cmd}</li>`;
     })
     .join('\n');
   const empty =
@@ -230,12 +269,21 @@ header.top .goal .k{font-family:var(--mono);font-size:9.5px;letter-spacing:.14em
 .timeline .ts{font-size:11px;color:var(--muted);white-space:nowrap}
 .timeline .txt{color:var(--dim);overflow-wrap:anywhere}
 .capnote,.empty{font-size:12px;color:var(--muted);padding:8px 0 0}
+.beyanlar{margin-top:14px;border-top:1px solid var(--line);padding-top:10px}
+.beyanlar>summary{cursor:pointer;font-size:12px;color:var(--muted);display:flex;align-items:center;gap:8px;list-style:none;padding:4px 0}
+.beyanlar>summary::-webkit-details-marker{display:none}
+.beyanlar>summary::after{content:'göster';font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--plan);margin-left:auto}
+.beyanlar[open]>summary::after{content:'gizle'}
+.beyanlar>summary:hover{color:var(--dim)}
 .plist{list-style:none}
-.pitem{display:flex;align-items:baseline;gap:10px;border-bottom:1px solid var(--line);padding:10px 0;font-size:13px}
+.pitem{display:flex;align-items:baseline;gap:10px;border-bottom:1px solid var(--line);padding:10px 0;font-size:13px;flex-wrap:wrap}
 .pitem:last-child{border-bottom:none}
 .tick{font-family:var(--mono);color:var(--plan);width:18px;flex:none;text-align:center}
 .tick.on{color:var(--ok)}
-.ptitle{flex:1;color:var(--dim);overflow-wrap:anywhere}
+.ptitle{flex:1;min-width:min(100%,22ch);color:var(--dim);overflow-wrap:anywhere}
+.preason{display:block;font-size:11.5px;color:var(--muted);margin-top:2px}
+.pcount{font-size:10.5px;color:var(--muted);white-space:nowrap}
+.pid{font-size:11px;color:var(--teal2);background:var(--s3);border:1px solid var(--line2);border-radius:7px;padding:3px 8px;white-space:nowrap;user-select:all}
 .fullband{margin:0 0 14px;padding:12px 16px;border-radius:11px;background:var(--teald);border:1px solid rgba(45,212,191,.3);color:var(--teal2);font-size:13.5px;font-weight:600;letter-spacing:-.01em}
 footer{font-family:var(--mono);font-size:10.5px;color:var(--muted);text-align:center;padding-top:8px;line-height:1.8}
 @media(max-width:600px){.panel{padding:18px 16px}.krow .v{text-align:left}.krow{flex-direction:column;gap:2px}}

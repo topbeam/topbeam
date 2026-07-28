@@ -135,6 +135,30 @@ test('scripts.test yok + scripts.build var → npm run build; ikisi de yoksa git
   const c = claim('dosya-transcript-s1');
   assert.equal(buildCard([c], { now: NOW, scripts: { build: 'node scripts/build.mjs' } }).action.command, 'npm run build');
   assert.equal(buildCard([c], { now: NOW }).action.command, 'git status');
+  // git BİLİNİYORSA da davranış aynı — varsayım değil, bilgi değiştirir.
+  assert.equal(buildCard([c], { now: NOW, isGitRepo: true }).action.command, 'git status');
+});
+
+test('GİT YOK: "git status" ÖNERİLMEZ — hareket insan onayına döner (sahte affordance yok)', () => {
+  const c = claim('dosya-transcript-s1');
+  const card = buildCard([c], { now: NOW, isGitRepo: false });
+  assert.notEqual(card.action.command, 'git status');
+  assert.equal(card.action.command, verifyCommand('dosya-transcript-s1'));
+  assert.ok(card.action.verb.includes('git deposu değil'));
+  // Bitiş koşulu da ERİŞİLEBİLİR olmalı: kapalı yol (dosya-kanıtı) vaat edilmez.
+  assert.equal(card.doneWhen.includes('git kaydında göründüğünde'), false);
+  assert.ok(card.doneWhen.includes('insan-onayı'));
+  // Kanıt seviyesi GEVŞEMEZ: git yok diye iddia yükselmez.
+  assert.equal(card.factLevel, 'dogrulanmadi');
+});
+
+test('GİT YOK ama test scripti VAR → hâlâ en güçlü kanıt yolu önerilir (testler)', () => {
+  const card = buildCard([claim('dosya-transcript-s1')], {
+    now: NOW,
+    isGitRepo: false,
+    scripts: { test: 'node --test' },
+  });
+  assert.equal(card.action.command, 'npm test');
 });
 
 test('doğrulanmamış test claim\'i → komut evidence ref\'inden gelir (scripts yoksa)', () => {
