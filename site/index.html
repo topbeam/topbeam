@@ -101,6 +101,24 @@ em{font-style:italic}
 .copy:hover,.copy:focus-visible{color:var(--ink);border-color:rgba(237,241,232,.32)}
 .copy[data-done="1"]{color:var(--acc);border-color:rgba(77,216,148,.4)}
 
+/* çalışmayan komut: kopyalanamaz, açıkça işaretli */
+.cmd.soon{border-style:dashed}
+.cmd.soon code{color:var(--ink2)}
+.cmd.soon code::before{opacity:.5}
+.soonTag{
+  flex:0 0 auto;
+  font-size:.66rem;font-weight:600;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--apricot);background:rgba(240,160,129,.08);
+  border:1px dashed rgba(240,160,129,.45);border-radius:8px;
+  padding:.4rem .6rem;white-space:nowrap;
+}
+
+/* bağlantı */
+a.lnk{color:var(--acc);text-decoration:none;border-bottom:1px solid rgba(77,216,148,.35)}
+a.lnk:hover,a.lnk:focus-visible{border-bottom-color:var(--acc)}
+.reach{max-width:34rem;margin-top:.9rem}
+.reach .mail{font-family:var(--mono);font-size:.92em;overflow-wrap:anywhere}
+
 /* ── 1. HERO ───────────────────────────────────────────────────────────── */
 .hero{
   position:relative;
@@ -320,21 +338,30 @@ footer a:hover{border-bottom-color:var(--acc)}
 
     <div class="install">
       <span class="eyebrow">Kurulum</span>
-      <div class="cmd">
+      <!-- YAYIN GÜNÜ: npm publish yapıldıktan SONRA — (1) .cmd'den "soon" sınıfını kaldır,
+           (2) <span class="soonTag"> yerine <button class="copy" type="button"
+               data-copy="npx ocean-code init">Kopyala</button> koy,
+           (3) aşağıdaki .prelaunch bloğunu sil. Öncesinde hiçbirini yapma. -->
+      <div class="cmd soon">
         <code>npx ocean-code init</code>
-        <button class="copy" type="button" data-copy="npx ocean-code init">Kopyala</button>
+        <span class="soonTag">yayından sonra</span>
       </div>
 
-      <!-- YAYIN GÜNÜ: npm publish yapıldıktan SONRA bu .prelaunch bloğunu sil. Öncesinde silme. -->
       <p class="tiny prelaunch">
-        <b>Yayın durumu:</b> Ocean henüz npm'e yayınlanmadı — yukarıdaki komut yayından
-        sonra çalışır, bugün çalıştığını söylemek yalan olur.
+        <b>Yayın durumu:</b> Ocean henüz npm'e yayınlanmadı — yukarıdaki komut bugün
+        çalışmıyor. Bu yüzden kopyala düğmesi de yok: çalışmayan komutu kopyalatmak
+        Ocean'ın kendi kuralına aykırı olurdu.
         Paket adı <code>ocean-code</code>; npm'deki <code>ocean</code> ve
         <code>ocean-cli</code> başka kişilerin ilgisiz paketleridir, onları kurma.
       </p>
 
+      <p class="tiny reach">
+        Bugün denemenin tek yolu var: <a class="lnk" href="mailto:info@reveriajans.com?subject=Ocean%20erken%20eri%C5%9Fim">erken erişim için yaz</a>
+        — <span class="mail">info@reveriajans.com</span>. Otomatik liste yok, cevabı insan yazar.
+      </p>
+
       <div class="facts">
-        <span>Node ≥ 20</span><span>lokal-first</span><span>LLM yok</span><span>ağ çağrısı yok</span><span>açık çekirdek · MIT</span>
+        <span>Node ≥ 20</span><span>lokal-first</span><span>LLM yok</span><span>ağ çağrısı yok</span><span>MIT lisanslı çekirdek</span>
       </div>
     </div>
   </div>
@@ -471,6 +498,8 @@ footer a:hover{border-bottom-color:var(--acc)}
     </p>
 
     <p class="tiny" style="margin-top:.7rem">
+      Yukarıdaki dört başlıktaki <code>npx</code> biçimi yayın sonrasını gösterir —
+      paket npm'e çıkana kadar bu komutlar çalışmaz (yukarıdaki yayın durumu notu).
       Paket adı <code>ocean-code</code>, komut adı <code>ocean</code>: global kurarsan
       (<code>npm i -g ocean-code</code>) komutlar kısaca <code>ocean sync</code> olur —
       panonun kendi çıktısında gördüğün ad budur.
@@ -534,6 +563,13 @@ footer a:hover{border-bottom-color:var(--acc)}
       kesişimi ve kart okunabilir kod. Ücretli katman kapalı kalır: <em>open core</em>.
     </p>
 
+    <p class="tiny prelaunch" style="max-width:44rem">
+      <b>Bunun bugünkü sınırı:</b> lisans MIT (<code>LICENSE</code> dosyası pakete dâhil),
+      ama depo herkese açık değil — yani bu sayfada tıklayıp kaynağı okuyabileceğin bir
+      link <em>yok</em>. Olmadığını saklamıyorum, bir tarih de vermiyorum: depo açılırsa
+      bu satır değişir, açılana kadar burada böyle durur.
+    </p>
+
     <div class="plans">
       <div class="plan">
         <h3>Free</h3>
@@ -584,11 +620,13 @@ footer a:hover{border-bottom-color:var(--acc)}
       <span>Ocean by REVERI</span>
       <span>Lokal-first</span>
       <span>Kanıta dayalı</span>
-      <span>Açık çekirdek · MIT</span>
+      <span>MIT lisanslı çekirdek</span>
       <span>Claude Code için üretildi</span>
     </div>
     <p class="fbot">
-      <a href="https://reveriajans.com" rel="noopener">reveriajans.com</a>
+      <a href="mailto:info@reveriajans.com?subject=Ocean%20erken%20eri%C5%9Fim">info@reveriajans.com</a>
+      &nbsp;·&nbsp;
+      <a href="https://www.reveriajans.com" rel="noopener">reveriajans.com</a>
     </p>
   </div>
 </footer>
