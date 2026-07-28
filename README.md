@@ -71,7 +71,9 @@ kanıt-kurallı iddialar (claim), LOG HISTORY ve **sıradaki-tek-hareket kartın
 Bir iddiayı gösterir, kanıtlarını listeler, onayını sorar (e/H). Onaylarsan:
 - iddia **insan-onayı** seviyesine yükselir (tek meşru yükseltme yolu budur),
 - `.ocean/passport.jsonl`'e eklenir (append-only, değişmez onay logu),
-- pasaport **FULL-TİK** olursa bir kez macOS bildirimi: "Ocean: ürün geliştirildi 🎉".
+- pasaport **FULL-TİK** olursa bir kez macOS bildirimi: "Ocean: ürün geliştirildi 🎉"
+  (planlanan fiyatlamada bu bildirim Pro tarafında — bugünkü sürümde herkeste açık,
+  kodda lisans kontrolü yok; bkz. [Fiyat](#fiyat-planlanan--açık-çekirdek)).
 
 ### `ocean open`
 Pano yolunu yazdırır. Tarayıcıyı **otomatik açmaz** — sen açarsın.
@@ -124,6 +126,33 @@ Sınırlar açıkça çizilidir:
 - Yüzde-ilerleme, motivasyon sözü, kırmızı alarm yok. Sakin, dürüst Türkçe.
 - Diske giden her metin secret-maskeleme filtresinden geçer (API anahtarı,
   token, parola desenleri maskelenir).
+
+## Fiyat (planlanan) · açık çekirdek
+
+> **Bugünkü gerçek:** ödeme sayfası yok ve bu sürüm hiçbir özelliği kilitlemiyor —
+> kodda lisans kontrolü yok. Aşağıdaki sınır, çizmeyi *planladığım* sınır.
+> Kurmadan önce bilinmesi için burada; kurulduktan sonra öğrenilmesi için değil.
+
+**Free — $0, tek proje, süre sınırı yok**
+- Tek proje
+- Tam kart — sıradaki tek hareket
+- Log geçmişi
+- Manuel doğrulama (`ocean verify`)
+- Temel pasaport kaydı (o projeye ait)
+
+**Ocean Pro — $5/ay · $50/yıl (founding fiyatı, sonra $9)**
+- Sınırsız proje
+- Projeler arası taşınabilir pasaport geçmişi
+- FULL-TİK bildirimi + gelişmiş doğrulama akışları
+- Founding fiyatı satın alındığı sürece korunur
+
+**Açık çekirdek (open core).** Okuyucu çekirdek — transcript ayrıştırma, git kesişimi,
+kanıt kuralları, kart — **MIT** lisanslı (`LICENSE`, `package.json` → `"license": "MIT"`;
+paket içinde de gelir). Ücretli katman kapalı kalır.
+
+Bu sınır üç yerde **birebir** aynıdır ve burası tek gerçek kaynağıdır:
+bu README · `site/index.html` fiyat bölümü · `TEK-PAKET/OCEAN-LANSMAN-KITI.md`
+(Reddit / HN / X metinleri). Biri değişirse üçü birlikte değişir.
 
 ## Ortam değişkenleri
 
