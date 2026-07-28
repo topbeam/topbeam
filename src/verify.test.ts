@@ -1,0 +1,166 @@
+/**
+ * verify.ts testleri — sahte ask/notify enjeksiyonu; osascript ASLA çağrılmaz.
+ * Dürüstlük invaryantları: onay yalnız insan cevabıyla; red → seviye değişmez;
+ * full-tik bildirimi BİR KEZ; passport.jsonl append-only.
+ */
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdtemp, readFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { newOceanState, type Claim, type Verification } from './types.ts';
+import { writeState, readState, passportLogPath } from './state.ts';
+import { upsertPassport } from './sync.ts';
+import { approveClaim, runVerify, type VerifyDeps } from './verify.ts';
+
+const NOW = new Date('2026-07-28T15:00:00.000Z');
+
+function claims2(): Claim[] {
+  return [
+    {
+      id: 'dosya-git-s1', text: '1 dosya değişti: src/a.ts', level: 'dosya-kaniti', kind: 'dosya',
+      evidence: [
+        { kind: 'transcript-tool-use', summary: 'Transcript: hatasız edit.' },
+        { kind: 'git-diff', summary: 'git: çalışma ağacında kayıt var.' },
+      ],
+      createdAt: '2026-07-28T10:00:00Z',
+    },
+    {
+      id: 'test-s1-0', text: '19 test geçti (npm test).', level: 'test-kaniti', kind: 'test',
+      evidence: [{ kind: 'test-output', summary: '# pass 19' }],
+      createdAt: '2026-07-28T11:00:00Z',
+    },
+  ];
+}
+
+async function makeStateDir(): Promise<string> {
+  const dir = await mkdtemp(join(tmpdir(), 'ocean-verify-'));
+  const st = newOceanState('Verify Proje', NOW);
+  st.claims = claims2();
+  st.passport = upsertPassport([], st.claims);
+  await writeState(dir, st);
+  return dir;
+}
+
+interface FakeDeps extends VerifyDeps {
+  lines: string[];
+  notifications: string[];
+}
+
+function fakeDeps(answer: string): FakeDeps {
+  const lines: string[] = [];
+  const notifications: string[] = [];
+  return {
+    lines,
+    notifications,
+    ask: () => Promise.resolve(answer),
+    out: (l) => lines.push(l),
+    notify: (title, msg) => {
+      notifications.push(`${title}: ${msg}`);
+      return Promise.resolve(true);
+    },
+    by: 'ekin',
+    now: NOW,
+  };
+}
+
+test('bilinmeyen id: dürüst hata + kayıtlı id listesi', async () => {
+  const dir = await makeStateDir();
+  const deps = fakeDeps('e');
+  const res = await runVerify(dir, 'boyle-yok', deps);
+  assert.equal(res.ok, false);
+  assert.ok(res.error?.includes('boyle-yok'));
+  assert.ok(res.error?.includes('dosya-git-s1'));
+});
+
+test('init edilmemiş dizin: dürüst hata', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'ocean-verify-bos-'));
+  const res = await runVerify(dir, 'x', fakeDeps('e'));
+  assert.equal(res.ok, false);
+  assert.ok(res.error?.includes('ocean init'));
+});
+
+test('red (H): seviye DEĞİŞMEZ, passport.jsonl yazılmaz', async () => {
+  const dir = await makeStateDir();
+  const res = await runVerify(dir, 'dosya-git-s1', fakeDeps('h'));
+  assert.equal(res.ok, true);
+  assert.equal(res.approved, false);
+
+  const st = await readState(dir);
+  assert.equal(st?.claims.find((c) => c.id === 'dosya-git-s1')?.level, 'dosya-kaniti');
+  await assert.rejects(() => readFile(passportLogPath(dir), 'utf8')); // dosya hiç oluşmadı
+});
+
+test('onay (e): insan-onayı + pasaport completed + append-only log + kanıt gösterildi', async () => {
+  const dir = await makeStateDir();
+  const deps = fakeDeps('e');
+  const res = await runVerify(dir, 'dosya-git-s1', deps);
+  assert.equal(res.ok, true);
+  assert.equal(res.approved, true);
+  assert.equal(res.fullTick, false); // 1/2 — full değil
+
+  // ekrana iddia + kanıtlar döküldü (karar insanın, kör onay değil)
+  assert.ok(deps.lines.some((l) => l.includes('1 dosya değişti')));
+  assert.ok(deps.lines.some((l) => l.includes('git-diff')));
+
+  const st = await readState(dir);
+  const c = st?.claims.find((x) => x.id === 'dosya-git-s1');
+  assert.equal(c?.level, 'insan-onayi');
+  assert.ok(c?.evidence.some((e) => e.kind === 'human'));
+
+  const item = st?.passport.find((p) => p.id === 'dosya-git-s1');
+  assert.equal(item?.status, 'completed');
+  assert.equal(item?.verification?.by, 'ekin');
+
+  const logRaw = await readFile(passportLogPath(dir), 'utf8');
+  const rec = JSON.parse(logRaw.trim()) as { claimId: string; levelBefore: string; levelAfter: string };
+  assert.equal(rec.claimId, 'dosya-git-s1');
+  assert.equal(rec.levelBefore, 'dosya-kaniti');
+  assert.equal(rec.levelAfter, 'insan-onayi');
+
+  // full-tik olmadan bildirim YOK
+  assert.equal(deps.notifications.length, 0);
+
+  // pano tazelendi
+  const html = await readFile(join(dir, '.ocean', 'pano.html'), 'utf8');
+  assert.ok(html.includes('1/2 doğrulandı'));
+});
+
+test('tüm maddeler onaylanınca FULL-TİK: bildirim BİR KEZ, tekrarlanmaz', async () => {
+  const dir = await makeStateDir();
+  const d1 = fakeDeps('e');
+  await runVerify(dir, 'dosya-git-s1', d1);
+  const d2 = fakeDeps('e');
+  const res2 = await runVerify(dir, 'test-s1-0', d2);
+
+  assert.equal(res2.fullTick, true);
+  assert.equal(res2.notified, true);
+  assert.equal(d2.notifications.length, 1);
+  assert.ok(d2.notifications[0]?.includes('Ürün geliştirildi'));
+
+  const st = await readState(dir);
+  assert.ok(st?.fullTickNotifiedAt);
+  assert.ok(st?.log.some((e) => e.source === 'ocean' && e.text.includes('FULL-TİK')));
+
+  // pano kutlama bandı
+  const html = await readFile(join(dir, '.ocean', 'pano.html'), 'utf8');
+  assert.ok(html.includes('Ürün geliştirildi 🎉'));
+  assert.ok(html.includes('2/2 doğrulandı'));
+
+  // zaten onaylı claim'i tekrar verify → yeniden onay istenmez, bildirim yok
+  const d3 = fakeDeps('e');
+  const res3 = await runVerify(dir, 'test-s1-0', d3);
+  assert.equal(res3.approved, false);
+  assert.equal(d3.notifications.length, 0);
+  assert.ok(d3.lines.some((l) => l.includes('zaten insan onaylı')));
+});
+
+test('approveClaim: kanıt ekler, seviye yükseltir, orijinali MUTASYONA UĞRATMAZ', () => {
+  const orig = claims2()[0] as Claim;
+  const verification: Verification = { by: 'ekin', at: NOW.toISOString(), decision: 'approved' };
+  const approved = approveClaim(orig, verification);
+  assert.equal(approved.level, 'insan-onayi');
+  assert.equal(approved.evidence.length, orig.evidence.length + 1);
+  assert.equal(orig.level, 'dosya-kaniti'); // orijinal değişmedi
+  assert.ok(approved.evidence.at(-1)?.summary.includes('ekin'));
+});

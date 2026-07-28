@@ -178,7 +178,10 @@ export async function collectGit(cwd: string, opts: GitCollectOptions = {}): Pro
     facts.notes.push('HEAD commit okunamadı — muhtemelen henüz commit yok.');
   }
 
-  const st = await runGit(bin, ['status', '--porcelain'], cwd, timeoutMs);
+  // --untracked-files=all: yeni dizindeki yeni dosyalar `?? dizin/` diye
+  // TEK satıra indirgenmesin — truth katmanının dosya-düzeyi kesişimi
+  // (transcript ∩ git) ancak dosya adları tek tek görününce çalışır.
+  const st = await runGit(bin, ['status', '--porcelain', '--untracked-files=all'], cwd, timeoutMs);
   if (st.ok) {
     const lines = st.stdout.split('\n').filter((l) => l.length > 3);
     for (const l of lines.slice(0, MAX_DIRTY_FILES)) {
