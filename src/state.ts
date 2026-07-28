@@ -1,5 +1,6 @@
 /**
  * Kalıcılık katmanı — .ocean/ dizini altındaki tüm okuma/yazma BURADAN geçer.
+ * (Dizin adı Topbeam'de de `.ocean` kalır — veri göçü riski yok.)
  *
  * Kurallar:
  * - Diske giden her metin redactDeep'ten geçer (secret maskeleme, bypass yok).

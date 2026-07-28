@@ -18,7 +18,7 @@ function gitDo(cwd: string, ...args: string[]): void {
 }
 
 test('collectGit: git olmayan dizin → isGit=false, zarif boş', async () => {
-  const dir = await mkdtemp(join(tmpdir(), 'ocean-git-yok-'));
+  const dir = await mkdtemp(join(tmpdir(), 'topbeam-git-yok-'));
   const res = await collectGit(dir);
   assert.equal(res.gitAvailable, true);
   assert.equal(res.isGit, false);
@@ -30,7 +30,7 @@ test('collectGit: git olmayan dizin → isGit=false, zarif boş', async () => {
 });
 
 test('collectGit: commit + kirli dosyalar + numstat diff', async () => {
-  const dir = await mkdtemp(join(tmpdir(), 'ocean-git-repo-'));
+  const dir = await mkdtemp(join(tmpdir(), 'topbeam-git-repo-'));
   gitDo(dir, 'init', '-q', '-b', 'main');
   await writeFile(join(dir, 'a.txt'), 'bir\n');
   gitDo(dir, 'add', 'a.txt');
@@ -66,7 +66,7 @@ test('collectGit: commit + kirli dosyalar + numstat diff', async () => {
 });
 
 test('collectGit: commit\'siz taze repo → dürüst notlar, diff null', async () => {
-  const dir = await mkdtemp(join(tmpdir(), 'ocean-git-bos-'));
+  const dir = await mkdtemp(join(tmpdir(), 'topbeam-git-bos-'));
   gitDo(dir, 'init', '-q', '-b', 'main');
   await writeFile(join(dir, 'c.txt'), 'içerik\n');
 
@@ -82,15 +82,15 @@ test('collectGit: commit\'siz taze repo → dürüst notlar, diff null', async (
 });
 
 test('collectGit: git binary\'si yoksa gitAvailable=false, fırlatmaz', async () => {
-  const dir = await mkdtemp(join(tmpdir(), 'ocean-git-binsiz-'));
-  const res = await collectGit(dir, { gitBin: 'ocean-olmayan-git-binari-xyz' });
+  const dir = await mkdtemp(join(tmpdir(), 'topbeam-git-binsiz-'));
+  const res = await collectGit(dir, { gitBin: 'topbeam-olmayan-git-binari-xyz' });
   assert.equal(res.gitAvailable, false);
   assert.equal(res.isGit, false);
   assert.ok(res.notes.some((n) => n.includes('git bulunamadı')));
 });
 
 test('collectGit: binary dosya numstat\'ta null added/removed', async () => {
-  const dir = await mkdtemp(join(tmpdir(), 'ocean-git-bin-'));
+  const dir = await mkdtemp(join(tmpdir(), 'topbeam-git-bin-'));
   gitDo(dir, 'init', '-q', '-b', 'main');
   await writeFile(join(dir, 'veri.bin'), Buffer.from([0, 1, 2, 255, 0, 7]));
   gitDo(dir, 'add', 'veri.bin');

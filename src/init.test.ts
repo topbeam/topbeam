@@ -8,7 +8,7 @@ import { runInit, CLAUDE_MD_MARKER } from './init.ts';
 import { readState } from './state.ts';
 
 async function tmpProj(): Promise<string> {
-  return mkdtemp(join(tmpdir(), 'ocean-init-'));
+  return mkdtemp(join(tmpdir(), 'topbeam-init-'));
 }
 
 test('sıfırdan init: state + goal + notes + CLAUDE.md bölümü kurulur', async () => {
@@ -50,7 +50,7 @@ test('idempotent: ikinci init hiçbir şeyi ezmez, bölümü çiftlemez', async 
 
   const claudeMd = await readFile(join(dir, 'CLAUDE.md'), 'utf8');
   const occurrences = claudeMd.split(CLAUDE_MD_MARKER).length - 1;
-  assert.equal(occurrences, 1, '## Ocean bölümü tek olmalı');
+  assert.equal(occurrences, 1, '## Topbeam bölümü tek olmalı');
 });
 
 test('mevcut CLAUDE.md korunur, bölüm SONUNA eklenir', async () => {

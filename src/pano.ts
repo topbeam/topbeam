@@ -1,12 +1,13 @@
 /**
  * Pano render — .ocean/pano.html TEK statik dosya (saf fonksiyon, fs yok).
+ * (Dosya/dizin adları `.ocean/…` Topbeam'de de sabit — veri göçü riski yok.)
  *
- * Görsel dil: Keşif raporundaki Ocean token seti birebir (koyu zemin merdiveni,
+ * Görsel dil: Keşif raporundaki Topbeam token seti birebir (koyu zemin merdiveni,
  * teal aksan, mono-uppercase etiket imzası, sistem fontlar — gömülü font YOK).
  *
  * DÜRÜSTLÜK (yapısal):
  * - EN BASKIN öğe = sıradaki-tek-hareket kartı (GPT spec 6 alan + "Doğrulamayı
- *   başlat" kutusu: kopyalanabilir `ocean verify <id>` komutu).
+ *   başlat" kutusu: kopyalanabilir `topbeam verify <id>` komutu).
  * - Yüzde-progress-bar YOK; pasaport "3/7 doğrulandı" dürüst sayımla verilir.
  * - Kanıt satırı yoksa "kayıt yok" — sakin gri, kırmızı alarm değil.
  * - Motivasyon sözü yok; beyan satırları "beyan" rozetiyle işaretli VE
@@ -74,7 +75,8 @@ const SOURCE_PILL: Record<LogSource, { cls: string; label: string }> = {
   test: { cls: 'ev-test', label: 'test' },
   'claude-beyan': { cls: 'ev-none', label: 'beyan' },
   insan: { cls: 'ev-human', label: 'insan' },
-  ocean: { cls: 'ev-ocean', label: 'ocean' },
+  // enum DEĞERİ 'ocean' (şema uyumu) — kullanıcıya görünen etiket: topbeam.
+  ocean: { cls: 'ev-ocean', label: 'topbeam' },
 };
 
 /** Defterle desteklenmeyen "insan" iddiasının yerine geçen dürüst rozet. */
@@ -166,7 +168,7 @@ function renderCard(card: Card, ledger: VerificationLedger, claims: readonly Cla
     ? `<div class="verifybox">
         <span class="eyebrow">${esc(CARD_PRIMARY_BUTTON_TR)}</span>
         <p class="hint">Pano statik — komutu terminalde çalıştır:</p>
-        ${cmdBlock(`ocean verify ${card.id}`)}
+        ${cmdBlock(`topbeam verify ${card.id}`)}
       </div>`
     : '';
 
@@ -265,7 +267,7 @@ function renderLog(
   const hamBeyan = scope !== undefined ? scope.log.hamBeyan : null;
 
   const empty =
-    total === 0 ? '<p class="empty">Henüz log kaydı yok — <span class="mono">ocean sync</span> sonrası dolar.</p>' : '';
+    total === 0 ? '<p class="empty">Henüz log kaydı yok — <span class="mono">topbeam sync</span> sonrası dolar.</p>' : '';
   const kanitBos =
     total > 0 && kanit.length === 0
       ? '<p class="empty">Kanıt taşıyan satır yok — aşağıdaki beyanlar Claude\'un kendi ifadeleridir, kanıt değildir.</p>'
@@ -307,7 +309,7 @@ function renderLog(
 /**
  * "Bu panonun kapsamı — ve bilmedikleri" — kartın HEMEN ALTINDA.
  *
- * NEDEN: Ocean gürültüyü keser (proje dışı düzenleme, ilişkilendirilemeyen
+ * NEDEN: Topbeam gürültüyü keser (proje dışı düzenleme, ilişkilendirilemeyen
  * beyan, sayı üretmeyen kontrol komutu, satır sınırı). Kesmek doğru; ama İZ
  * BIRAKMADAN kesmek gizlemektir — kullanıcı panonun her şeyi gördüğünü sanır.
  * Bu blok farkı kapatır: neyin, kaç tane elendiği ölçülmüş sayılarla yazar.
@@ -319,7 +321,7 @@ function renderScope(scope: ScopeNotes | undefined): string {
     return `<section class="panel scope" aria-label="Panonun kapsamı">
     ${bas}
     <p class="empty">Kapsam kaydı yok — bu pano kapsam ölçümü eklenmeden önce üretilmiş.
-    <span class="mono">ocean sync</span> koşunca neyin elendiği buraya yazılır.</p>
+    <span class="mono">topbeam sync</span> koşunca neyin elendiği buraya yazılır.</p>
   </section>`;
   }
 
@@ -426,7 +428,7 @@ function renderPassport(state: OceanState, ledger: VerificationLedger): string {
        */
       const cmd = done
         ? ''
-        : cmdBlock(`ocean verify ${i.id}`, {
+        : cmdBlock(`topbeam verify ${i.id}`, {
             cls: 'pcmd',
             etiket: `Doğrulama komutunu kopyala — ${kisaBaslik(i.title)}`,
           });
@@ -603,7 +605,7 @@ export function renderPano(state: OceanState, opts: PanoOptions = {}): string {
       ? renderCard(card, ledger, state.claims)
       : `<section class="panel hero"><span class="eyebrow">Sıradaki tek hareket</span>
          <h2 class="fact">Henüz kart üretilmedi.</h2>
-         <div class="action"><p class="verb">Senkronu çalıştır.</p>${cmdBlock('ocean sync')}</div></section>`;
+         <div class="action"><p class="verb">Senkronu çalıştır.</p>${cmdBlock('topbeam sync')}</div></section>`;
 
   return `<!doctype html>
 <html lang="tr">
@@ -611,22 +613,22 @@ export function renderPano(state: OceanState, opts: PanoOptions = {}): string {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#04060d">
-<title>Ocean — ${esc(state.projectName)}</title>
+<title>Topbeam — ${esc(state.projectName)}</title>
 <style>${CSS}</style>
 </head>
 <body>
 <main>
   <header class="top">
-    <span class="eyebrow">Ocean — dürüst proje panosu</span>
+    <span class="eyebrow">Topbeam — dürüst proje panosu</span>
     <h1>${esc(state.projectName)}</h1>
-    <p class="meta">son senkron: ${esc(lastSync)} · ocean v${esc(TOOL_VERSION)} · deterministik özet — LLM yok</p>
+    <p class="meta">son senkron: ${esc(lastSync)} · topbeam v${esc(TOOL_VERSION)} · deterministik özet — LLM yok</p>
     ${goal}
   </header>
   ${cardHtml}
   ${renderScope(state.scope)}
   ${renderLog(state.log, ledger, state.scope)}
   ${renderPassport(state, ledger)}
-  <footer>Ocean yalnız kanıtlı gerçekleri ve açık belirsizlikleri gösterir.<br>
+  <footer>Topbeam yalnız kanıtlı gerçekleri ve açık belirsizlikleri gösterir.<br>
   kanıt seviyeleri: dosya-kanıtı · test-kanıtı · insan-onayı · doğrulanmadı<br>
   insan onayı rozeti yalnız <span class="mono">.ocean/passport.jsonl</span> defterindeki terminal imzalı kayda dayanır</footer>
 </main>

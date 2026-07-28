@@ -1,39 +1,41 @@
 /**
- * ocean init — projeyi Ocean'a bağlar. Kullanıcı elle iş yapmaz:
+ * topbeam init — projeyi Topbeam'e bağlar. Kullanıcı elle iş yapmaz:
  * - .ocean/ kurulur: state.json + goal.md + notes.md (varsa DOKUNULMAZ).
- * - Projenin CLAUDE.md'sine "## Ocean" bölümü APPEND edilir (varsa dokunma):
+ *   NOT: veri dizini adı `.ocean` KALIR (marka Topbeam olsa da) — mevcut
+ *   kurulumlarda veri göçü/bozulma riski almamak için bilinçli karar.
+ * - Projenin CLAUDE.md'sine "## Topbeam" bölümü APPEND edilir (varsa dokunma):
  *   Claude'a talimat — hedefi goal.md'de güncel tut + önemli adımlarda
  *   notes.md'ye 1 satır Türkçe not ekle + kanıtsız "çalışıyor" deme.
  *
- * İdempotent: ikinci `ocean init` hiçbir şeyi ezmez, ne yaptığını söyler.
+ * İdempotent: ikinci `topbeam init` hiçbir şeyi ezmez, ne yaptığını söyler.
  */
 import { readFile, writeFile, appendFile, mkdir } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { newOceanState, type LogEntry } from './types.ts';
 import { goalPath, notesPath, oceanDir, readState, statePath, writeState } from './state.ts';
 
-export const CLAUDE_MD_MARKER = '## Ocean';
+export const CLAUDE_MD_MARKER = '## Topbeam';
 
 export const CLAUDE_MD_SECTION = `
-## Ocean
+## Topbeam
 
-Bu proje Ocean ile izleniyor — dürüst proje panosu (\`.ocean/pano.html\`).
+Bu proje Topbeam ile izleniyor — dürüst proje panosu (\`.ocean/pano.html\`).
 
 Claude, bu projede çalışırken şu alışkanlıkları uygula:
 1. **Hedef:** Proje hedefi değiştiğinde \`.ocean/goal.md\` dosyasını güncel tut (kısa, tek paragraf).
 2. **Not:** Önemli her adımda \`.ocean/notes.md\` dosyasına 1 satırlık Türkçe not EKLE (append, eskiyi silme):
    \`- YYYY-MM-DD HH:MM — ne yapıldı\` biçiminde.
 3. **Dürüstlük:** Kanıt görmeden "çalışıyor / bitti" deme; "uygulandı görünüyor, doğrulanmadı" de.
-   Doğrulama kullanıcıya aittir: \`ocean verify <id>\`.
-4. **Senkron:** Anlamlı bir iş bitince \`ocean sync\` çalıştır — pano ve kart güncellensin.
+   Doğrulama kullanıcıya aittir: \`topbeam verify <id>\`.
+4. **Senkron:** Anlamlı bir iş bitince \`topbeam sync\` çalıştır — pano ve kart güncellensin.
 `;
 
 const GOAL_TEMPLATE = `# Proje Hedefi
 
-(Claude: bu dosyayı güncel tut — tek paragraf, şu anki gerçek hedef. Ocean panoda gösterir.)
+(Claude: bu dosyayı güncel tut — tek paragraf, şu anki gerçek hedef. Topbeam panoda gösterir.)
 `;
 
-const NOTES_TEMPLATE = `# Ocean Notları
+const NOTES_TEMPLATE = `# Topbeam Notları
 
 (Claude: önemli adımlarda buraya 1 satır Türkçe not ekle — \`- YYYY-MM-DD HH:MM — not\`. Eskiyi silme.)
 `;
@@ -71,7 +73,10 @@ export async function runInit(cwd: string, opts: { now?: Date } = {}): Promise<I
     const state = newOceanState(projectName, now);
     const entry: LogEntry = {
       ts: now.toISOString(),
-      text: 'Ocean bu projeye bağlandı (ocean init).',
+      text: 'Topbeam bu projeye bağlandı (topbeam init).',
+      // NOT: 'ocean' = LogSource enum DEĞERİ (veri şeması, panoda etiketi
+      // "topbeam" olarak gösterilir). Değeri değiştirmek eski state.json'ları
+      // bozardı — bilinçli olarak sabit bırakıldı.
       source: 'ocean',
     };
     state.log.push(entry);
@@ -93,7 +98,7 @@ export async function runInit(cwd: string, opts: { now?: Date } = {}): Promise<I
     created.push('.ocean/notes.md');
   }
 
-  // CLAUDE.md — "## Ocean" bölümü yoksa APPEND; varsa dokunma.
+  // CLAUDE.md — "## Topbeam" bölümü yoksa APPEND; varsa dokunma.
   const claudeMdPath = join(cwd, 'CLAUDE.md');
   let claudeMdUpdated = false;
   let claudeMd = '';
@@ -103,12 +108,12 @@ export async function runInit(cwd: string, opts: { now?: Date } = {}): Promise<I
     claudeMd = '';
   }
   if (claudeMd.includes(CLAUDE_MD_MARKER)) {
-    skipped.push('CLAUDE.md (## Ocean bölümü zaten var)');
+    skipped.push(`CLAUDE.md (${CLAUDE_MD_MARKER} bölümü zaten var)`);
   } else {
     const sep = claudeMd === '' || claudeMd.endsWith('\n') ? '' : '\n';
     await appendFile(claudeMdPath, `${sep}${CLAUDE_MD_SECTION}`, 'utf8');
     claudeMdUpdated = true;
-    created.push('CLAUDE.md → "## Ocean" bölümü eklendi');
+    created.push(`CLAUDE.md → "${CLAUDE_MD_MARKER}" bölümü eklendi`);
   }
 
   return { created, skipped, claudeMdUpdated, projectName };

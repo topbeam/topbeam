@@ -61,12 +61,12 @@ function testClaim(id: string, over: Partial<Claim> = {}): Claim {
 
 // ── boş / tam durumlar ───────────────────────────────────────────────────────
 
-test('hiç claim yok → sakin boş kart, aksiyon ocean sync', () => {
+test('hiç claim yok → sakin boş kart, aksiyon topbeam sync', () => {
   const card = buildCard([], { now: NOW });
   assert.equal(card.id, 'kart-bos');
   assert.equal(card.factLevel, 'dogrulanmadi');
   assert.deepEqual(card.evidence, { gitDiff: null, testOutput: null, humanApproval: null });
-  assert.equal(card.action.command, 'ocean sync');
+  assert.equal(card.action.command, 'topbeam sync');
   assert.equal(card.updatedAt, NOW.toISOString());
   // Sakin dil: alarm/motivasyon/yüzde yok.
   const all = `${card.fact} ${card.unknown} ${card.why} ${card.doneWhen}`;
@@ -112,7 +112,7 @@ test('eşit createdAt → id sırası (deterministik seçim)', () => {
   assert.deepEqual(c1, c2);
 });
 
-test('doğrulanmamış yoksa: kanıtlı-ama-onaysız en yenisi → ocean verify aksiyonu', () => {
+test('doğrulanmamış yoksa: kanıtlı-ama-onaysız en yenisi → topbeam verify aksiyonu', () => {
   const kanitli = claim('test-s1-0', {
     level: 'test-kaniti',
     kind: 'test',
@@ -123,7 +123,7 @@ test('doğrulanmamış yoksa: kanıtlı-ama-onaysız en yenisi → ocean verify 
   assert.equal(card.id, 'test-s1-0');
   assert.equal(card.factLevel, 'test-kaniti'); // seviye AYNEN — yükseltme yok
   assert.equal(card.action.command, verifyCommand('test-s1-0'));
-  assert.ok(card.doneWhen.includes('ocean verify test-s1-0'));
+  assert.ok(card.doneWhen.includes('topbeam verify test-s1-0'));
   assert.ok(card.doneWhen.includes('insan-onayı'));
 });
 
@@ -214,7 +214,7 @@ test('GPT spec: 6 alan dolu + tek bilinmeyen + açık bitiş koşulu', () => {
   assert.ok(card.action.verb.length > 0); // (d)
   assert.ok(card.why.length > 0 && !card.why.includes('\n')); // (e) tek cümle
   assert.ok(card.doneWhen.includes('kanıt') || card.doneWhen.includes('onay')); // (f) kanıt-yükseltme koşulu
-  assert.ok(card.doneWhen.includes(`ocean verify ${card.id}`)); // buton komutla uyumlu
+  assert.ok(card.doneWhen.includes(`topbeam verify ${card.id}`)); // buton komutla uyumlu
   assert.equal(CARD_PRIMARY_BUTTON_TR, 'Doğrulamayı başlat');
 });
 
@@ -963,7 +963,7 @@ test('claimKritik: en ağır tür kazanır, eşleşen dosyalar kayıttan gelir',
 // ── yardımcılar ──────────────────────────────────────────────────────────────
 
 test('verifyCommand + scriptsFromPackageJson', () => {
-  assert.equal(verifyCommand('gorev-3'), 'ocean verify gorev-3');
+  assert.equal(verifyCommand('gorev-3'), 'topbeam verify gorev-3');
   assert.deepEqual(scriptsFromPackageJson('{"scripts":{"test":"node --test","x":3}}'), { test: 'node --test' });
   assert.deepEqual(scriptsFromPackageJson('bozuk json'), {});
   assert.deepEqual(scriptsFromPackageJson('{"scripts":[]}'), {});

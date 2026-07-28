@@ -43,7 +43,7 @@ function claimsBirimli(): Claim[] {
 }
 
 async function makeStateDir(claims: Claim[] = claims2()): Promise<string> {
-  const dir = await mkdtemp(join(tmpdir(), 'ocean-verify-'));
+  const dir = await mkdtemp(join(tmpdir(), 'topbeam-verify-'));
   const st = newOceanState('Verify Proje', NOW);
   st.claims = claims;
   st.passport = buildPassport([], st.claims);
@@ -84,10 +84,10 @@ test('bilinmeyen id: dürüst hata + kayıtlı id listesi', async () => {
 });
 
 test('init edilmemiş dizin: dürüst hata', async () => {
-  const dir = await mkdtemp(join(tmpdir(), 'ocean-verify-bos-'));
+  const dir = await mkdtemp(join(tmpdir(), 'topbeam-verify-bos-'));
   const res = await runVerify(dir, 'x', fakeDeps('e'));
   assert.equal(res.ok, false);
-  assert.ok(res.error?.includes('ocean init'));
+  assert.ok(res.error?.includes('topbeam init'));
 });
 
 test('red (H): seviye DEĞİŞMEZ, passport.jsonl yazılmaz', async () => {

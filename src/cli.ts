@@ -1,5 +1,5 @@
 /**
- * Ocean CLI — ocean  (shebang release build'de banner ile eklenir)
+ * Topbeam CLI — topbeam  (shebang release build'de banner ile eklenir)
  * Akış (MVP dikey dilim): init → sync → verify → open
  *
  * İnce yönlendirici: komut mantığı ayrı modüllerde (init/sync/verify),
@@ -24,12 +24,12 @@ function fail(msg: string): never {
 }
 
 const HELP = `
-Ocean v${TOOL_VERSION} — dürüst proje panosu (local-first, LLM'siz)
+Topbeam v${TOOL_VERSION} — dürüst proje panosu (local-first, LLM'siz)
 
-Kullanım: ocean <komut> [seçenekler]
+Kullanım: topbeam <komut> [seçenekler]
 
 Komutlar:
-  init            Bu projeyi Ocean'a bağla (.ocean/ kurulumu + CLAUDE.md entegrasyonu)
+  init            Bu projeyi Topbeam'e bağla (.ocean/ kurulumu + CLAUDE.md entegrasyonu)
   sync            Claude Code transcript + git gerçeklerinden log ve kartı güncelle
   verify <id>     Bir işi doğrula (insan onayı kaydet — kanıt seviyesi yükselir)
                   <id> tek kayıt ya da pasaport iş birimi (birim-…) olabilir;
@@ -51,11 +51,11 @@ veya insan onayıyla söylenir. Özet deterministiktir (LLM yok).
 async function cmdInit(_args: Args): Promise<void> {
   const cwd = process.cwd();
   const res = await runInit(cwd);
-  out(`Ocean bağlandı: ${res.projectName}`);
+  out(`Topbeam bağlandı: ${res.projectName}`);
   for (const c of res.created) out(`  + ${c}`);
   for (const s of res.skipped) out(`  = ${s} (vardı, dokunulmadı)`);
   out('');
-  out('Sıradaki adım: ocean sync  (transcript + git gerçeklerinden panoyu kur)');
+  out('Sıradaki adım: topbeam sync  (transcript + git gerçeklerinden panoyu kur)');
 }
 
 const LEVEL_ORDER: EvidenceLevel[] = ['dosya-kaniti', 'test-kaniti', 'insan-onayi', 'dogrulanmadi'];
@@ -85,7 +85,7 @@ async function cmdSync(_args: Args): Promise<void> {
   // defterine dayanır, pasaportun kendi 'completed' iddiasına değil.
   const verified = res.dogrulananBirim ?? 0;
 
-  out(`Ocean senkron tamam — ${st.projectName}`);
+  out(`Topbeam senkron tamam — ${st.projectName}`);
   out(`  Transcript : ${res.transcriptsFound ?? 0} oturum tarandı`);
   out(`  Claim      : ${st.claims.length}${levelSummary !== '' ? ` (${levelSummary})` : ''}`);
   out(`  Log        : ${st.log.length} satır`);
@@ -148,7 +148,7 @@ function makeAsker(): { ask: (q: string) => Promise<string>; close: () => void }
  */
 async function cmdVerify(args: Args): Promise<void> {
   const id = args.positional[0];
-  if (id === undefined || id === '') fail('Kullanım: ocean verify <id>');
+  if (id === undefined || id === '') fail('Kullanım: topbeam verify <id>');
   if (args.flags.by !== undefined) {
     fail(
       "'--by' bayrağı kaldırıldı: onaylayan kimliği işletim sistemi kullanıcısından okunur.\n" +
@@ -176,9 +176,9 @@ async function cmdOpen(_args: Args): Promise<void> {
   try {
     await access(p);
   } catch {
-    fail(`Pano henüz yok: ${p}\nÖnce: ocean sync`);
+    fail(`Pano henüz yok: ${p}\nÖnce: topbeam sync`);
   }
-  out('Pano yolu (tarayıcında aç — Ocean otomatik açmaz):');
+  out('Pano yolu (tarayıcında aç — Topbeam otomatik açmaz):');
   out(`  ${p}`);
 }
 
@@ -188,7 +188,7 @@ async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
 
   if (args.flags.version === true || args.cmd === 'version') {
-    out(`ocean v${TOOL_VERSION}`);
+    out(`topbeam v${TOOL_VERSION}`);
     return;
   }
   if (args.flags.help === true || args.cmd === 'help') {

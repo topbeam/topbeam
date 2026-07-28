@@ -6,7 +6,7 @@
  * Bu testler o kuralları REGRESYONA karşı kilitler — sayfa elle düzenlenirken
  * yanlışlıkla eski hâle dönerse burada kırılır.
  *
- * Not: hiçbiri ağa çıkmaz; yalnız dosya metnini okur (Ocean'ın "ağ çağrısı yok"
+ * Not: hiçbiri ağa çıkmaz; yalnız dosya metnini okur (Topbeam'in "ağ çağrısı yok"
  * kuralı testlerde de geçerli).
  */
 import { test } from 'node:test';
@@ -54,7 +54,9 @@ test('landing: kopyala butonu ÇALIŞMAYAN komut taşımaz (npx yayın öncesi k
 });
 
 test('landing: npx komutu gösteriliyorsa "yayından sonra" işareti ve yayın durumu notu yanında', () => {
-  if (!html.includes('npx ocean-code')) return; // komut kaldırıldıysa kural konusuz
+  // Paket adı Topbeam'e taşındı; eski ad da kontrol edilir ki landing hangi
+  // adı taşırsa taşısın nöbetçi SUSMASIN (ad değişince kural sessizce düşmesin).
+  if (!/npx (topbeam|ocean-code)/.test(html)) return; // komut kaldırıldıysa kural konusuz
   assert.match(html, /class="cmd soon"/, '.cmd.soon işareti yok — komut çalışıyormuş gibi duruyor');
   assert.match(html, /yayından sonra/, '"yayından sonra" etiketi yok');
   assert.match(html, /Yayın durumu:/, 'yayın durumu notu yok');

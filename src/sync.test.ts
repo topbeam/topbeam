@@ -23,8 +23,8 @@ const j = (o: unknown): string => JSON.stringify(o);
 async function makeProject(): Promise<{ proj: string; claudeDir: string }> {
   // realpath ŞART: macOS'ta /var → /private/var; git root gerçek yolu döner,
   // transcript yollarıyla kesişim ancak aynı gerçek yolla kurulunca oluşur.
-  const proj = await realpath(await mkdtemp(join(tmpdir(), 'ocean-sync-proj-')));
-  const claudeDir = await mkdtemp(join(tmpdir(), 'ocean-sync-claude-'));
+  const proj = await realpath(await mkdtemp(join(tmpdir(), 'topbeam-sync-proj-')));
+  const claudeDir = await mkdtemp(join(tmpdir(), 'topbeam-sync-claude-'));
 
   execFileSync('git', ['init', '-q'], { cwd: proj });
   await mkdir(join(proj, 'src'), { recursive: true });
@@ -89,10 +89,10 @@ function withClaudeDir<T>(claudeDir: string, fn: () => Promise<T>): Promise<T> {
 }
 
 test('sync init olmadan dürüstçe reddeder', async () => {
-  const dir = await mkdtemp(join(tmpdir(), 'ocean-sync-bos-'));
+  const dir = await mkdtemp(join(tmpdir(), 'topbeam-sync-bos-'));
   const res = await runSync(dir);
   assert.equal(res.ok, false);
-  assert.ok(res.error?.includes('ocean init'));
+  assert.ok(res.error?.includes('topbeam init'));
 });
 
 test('tam boru hattı: collect → truth → card → state + pano', async () => {
@@ -122,7 +122,7 @@ test('tam boru hattı: collect → truth → card → state + pano', async () =>
   // kart: doğrulanmamış yok → kanıtlı-en-yeni için insan onayı istenir
   assert.ok(st.card);
   assert.ok([`dosya-git-${S1}`, `test-${S1}-0`].includes(st.card.id));
-  assert.equal(st.card.action.command, `ocean verify ${st.card.id}`);
+  assert.equal(st.card.action.command, `topbeam verify ${st.card.id}`);
 
   // log: kanıtlı gerçekler + beyan (rozetli) — init izi de korunur
   assert.ok(st.log.some((e) => e.source === 'claude-beyan' && e.text.startsWith('Beyan:')));
@@ -133,7 +133,7 @@ test('tam boru hattı: collect → truth → card → state + pano', async () =>
   const { readFile } = await import('node:fs/promises');
   const html = await readFile(res.panoPath, 'utf8');
   assert.ok(html.includes('Sıradaki tek hareket'));
-  assert.ok(html.includes(`ocean verify ${st.card.id}`));
+  assert.ok(html.includes(`topbeam verify ${st.card.id}`));
 });
 
 test('notes.md satırları log\'a beyan olarak girer', async () => {
@@ -234,8 +234,8 @@ test('sync: pasaport claim başına DEĞİL oturum başına dolar (iki oturum �
 });
 
 test('git deposu OLMAYAN proje: kart "git status" ÖNERMEZ', async () => {
-  const proj = await realpath(await mkdtemp(join(tmpdir(), 'ocean-nogit-')));
-  const claudeDir = await mkdtemp(join(tmpdir(), 'ocean-nogit-claude-'));
+  const proj = await realpath(await mkdtemp(join(tmpdir(), 'topbeam-nogit-')));
+  const claudeDir = await mkdtemp(join(tmpdir(), 'topbeam-nogit-claude-'));
   await mkdir(join(proj, 'src'), { recursive: true });
   await writeFile(join(proj, 'src', 'a.ts'), 'export const a = 1;\n', 'utf8'); // package.json YOK
 
@@ -267,7 +267,7 @@ test('git deposu OLMAYAN proje: kart "git status" ÖNERMEZ', async () => {
   const card = res.state?.card;
   assert.ok(card);
   assert.notEqual(card.action.command, 'git status', 'çalışmayacak komut önerilemez');
-  assert.equal(card.action.command, `ocean verify ${card.id}`);
+  assert.equal(card.action.command, `topbeam verify ${card.id}`);
   assert.ok(card.action.verb.includes('git deposu değil'));
   assert.ok(card.fact.includes('git deposu değil'));
 });
@@ -299,7 +299,7 @@ test('kapsam: proje DIŞI düzenleme sayılır ve panoda görünür (iz bırakar
   const { proj, claudeDir } = await makeProject();
   const slugDir = join(claudeDir, 'projects', slugifyCwd(proj));
   const sid = 'sess-dis';
-  const disari = join(tmpdir(), 'ocean-baska-proje', 'gizli.ts');
+  const disari = join(tmpdir(), 'topbeam-baska-proje', 'gizli.ts');
   const lines = [
     j({
       type: 'assistant', cwd: proj, sessionId: sid, uuid: 'a1', timestamp: '2026-07-28T10:01:00.000Z',

@@ -28,7 +28,7 @@ function run(args: string[], opts: RunOpts = {}): { code: number; stdout: string
       env: {
         ...process.env,
         NODE_OPTIONS: '',
-        OCEAN_CLAUDE_DIR: join(tmpdir(), 'ocean-code-test-bos-claude'),
+        OCEAN_CLAUDE_DIR: join(tmpdir(), 'topbeam-test-bos-claude'),
         OCEAN_NO_NOTIFY: '1',
       },
     });
@@ -42,7 +42,7 @@ function run(args: string[], opts: RunOpts = {}): { code: number; stdout: string
 test('--version sürümü yazdırır, exit 0', () => {
   const r = run(['--version']);
   assert.equal(r.code, 0);
-  assert.match(r.stdout, /^ocean v\d+\.\d+\.\d+/);
+  assert.match(r.stdout, /^topbeam v\d+\.\d+\.\d+/);
 });
 
 test('help komutları ve dürüstlük ilkesini listeler, exit 0', () => {
@@ -63,34 +63,34 @@ test('bilinmeyen komut exit 1 + yardım', () => {
 test('verify id ister: idsiz exit 1', () => {
   const r = run(['verify']);
   assert.equal(r.code, 1);
-  assert.match(r.stderr, /Kullanım: ocean verify/);
+  assert.match(r.stderr, /Kullanım: topbeam verify/);
 });
 
 test('sync init olmadan dürüstçe reddeder, exit 1', async () => {
-  const dir = await mkdtemp(join(tmpdir(), 'ocean-code-nosync-'));
+  const dir = await mkdtemp(join(tmpdir(), 'topbeam-nosync-'));
   const r = run(['sync'], { cwd: dir });
   assert.equal(r.code, 1);
-  assert.match(r.stderr, /ocean init/);
+  assert.match(r.stderr, /topbeam init/);
 });
 
 test('open pano yokken dürüstçe reddeder, exit 1', async () => {
-  const dir = await mkdtemp(join(tmpdir(), 'ocean-code-noopen-'));
+  const dir = await mkdtemp(join(tmpdir(), 'topbeam-noopen-'));
   const r = run(['open'], { cwd: dir });
   assert.equal(r.code, 1);
-  assert.match(r.stderr, /ocean sync/);
+  assert.match(r.stderr, /topbeam sync/);
 });
 
 test('tam akış: init → sync → open (izole dizin, transcript yok senaryosu)', async () => {
-  const dir = await mkdtemp(join(tmpdir(), 'ocean-code-akis-'));
+  const dir = await mkdtemp(join(tmpdir(), 'topbeam-akis-'));
 
   const init = run(['init'], { cwd: dir });
   assert.equal(init.code, 0, init.stderr);
-  assert.ok(init.stdout.includes('Ocean bağlandı'));
+  assert.ok(init.stdout.includes('Topbeam bağlandı'));
   assert.ok(init.stdout.includes('.ocean/state.json'));
   await access(join(dir, '.ocean', 'state.json'));
   await access(join(dir, '.ocean', 'goal.md'));
   const claudeMd = await readFile(join(dir, 'CLAUDE.md'), 'utf8');
-  assert.ok(claudeMd.includes('## Ocean'));
+  assert.ok(claudeMd.includes('## Topbeam'));
 
   // ikinci init: idempotent
   const init2 = run(['init'], { cwd: dir });
@@ -99,7 +99,7 @@ test('tam akış: init → sync → open (izole dizin, transcript yok senaryosu)
 
   const sync = run(['sync'], { cwd: dir });
   assert.equal(sync.code, 0, sync.stderr);
-  assert.ok(sync.stdout.includes('Ocean senkron tamam'));
+  assert.ok(sync.stdout.includes('Topbeam senkron tamam'));
   assert.ok(sync.stdout.includes('Pano'));
   await access(join(dir, '.ocean', 'pano.html'));
 
@@ -114,7 +114,7 @@ test('tam akış: init → sync → open (izole dizin, transcript yok senaryosu)
 });
 
 test('verify: olmayan id ile exit 1 + dürüst mesaj (subprocess)', async () => {
-  const dir = await mkdtemp(join(tmpdir(), 'ocean-code-verify-'));
+  const dir = await mkdtemp(join(tmpdir(), 'topbeam-verify-'));
   run(['init'], { cwd: dir });
   const r = run(['verify', 'gorev-3'], { cwd: dir, input: 'h\n' });
   assert.equal(r.code, 1);
@@ -123,11 +123,11 @@ test('verify: olmayan id ile exit 1 + dürüst mesaj (subprocess)', async () => 
 
 /**
  * İNSAN KAPISI — bu testin kilitlediği olay GERÇEK: dogfood'da bir ajan
- * `ocean verify <id> <<< "e"` koşturup passport.jsonl'e "insan onayı" yazdırdı.
+ * `topbeam verify <id> <<< "e"` koşturup passport.jsonl'e "insan onayı" yazdırdı.
  * Subprocess'in stdin'i bir PIPE'tır (isTTY yok) → tam o senaryo.
  */
 test('verify subprocess: piped "e" onay VERMEZ — bot insan onayı yazamaz', async () => {
-  const dir = await mkdtemp(join(tmpdir(), 'ocean-code-verify-e-'));
+  const dir = await mkdtemp(join(tmpdir(), 'topbeam-verify-e-'));
   const { newOceanState } = await import('./types.ts');
   const { writeState, readState } = await import('./state.ts');
   const st = newOceanState('CliVerify', new Date('2026-07-28T10:00:00Z'));
@@ -153,7 +153,7 @@ test('verify subprocess: piped "e" onay VERMEZ — bot insan onayı yazamaz', as
 });
 
 test('verify: --by bayrağı reddedilir (imza uydurma kapısı kapalı)', async () => {
-  const dir = await mkdtemp(join(tmpdir(), 'ocean-code-verify-by-'));
+  const dir = await mkdtemp(join(tmpdir(), 'topbeam-verify-by-'));
   run(['init'], { cwd: dir });
   const r = run(['verify', 'dosya-git-s9', '--by', 'dogfood-ajan'], { cwd: dir, input: 'e\n' });
   assert.equal(r.code, 1);
@@ -161,7 +161,7 @@ test('verify: --by bayrağı reddedilir (imza uydurma kapısı kapalı)', async 
 });
 
 test('verify subprocess: girdi kapalıysa (cevapsız) onay YOK — dürüst varsayılan', async () => {
-  const dir = await mkdtemp(join(tmpdir(), 'ocean-code-verify-h-'));
+  const dir = await mkdtemp(join(tmpdir(), 'topbeam-verify-h-'));
   const { newOceanState } = await import('./types.ts');
   const { writeState, readState } = await import('./state.ts');
   const st = newOceanState('CliVerify2', new Date('2026-07-28T10:00:00Z'));

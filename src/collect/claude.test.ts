@@ -26,7 +26,7 @@ const S2 = 'cccc-2222-dddd';
 
 const j = (o: unknown): string => JSON.stringify(o);
 
-const claudeDir = await mkdtemp(join(tmpdir(), 'ocean-claude-fix-'));
+const claudeDir = await mkdtemp(join(tmpdir(), 'topbeam-claude-fix-'));
 const slugDir = join(claudeDir, 'projects', slugifyCwd(PROJ));
 await mkdir(slugDir, { recursive: true });
 

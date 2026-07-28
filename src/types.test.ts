@@ -96,7 +96,7 @@ test('Card şekli — GPT spec alanları derlenir ve taşınır', () => {
       humanApproval: null,
     },
     unknown: 'Testler hiç çalıştırılmadı.',
-    action: { verb: 'Doğrulamayı başlat.', command: 'ocean verify gorev-3' },
+    action: { verb: 'Doğrulamayı başlat.', command: 'topbeam verify gorev-3' },
     why: 'Tek bilinmeyen test sonucu; onu kapatmadan sonraki adım anlamsız.',
     doneWhen: 'Test çıktı kaydında GEÇTİ görünmeli.',
     rule: 'en-yeni',

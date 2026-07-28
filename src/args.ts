@@ -13,7 +13,7 @@ export interface Args {
  * argv (node/script sonrası dilim) → {cmd, positional, flags}.
  * `--anahtar deger` çifti; değer yoksa boolean true.
  * `--anahtar --digeri` durumunda ilki boolean kalır.
- * İlk öğe `--` ile başlıyorsa komut değildir (örn. `ocean --version`).
+ * İlk öğe `--` ile başlıyorsa komut değildir (örn. `topbeam --version`).
  */
 export function parseArgs(argv: string[]): Args {
   const first = argv[0];

@@ -103,7 +103,7 @@ test('kart EN ÜSTTE ve 6 alan + Doğrulamayı başlat kutusu + verify komutu', 
   }
   // ana buton kutusu + kopyalanabilir komut
   assert.ok(html.includes('Doğrulamayı başlat'));
-  assert.ok(html.includes(`ocean verify ${st.card?.id ?? ''}`));
+  assert.ok(html.includes(`topbeam verify ${st.card?.id ?? ''}`));
 });
 
 test('kanıt satırı uydurulmaz: olmayan tür "kayıt yok" görünür', () => {
@@ -178,7 +178,7 @@ test('pasaport: doğrulanmamış birimde verify komutu + kayıt sayısı görün
     reason: '1/3 kayıt insan onaylı — birim henüz tamam değil.',
   };
   const html = renderPano(st, { ledger: stateLedger() });
-  assert.ok(html.includes('ocean verify birim-s1'));
+  assert.ok(html.includes('topbeam verify birim-s1'));
   assert.ok(html.includes('3 kayıt'));
   assert.ok(html.includes('1/3 kayıt insan onaylı'));
   // onaylanmış maddede tekrar "verify" çağrısı GÖSTERİLMEZ (yapılacak iş yok):
@@ -200,7 +200,7 @@ test('pasaport: her açık madde KOPYALANABİLİR — çıplak id elle seçilmez
   // Kartla AYNI desen: her satırda kopyalanabilir komut + Kopyala butonu.
   assert.equal(html.match(/class="cmdrow pcmd"/g)?.length, 3);
   for (const id of ['birim-04e1b826', 'birim-9c31aa07', 'birim-77d0be14']) {
-    assert.ok(html.includes(`data-cmd="ocean verify ${id}"`), `${id}: kopyalanabilir komut yok`);
+    assert.ok(html.includes(`data-cmd="topbeam verify ${id}"`), `${id}: kopyalanabilir komut yok`);
   }
   // Erişilebilirlik: her satırın butonu var ve adı AYIRT EDİCİ
   // (11 satırda 11 aynı "Kopyala" ekran okuyucuda kullanılamaz).
@@ -236,12 +236,12 @@ test('escape: kötü niyetli claim metni HTML/JS enjekte edemez', () => {
   assert.ok(html.includes('&lt;script&gt;'));
 });
 
-test('kart-bos: Doğrulamayı başlat kutusu yok, ocean sync önerilir', () => {
+test('kart-bos: Doğrulamayı başlat kutusu yok, topbeam sync önerilir', () => {
   const st = newOceanState('Bos Proje', NOW);
   st.card = buildCard([], { now: NOW });
   const html = renderPano(st);
   assert.equal(html.includes('Doğrulamayı başlat'), false);
-  assert.ok(html.includes('ocean sync'));
+  assert.ok(html.includes('topbeam sync'));
   assert.ok(html.includes('0/0 doğrulandı'));
 });
 

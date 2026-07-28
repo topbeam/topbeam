@@ -29,7 +29,7 @@ test('ardışık iki flag: ilki boolean kalır', () => {
   assert.equal(a.flags.limit, '5');
 });
 
-test('ilk öğe flag ise komut sayılmaz (ocean --version)', () => {
+test('ilk öğe flag ise komut sayılmaz (topbeam --version)', () => {
   const a = parseArgs(['--version']);
   assert.equal(a.cmd, 'help');
   assert.equal(a.flags.version, true);

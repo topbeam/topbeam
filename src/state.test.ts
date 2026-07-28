@@ -22,7 +22,7 @@ import {
 } from './state.ts';
 
 async function tmpProj(): Promise<string> {
-  return mkdtemp(join(tmpdir(), 'ocean-state-'));
+  return mkdtemp(join(tmpdir(), 'topbeam-state-'));
 }
 
 test('readState: dosya yoksa null (fırlatmaz)', async () => {
@@ -84,7 +84,7 @@ test('appendPassportLog: append-only JSONL, iki kayıt iki satır', async () => 
 
 test('parseNotes: tarihli + tarihsiz satırlar; başlık ve yönerge atlanır', () => {
   const raw = [
-    '# Ocean Notları',
+    '# Topbeam Notları',
     '(Claude: yönerge satırı)',
     '',
     '- 2026-07-28 14:05 — login formu eklendi',
@@ -106,10 +106,10 @@ test('readGoal: şablon (başlık+yönerge) → null; gerçek hedef satırı →
   await writeFile(goalPath(dir), '# Proje Hedefi\n\n(Claude: bu dosyayı güncel tut.)\n', 'utf8');
   assert.equal(await readGoal(dir), null);
 
-  await writeFile(goalPath(dir), '# Proje Hedefi\n\nOcean MVP dikey dilimini bitir.\n', 'utf8');
-  assert.equal(await readGoal(dir), 'Ocean MVP dikey dilimini bitir.');
+  await writeFile(goalPath(dir), '# Proje Hedefi\n\nTopbeam MVP dikey dilimini bitir.\n', 'utf8');
+  assert.equal(await readGoal(dir), 'Topbeam MVP dikey dilimini bitir.');
 
-  const yok = await mkdtemp(join(tmpdir(), 'ocean-goal-yok-'));
+  const yok = await mkdtemp(join(tmpdir(), 'topbeam-goal-yok-'));
   assert.equal(await readGoal(yok), null);
 });
 

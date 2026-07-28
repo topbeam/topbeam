@@ -1,39 +1,42 @@
-# Ocean
+# Topbeam
 
-Vibe coder için dürüst proje panosu. Ocean sana projenin hikâyesini anlatmaz;
+Vibe coder için dürüst proje panosu. Topbeam sana projenin hikâyesini anlatmaz;
 **mevcut gerçeği ve ilerlemek için gereken tek hareketi söyler.**
 
 Local-first: LLM çağrısı yok, network çağrısı yok. Özet **deterministiktir** —
-Claude Code transcript'lerindeki tool-use kayıtları + git gerçeklerinden üretilir;
+Claude Code transcript'lerindeki tool-use kayıtlarından + git gerçeklerinden üretilir;
 halüsinasyon yapısal olarak imkânsızdır (assistant'ın "bitti, çalışıyor!" cümlesi
 özete hiçbir yoldan giremez).
 
+**Topbeam by REVERI** — *"topping out"*: inşaatta son kirişin en tepeye çakılması,
+bitiş töreni. BuildPassport barının dolması budur.
+
 ## Kurulum
 
-Marka adı **OCEAN**, komut adı **`ocean`**, npm paket adı **`ocean-code`**
-(npm'de `ocean` ve `ocean-cli` adları başka kişilerin ilgisiz paketleridir —
-kurulum komutunda paket adı `ocean-code`'dur).
+Komut adı **`topbeam`**, npm paket adı da **`topbeam`** — tek ad, tek token.
+(Kısaltma yok: `beam` takma adı verilmez.)
 
-> **Durum: Ocean henüz npm'e yayınlanmadı.** Bugün çalışan tek yol aşağıdaki
-> yerel kurulumdur. `npx` yolu yayından sonra çalışacak; bugün çalıştığını
-> söylemek yalan olur, o yüzden ayrı başlıkta ve açıkça işaretli.
+> **Durum: Topbeam henüz npm'e YAYINLANMADI.** Bugün çalışan tek yol aşağıdaki
+> yerel kurulumdur. `npx` / `npm i -g` yolu yayından sonra çalışacak; bugün
+> çalıştığını söylemek yalan olur, o yüzden ayrı başlıkta ve açıkça işaretli.
 
 ### Bugün çalışan yol — yerelden kurulum
 
 ```bash
-cd ocean-cli        # bu deponun klasörü
+git clone <depo>    # GitHub org (topbeam) henüz açılmadı — açılınca URL buraya
+cd ocean-cli        # bu deponun klasörü (klasör adı henüz taşınmadı)
 npm install
 npm run build
-npm link            # `ocean` komutu PATH'e girer
+npm link            # `topbeam` komutu PATH'e girer
 ```
 
 Kurulumu doğrula:
 
 ```bash
-ocean --help        # yardım metni ve sürüm görünmeli
+topbeam --help      # yardım metni ve sürüm görünmeli
 ```
 
-Geri almak: `npm unlink -g ocean-code`.
+Geri almak: `npm unlink -g topbeam`.
 
 `npm link` istemiyorsan global kurulum yapmadan da çalıştırabilirsin:
 
@@ -43,39 +46,51 @@ node /tam/yol/ocean-cli/dist/cli.js sync
 
 ### Yayından sonra (henüz ÇALIŞMAZ)
 
-Paket npm'e `ocean-code` adıyla yayınlandığında şu komutlar çalışacak:
+Paket npm'e `topbeam` adıyla yayınlandığında şu komutlar çalışacak:
 
 ```bash
-npx ocean-code init            # yayın öncesi çalışmaz
-npx -p ocean-code ocean init   # aynısının kesin biçimi (paket ≠ komut adı)
-npm i -g ocean-code            # `ocean` komutunu global kurar
+npx topbeam init    # yayın öncesi çalışmaz
+npm i -g topbeam    # `topbeam` komutunu global kurar
 ```
 
 Gereksinim: Node >= 20. Çalışma zamanı bağımlılığı yok (tek dosya bundle).
 
+### Depo ve bağlantılar
+
+GitHub organizasyonu (`topbeam`) henüz açılmadı; bu yüzden `package.json` içindeki
+`repository` / `bugs` / `homepage` alanları **boş** — uydurma URL yazılmadı.
+Org açılınca üç alan da buraya ve `package.json`'a eklenecek.
+
+## Veri dizini: neden hâlâ `.ocean/`
+
+Marka Topbeam, ama proje kökündeki veri dizini **`.ocean/`** ve içindeki dosya
+adları (`state.json`, `pano.html`, `passport.jsonl`, `goal.md`, `notes.md`)
+**değişmedi** — bilinçli karar: mevcut kurulumlarda veri göçü riski almıyoruz.
+Aynı gerekçeyle ortam değişkenleri de `OCEAN_*` önekini koruyor.
+
 ## 4 Komut
 
-### `ocean init`
-Projeyi Ocean'a bağlar — kullanıcı elle iş yapmaz:
+### `topbeam init`
+Projeyi Topbeam'e bağlar — kullanıcı elle iş yapmaz:
 - `.ocean/` kurulur: `state.json` (durum), `goal.md` (hedef), `notes.md` (kısa notlar)
-- Projenin `CLAUDE.md`'sine **"## Ocean"** bölümü eklenir (varsa dokunmaz):
+- Projenin `CLAUDE.md`'sine **"## Topbeam"** bölümü eklenir (varsa dokunmaz):
   Claude'a talimat — hedefi güncel tut, önemli adımlarda 1 satır Türkçe not ekle,
   kanıtsız "çalışıyor" deme.
 
-### `ocean sync`
+### `topbeam sync`
 Claude Code transcript'leri (`~/.claude/projects/...`) + git gerçeklerini okur →
 kanıt-kurallı iddialar (claim), LOG HISTORY ve **sıradaki-tek-hareket kartını**
 üretir → `.ocean/pano.html` yazar. İnsan onayları asla geri alınmaz.
 
-### `ocean verify <id>`
+### `topbeam verify <id>`
 Bir iddiayı gösterir, kanıtlarını listeler, onayını sorar (e/H). Onaylarsan:
 - iddia **insan-onayı** seviyesine yükselir (tek meşru yükseltme yolu budur),
 - `.ocean/passport.jsonl`'e eklenir (append-only, değişmez onay logu),
-- pasaport **FULL-TİK** olursa bir kez macOS bildirimi: "Ocean: ürün geliştirildi 🎉"
+- pasaport **FULL-TİK** olursa bir kez macOS bildirimi: "Topbeam: ürün geliştirildi 🎉"
   (planlanan fiyatlamada bu bildirim Pro tarafında — bugünkü sürümde herkeste açık,
   kodda lisans kontrolü yok; bkz. [Fiyat](#fiyat-planlanan--açık-çekirdek)).
 
-### `ocean open`
+### `topbeam open`
 Pano yolunu yazdırır. Tarayıcıyı **otomatik açmaz** — sen açarsın.
 
 ## Pano (`.ocean/pano.html`)
@@ -84,7 +99,7 @@ Tek statik dosya, sistem fontları, tek küçük JS (kopyala butonu). Üstten al
 1. **Sıradaki tek hareket** (en baskın öğe): şu anki gerçek + kesinlik seviyesi ·
    kanıt üç ayrı satır (git diff / test çıktısı / insan onayı) · en önemli tek
    bilinmeyen · tek fiil + çalıştırılabilir komut · neden bu · bitti sayılma koşulu ·
-   "Doğrulamayı başlat" kutusu (`ocean verify <id>` kopyalanabilir).
+   "Doğrulamayı başlat" kutusu (`topbeam verify <id>` kopyalanabilir).
 2. **Log history**: zaman çizgisi — git/test gerçekleri, Claude'un beyanları
    ("beyan" rozetiyle; kanıt değil), insan onayları.
 3. **Pasaport**: tik listesi + dürüst sayım ("1/2 doğrulandı" — yüzde-progress-bar
@@ -137,10 +152,10 @@ Sınırlar açıkça çizilidir:
 - Tek proje
 - Tam kart — sıradaki tek hareket
 - Log geçmişi
-- Manuel doğrulama (`ocean verify`)
+- Manuel doğrulama (`topbeam verify`)
 - Temel pasaport kaydı (o projeye ait)
 
-**Ocean Pro — $5/ay · $50/yıl (founding fiyatı, sonra $9)**
+**Topbeam Pro — $5/ay · $50/yıl (founding fiyatı, sonra $9)**
 - Sınırsız proje
 - Projeler arası taşınabilir pasaport geçmişi
 - FULL-TİK bildirimi + gelişmiş doğrulama akışları

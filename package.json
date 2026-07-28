@@ -1,24 +1,26 @@
 {
-  "name": "ocean-code",
+  "name": "topbeam",
   "version": "0.1.0",
-  "description": "Ocean — vibe coder için dürüst proje panosu: Claude Code transcript + git gerçeklerinden deterministik log, kanıt seviyeli durum ve sıradaki-tek-hareket kartı. LLM yok, network yok, local-first.",
+  "description": "Topbeam — vibe coder için dürüst proje panosu: Claude Code / Codex transcript + git gerçeklerinden deterministik log, kanıt seviyeli durum ve sıradaki-tek-hareket kartı. LLM yok, network yok, local-first.",
   "type": "module",
   "license": "MIT",
   "author": "Ekin Kılıçkaya",
   "keywords": [
+    "topbeam",
     "claude-code",
+    "codex",
     "cli",
     "local-first",
+    "evidence",
+    "buildpassport",
     "git",
     "transcript",
-    "evidence",
     "provenance",
-    "buildpassport",
     "vibe-coding",
     "offline"
   ],
   "bin": {
-    "ocean": "dist/cli.js"
+    "topbeam": "dist/cli.js"
   },
   "engines": {
     "node": ">=20"

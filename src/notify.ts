@@ -6,6 +6,7 @@
  * - macOS dışı platformda hiç denenmez (false).
  * - Network yok, LLM yok; tek dış süreç: osascript (yalnız darwin).
  * - Test/otomasyon kaçışları: OCEAN_NO_NOTIFY=1 → hiç çalışmaz;
+ *   (env adları OCEAN_* kalır — mevcut kurulumlar bozulmasın diye bilinçli.)
  *   OCEAN_NOTIFY_BIN → osascript yerine başka binary (test izolasyonu).
  */
 import { execFile } from 'node:child_process';

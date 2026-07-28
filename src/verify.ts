@@ -1,8 +1,8 @@
 /**
- * ocean verify <id> — insan onayı akışı. "Çalışıyor"nun tek meşru kapısı.
+ * topbeam verify <id> — insan onayı akışı. "Çalışıyor"nun tek meşru kapısı.
  *
  * İNSAN KAPISI (ürünün EN kutsal kuralı: insan onayı = GERÇEK insan).
- * Dogfood'da bir ajan `ocean verify <id> <<< "e"` koşturup passport.jsonl'e
+ * Dogfood'da bir ajan `topbeam verify <id> <<< "e"` koşturup passport.jsonl'e
  * `by:"dogfood-ajan"` diye "insan onayı" yazdı. Bu, ürünün tek moat'ını
  * (dürüstlük) delen bir olaydı. Kapı artık KODDA:
  *
@@ -17,7 +17,7 @@
  * bot da geçebilir — o zaman kapı kapı olmaktan çıkar, süse döner. Bir ajanın
  * taklit EDEMEYECEĞİ tek sinyal, onay kanalının işletim sistemi düzeyinde bir
  * terminale bağlı olmasıdır. Bu yüzden tek ölçüt odur.
- * Bedeli bilinçli: `ocean verify` betikten koşturulamaz. Doğru bedel — bu komut
+ * Bedeli bilinçli: `topbeam verify` betikten koşturulamaz. Doğru bedel — bu komut
  * zaten "bir insan kendi gözüyle gördü" demek için var.
  *
  * <id> ya tek bir CLAIM ya da bir İŞ BİRİMİ (pasaport maddesi, `birim-…`)
@@ -34,7 +34,7 @@
  *   - .ocean/passport.jsonl'e APPEND edilir (değişmez onay logu),
  *   - kart yeniden kurulur, state + pano yazılır,
  *   - pasaport FULL-TİK olduysa BİR KEZ macOS bildirimi:
- *     "Ocean: ürün geliştirildi 🎉" (fullTickNotifiedAt ile tekrarlanmaz).
+ *     "Topbeam: ürün geliştirildi 🎉" (fullTickNotifiedAt ile tekrarlanmaz).
  *
  * Reddedilirse (H) hiçbir seviye değişmez — dürüstlük: onay zorla alınmaz.
  */
@@ -141,7 +141,7 @@ export function insanKapisi(deps: {
       message:
         'Onay kaydedilmedi: cevap bir terminalden gelmedi (pipe/otomasyon girdisi).\n' +
         'İnsan onayı bu üründe GERÇEK insan demektir — bir betik ya da ajan onay veremez.\n' +
-        'Bu komutu kendi terminalinde, elinle çalıştır: ocean verify <id>',
+        'Bu komutu kendi terminalinde, elinle çalıştır: topbeam verify <id>',
     };
   }
   // Kimlik listesi ledger.ts'te: onayı YAZAN kapı ile onayı GÖSTEREN kapı
@@ -180,7 +180,7 @@ export async function runVerify(cwd: string, id: string, deps: VerifyDeps): Prom
 
   const state = await readState(cwd);
   if (state === null) {
-    return { ok: false, error: "Bu proje Ocean'a bağlı değil. Önce: ocean init" };
+    return { ok: false, error: "Bu proje Topbeam'e bağlı değil. Önce: topbeam init" };
   }
 
   // ── hedefi çöz: tek claim mi, iş birimi mi? ──
@@ -209,7 +209,7 @@ export async function runVerify(cwd: string, id: string, deps: VerifyDeps): Prom
         (known.length > 0
           ? `Kayıtlı son claim id'leri:\n${known.join('\n')}` +
             (birimler.length > 0 ? `\nPasaport iş birimleri (hepsini tek onayla):\n${birimler.join('\n')}` : '')
-          : "Henüz hiç claim yok — önce: ocean sync"),
+          : "Henüz hiç claim yok — önce: topbeam sync"),
     };
   }
 
@@ -347,11 +347,12 @@ export async function runVerify(cwd: string, id: string, deps: VerifyDeps): Prom
   let notified = false;
   let fullTickNotifiedAt = state.fullTickNotifiedAt;
   if (fullTick && fullTickNotifiedAt === undefined) {
-    notified = await notify('Ocean', 'Ürün geliştirildi 🎉 — pasaporttaki tüm maddeler insan onaylı.');
+    notified = await notify('Topbeam', 'Ürün geliştirildi 🎉 — pasaporttaki tüm maddeler insan onaylı.');
     fullTickNotifiedAt = verification.at;
     log.push({
       ts: verification.at,
       text: 'Pasaport FULL-TİK: tüm maddeler insan onaylı — ürün geliştirildi 🎉',
+      // 'ocean' = LogSource enum DEĞERİ (şema uyumu; panoda etiket "topbeam").
       source: 'ocean' as const,
     });
   }

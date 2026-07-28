@@ -1,5 +1,5 @@
 /**
- * Ocean veri modeli — tek gerçek kaynak.
+ * Topbeam veri modeli — tek gerçek kaynak.
  *
  * DÜRÜSTLÜK YASALARI (ürün anayasası, ihlal = red):
  * - Kanıtsız claim gösterilmez. "ÇALIŞIYOR" asla otomatik söylenmez — yalnız
@@ -18,14 +18,18 @@ export const SCHEMA_VERSION = 1;
 /** Araç sürümü — TEK kaynak. UI/altbilgi/CLI buradan okur. */
 export const TOOL_VERSION = '0.1.0';
 
-/** Proje kökünde Ocean veri dizini ve durum dosyası. */
+/**
+ * Proje kökünde Topbeam veri dizini ve durum dosyası.
+ * NOT: dizin adı `.ocean` KALIR — marka Topbeam olsa da veri göçü riski
+ * almamak için bilinçli olarak sabit tutuldu.
+ */
 export const OCEAN_DIR = '.ocean';
 export const STATE_FILE = 'state.json';
 
 // ── Kanıt seviyeleri ─────────────────────────────────────────────────────────
 
 /**
- * Ocean kanıt seviyesi enum'u (ürün spec'indeki 4 seviye, Türkçe anahtar).
+ * Topbeam kanıt seviyesi enum'u (ürün spec'indeki 4 seviye, Türkçe anahtar).
  * - dosya-kaniti  : git diff + transcript uyuşuyor
  * - test-kaniti   : bash çıktısında geçen test sonucu
  * - insan-onayi   : kullanıcı verify etti
@@ -60,7 +64,7 @@ export type BpEvidenceLevel =
   | 'not_verified';
 
 /**
- * Ocean → BP seviye haritası (Keşif/BP raporu §2):
+ * Topbeam → BP seviye haritası (Keşif/BP raporu §2):
  * dosya-kaniti ≈ automatically_checked (type: git/file_analysis),
  * test-kaniti ≈ automatically_checked (type: command, exitCode'lu),
  * insan-onayi = human_verified, dogrulanmadi = not_verified.
@@ -152,7 +156,8 @@ export interface Claim {
  * - git          : git gerçekleri (commit/diff/status)
  * - test         : test komutu çıktısından çekilen sonuç satırı
  * - insan        : kullanıcının kendi notu / onayı
- * - ocean        : Ocean'ın kendi olayları (sync koştu, pasaport güncellendi)
+ * - ocean        : Topbeam'in kendi olayları (sync koştu, pasaport güncellendi).
+ *   DEĞER 'ocean' kalır (şema uyumu); panoda etiketi "topbeam" gösterilir.
  */
 export type LogSource = 'claude-beyan' | 'git' | 'test' | 'insan' | 'ocean';
 
@@ -211,7 +216,7 @@ export type CardRule =
 export interface NextAction {
   /** Tek fiil cümlesi. Örn: "Testleri çalıştır." */
   verb: string;
-  /** Çalıştırılabilir komut (pano statik — kullanıcı kopyalar). Örn: "ocean verify gorev-3" */
+  /** Çalıştırılabilir komut (pano statik — kullanıcı kopyalar). Örn: "topbeam verify gorev-3" */
   command?: string;
 }
 
@@ -300,7 +305,7 @@ export interface PassportItem {
   status: PassportItemStatus;
   /** Durum gerekçesi — tek cümle, teknik-olmayan dil. */
   reason?: string;
-  /** Bağlı claim id'leri (Ocean tarafı) — BP'ye aktarımda evidence'a çevrilir. */
+  /** Bağlı claim id'leri (Topbeam tarafı) — BP'ye aktarımda evidence'a çevrilir. */
   claimIds: string[];
   /** İnsan doğrulaması (varsa). */
   verification?: Verification;
@@ -380,7 +385,7 @@ export interface LogCounts {
  * ScopeNotes — "bu panonun kapsamı ve bilmedikleri". state.json'a KALICI yazılır
  * ve panoda kartın hemen altında gösterilir.
  *
- * Dürüstlük gerekçesi: Ocean gürültüyü keser (proje dışı düzenleme, ilişkisiz
+ * Dürüstlük gerekçesi: Topbeam gürültüyü keser (proje dışı düzenleme, ilişkisiz
  * beyan, sayı üretmeyen kontrol komutu). Kesilen şey görünmezse kullanıcı
  * panonun her şeyi gördüğünü sanır — bu, sessiz bir yalandır. Sayılar burada
  * durur; hepsi ÖLÇÜLMÜŞ, hiçbiri tahmin değildir.
@@ -402,7 +407,7 @@ export interface ScopeNotes {
   notlar: string[];
 }
 
-// ── Ocean durumu (.ocean/state.json) ─────────────────────────────────────────
+// ── Topbeam durumu (.ocean/state.json) ─────────────────────────────────────────
 
 /**
  * OceanState — `.ocean/state.json` şeması. Proje köküne yazılır (gitignored).
@@ -437,7 +442,7 @@ export interface OceanState {
   fullTickNotifiedAt?: string;
 }
 
-/** Boş başlangıç durumu üretici — `ocean init` bunu yazar. */
+/** Boş başlangıç durumu üretici — `topbeam init` bunu yazar. */
 export function newOceanState(projectName: string, now = new Date()): OceanState {
   const ts = now.toISOString();
   return {

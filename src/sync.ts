@@ -1,5 +1,5 @@
 /**
- * ocean sync — motor: collect → truth → card → state → pano.
+ * topbeam sync — motor: collect → truth → card → state → pano.
  *
  * Deterministik boru hattı (LLM yok, network yok):
  *   collectClaude(cwd) + collectGit(cwd)
@@ -41,7 +41,7 @@ import type { Claim, LogCounts, LogEntry, OceanState, ScopeNotes } from './types
 
 export interface SyncResult {
   ok: boolean;
-  /** ok=false ise insan-okur Türkçe hata (örn: önce ocean init). */
+  /** ok=false ise insan-okur Türkçe hata (örn: önce topbeam init). */
   error?: string;
   state?: OceanState;
   /** Dürüst durum notları (toplayıcı + birleşme). */
@@ -108,7 +108,7 @@ export async function runSync(cwd: string, opts: { now?: Date } = {}): Promise<S
   if (state === null) {
     return {
       ok: false,
-      error: "Bu proje Ocean'a bağlı değil (ya da .ocean/state.json okunamadı). Önce: ocean init",
+      error: "Bu proje Topbeam'e bağlı değil (ya da .ocean/state.json okunamadı). Önce: topbeam init",
       notes: [],
     };
   }

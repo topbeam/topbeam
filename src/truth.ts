@@ -94,7 +94,7 @@ const LIMITS = {
  * dogfood'daki "Beyan: Click ChatGPT send button" gürültüsünün kaynağı buydu.
  */
 const ANLAMLI_BIN_RE =
-  /^(git|npm|pnpm|yarn|bun|node|deno|tsc|eslint|prettier|biome|stylelint|jest|vitest|pytest|mocha|python3?|pip3?|poetry|uv|pipenv|cargo|go|rustc|make|cmake|docker|docker-compose|gradle|mvn|dotnet|swift|xcodebuild|expo|eas|next|vite|rollup|esbuild|webpack|tsx|ts-node|prisma|supabase|wrangler|vercel|netlify|surge|ocean|buildpassport)(?![\w-])/;
+  /^(git|npm|pnpm|yarn|bun|node|deno|tsc|eslint|prettier|biome|stylelint|jest|vitest|pytest|mocha|python3?|pip3?|poetry|uv|pipenv|cargo|go|rustc|make|cmake|docker|docker-compose|gradle|mvn|dotnet|swift|xcodebuild|expo|eas|next|vite|rollup|esbuild|webpack|tsx|ts-node|prisma|supabase|wrangler|vercel|netlify|surge|topbeam|ocean|buildpassport)(?![\w-])/;
 
 // ── dış tipler ───────────────────────────────────────────────────────────────
 
@@ -704,7 +704,7 @@ export function collapseRepeats(entries: readonly LogEntry[]): LogEntry[] {
 
 /**
  * Log sınırı — KANIT ÖNCELİKLİ. Sınır dolduğunda önce beyanlar düşer;
- * git/test/insan/ocean satırları (gerçeğin kendisi) en sona kadar korunur.
+ * git/test/insan/topbeam satırları (gerçeğin kendisi) en sona kadar korunur.
  */
 function capLog(log: readonly LogEntry[], notes: string[]): LogEntry[] {
   if (log.length <= LIMITS.logMax) return [...log];

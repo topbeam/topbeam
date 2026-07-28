@@ -75,7 +75,7 @@ interface Cevre {
 
 /** Kart ana butonunun göstereceği CLI komutu (pano statik — kullanıcı kopyalar). */
 export function verifyCommand(claimId: string): string {
-  return `ocean verify ${claimId}`;
+  return `topbeam verify ${claimId}`;
 }
 
 /** package.json metninden scripts alanını güvenle çıkar (bozuk JSON → {}). */
@@ -593,7 +593,7 @@ function yesilKosum(claim: Claim): boolean {
 /**
  * Açık `cd` hedefi yazılmamış koşumun dizini = PROJE KÖKÜ.
  *
- * Ocean tek projeye bağlıdır (.ocean o projenin içindedir), dolayısıyla dizin
+ * Topbeam tek projeye bağlıdır (.ocean o projenin içindedir), dolayısıyla dizin
  * belirtmeden koşulan bir komut o projenin kökünde koşmuştur. Sentinel gerçek
  * bir yol olamayacak bir karakterle başlar ki 'kok' adlı bir dizinle karışmasın.
  */
@@ -906,7 +906,7 @@ export function buildCard(claims: readonly Claim[], opts: CardOptions = {}): Car
       factLevel: 'dogrulanmadi',
       evidence: { gitDiff: null, testOutput: null, humanApproval: null },
       unknown: 'Claude Code bu projede henüz iz bırakmadı ya da senkron hiç koşmadı.',
-      action: { verb: 'Senkronu çalıştır.', command: 'ocean sync' },
+      action: { verb: 'Senkronu çalıştır.', command: 'topbeam sync' },
       why: 'Kart yalnız gerçek kayıtlardan üretilir; önce kayıtları toplamak gerekir.',
       doneWhen: 'İlk claim üretildiğinde kart gerçek işe geçer.',
       rule: 'kayit-yok',
