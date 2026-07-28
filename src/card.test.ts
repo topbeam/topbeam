@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 import type { Card, Claim } from './types.ts';
 import { CARD_PRIMARY_BUTTON_TR } from './types.ts';
 import {
+  HEURISTIC,
   RULE_ORDER,
   buildCard,
   claimKritik,
@@ -340,17 +341,45 @@ test('(a) kırık test SONRADAN yeşillendi → manşetten düşer, sıradaki ku
   assert.ok([kirik, yesil, acik].some((c) => c.id === 'test-s1-0'));
 });
 
-test('(b) sonradan BAŞKA komut yeşillendi → kırık test manşette KALIR', () => {
-  const kirik = testClaim('test-s1-0', { createdAt: '2026-07-28T08:00:00.000Z' });
-  const baskaYesil = yesilClaim('test-s1-1', {
+test('(b) FARKLI DİZİNDE yeşil koşum → kırık test manşette KALIR', () => {
+  const kirik = testClaim('test-s1-0', {
+    createdAt: '2026-07-28T08:00:00.000Z',
+    evidence: [{ kind: 'test-output', summary: 'ℹ fail 2', ref: 'cd kok/paket-a && npm test' }],
+  });
+  const baskaDizin = yesilClaim('test-s1-1', {
     text: '4 test geçti, 0 başarısız (npx vitest run).',
-    evidence: [{ kind: 'test-output', summary: 'ℹ pass 4', ref: 'npx vitest run' }],
+    evidence: [{ kind: 'test-output', summary: 'ℹ pass 4', ref: 'cd kok/paket-b && npx vitest run' }],
     signals: { failedTests: 0, passedTests: 4 },
   });
 
-  const card = buildCard([kirik, baskaYesil], { now: NOW });
+  const card = buildCard([kirik, baskaDizin], { now: NOW });
   assert.equal(card.rule, 'kirik-test');
   assert.equal(card.id, 'test-s1-0');
+});
+
+test('(b2) AYNI DİZİNDE başka komut yeşillendi → kırık test manşetten düşer', () => {
+  // Kırık kayıt tek dosyalık koşum; sonradan aynı dizinde tüm paket yeşil geçti.
+  // Eski davranış komut ÇEKİRDEĞİNE bakıp bunu kaçırıyordu (kart log'uyla çelişiyordu).
+  const kirik = testClaim('test-s1-0', {
+    createdAt: '2026-07-28T08:00:00.000Z',
+    evidence: [{ kind: 'test-output', summary: 'ℹ fail 2', ref: 'node --test src/card.test.ts' }],
+  });
+  const yesil = yesilClaim('test-s1-1'); // npm test — aynı dizin (proje kökü), 3 saat sonra
+  const acik = claim('dosya-transcript-s2', { createdAt: '2026-07-28T09:00:00.000Z', sessionId: 's2' });
+
+  const card = buildCard([kirik, yesil, acik], { now: NOW });
+  assert.notEqual(card.rule, 'kirik-test');
+  assert.equal(card.id, 'dosya-transcript-s2');
+
+  // Açık `cd` hedefi iki tarafta da aynıysa da düşer (dizin = kapsam).
+  const kirikCd = testClaim('test-s2-0', {
+    createdAt: '2026-07-28T08:00:00.000Z',
+    evidence: [{ kind: 'test-output', summary: 'ℹ fail 2', ref: 'cd kok/proje && node --test src/a.test.ts' }],
+  });
+  const yesilCd = yesilClaim('test-s2-1', {
+    evidence: [{ kind: 'test-output', summary: 'ℹ pass 19', ref: 'cd kok/proje && npm test' }],
+  });
+  assert.notEqual(buildCard([kirikCd, yesilCd], { now: NOW }).rule, 'kirik-test');
 });
 
 test('(c) kırık testten SONRA hiçbir şey yok → manşette kalır', () => {
@@ -445,18 +474,104 @@ test('yeşillenme kontrolü DETERMİNİSTİK: girdi sırası kartı değiştirme
   assert.deepEqual(buildCard(claims, { now: NOW }), a); // aynı girdi → aynı kart
 });
 
-test('birden çok kırık kayıt: yalnız yeşillenen düşer, öteki manşete geçer', () => {
+test('birden çok kırık kayıt: yalnız AYNI DİZİNDE yeşillenen düşer, öteki manşete geçer', () => {
   const kirikA = testClaim('test-s1-0', {
     createdAt: '2026-07-28T08:00:00.000Z',
-    evidence: [{ kind: 'test-output', summary: 'ℹ fail 2', ref: 'npx vitest run' }],
+    evidence: [{ kind: 'test-output', summary: 'ℹ fail 2', ref: 'cd kok/paket-a && npx vitest run' }],
     signals: { failedTests: 2, passedTests: 5 },
   });
-  const kirikB = testClaim('test-s1-1', { createdAt: '2026-07-28T09:00:00.000Z' }); // npm test
-  const yesilB = yesilClaim('test-s1-2'); // npm test yeşillendi
+  const kirikB = testClaim('test-s1-1', { createdAt: '2026-07-28T09:00:00.000Z' }); // npm test, proje kökü
+  const yesilB = yesilClaim('test-s1-2'); // npm test, proje kökü → yalnız kirikB'yi düşürür
 
   const card = buildCard([kirikA, kirikB, yesilB], { now: NOW });
   assert.equal(card.rule, 'kirik-test');
-  assert.equal(card.id, 'test-s1-0'); // yeşillenmeyen kırık manşete geçti
+  assert.equal(card.id, 'test-s1-0'); // başka dizindeki kırık manşete geçti
+});
+
+// ── bayat kırık kayıt: tazelik damgası yanıltmaz ─────────────────────────────
+
+test('BAYAT kırık kayıt manşette KALIR ama tarihini + yaşını AÇIKÇA yazar', () => {
+  const eski = testClaim('test-s1-0', { createdAt: '2026-07-11T09:00:00.000Z' }); // 17 gün önce
+  const card = buildCard([eski], { now: NOW });
+
+  // Yeşile döndüğü kayıt YOK → gizlenmez (yaşlandırarak susmak dürüstlüğü deler).
+  assert.equal(card.rule, 'kirik-test');
+  assert.ok(card.why.includes('2026-07-11'), 'gerekçe kaydın tarihini yazmalı');
+  assert.ok(card.why.includes('17 gün'), 'gerekçe kaydın yaşını yazmalı');
+  assert.ok(card.why.includes('bugünün ölçümü değil'));
+  assert.ok(card.unknown.includes('2026-07-11'), 'bilinmeyen satırı da tarihi taşımalı');
+  assert.ok(!card.why.includes('\n') && !card.unknown.includes('\n')); // tek cümle korunur
+});
+
+test('BAYAT etiketi sıfır-dışı exit dalında da çalışır', () => {
+  const eskiExit = claim('test-s1-1', {
+    kind: 'test',
+    text: 'Test komutu koşuldu (npx vitest run) ama sonuç çıktıdan okunamadı — doğrulanmadı. Komut exit 1 ile bitti.',
+    evidence: [{ kind: 'test-output', summary: 'koştu', ref: 'npx vitest run' }],
+    signals: { nonZeroExit: 1 },
+    createdAt: '2026-07-11T09:00:00.000Z',
+  });
+  const card = buildCard([eskiExit], { now: NOW });
+  assert.equal(card.rule, 'kirik-test');
+  assert.ok(card.why.includes('exit 1'));
+  assert.ok(card.why.includes('2026-07-11') && card.why.includes('17 gün'));
+});
+
+test('TAZE kırık kayıt tarih etiketi ALMAZ (gereksiz gürültü yok)', () => {
+  const taze = testClaim('test-s1-0', { createdAt: '2026-07-26T09:00:00.000Z' }); // 2 gün
+  const card = buildCard([taze], { now: NOW });
+  assert.equal(card.rule, 'kirik-test');
+  assert.equal(card.why.includes('2026-07-26'), false);
+  assert.ok(card.why.includes('her şeyin önünde'));
+});
+
+test('BAYAT eşiği: HEURISTIC.bayatKirikGun sınırı kilitli (6 gün etiketsiz, 7 gün etiketli)', () => {
+  assert.equal(HEURISTIC.bayatKirikGun, 7);
+  const alti = testClaim('test-a', { createdAt: '2026-07-22T11:00:00.000Z' }); // 6 gün 1 saat
+  const yedi = testClaim('test-b', { createdAt: '2026-07-21T11:00:00.000Z' }); // 7 gün 1 saat
+  assert.equal(buildCard([alti], { now: NOW }).why.includes('gün önceki koşum'), false);
+  assert.ok(buildCard([yedi], { now: NOW }).why.includes('7 gün önceki koşum'));
+});
+
+test('BAYAT: komut kaydı yoksa "yeşile dönmedi" İDDİA EDİLMEZ (kanıtsız cümle yok)', () => {
+  const komutsuz = testClaim('test-s1-0', {
+    createdAt: '2026-07-11T09:00:00.000Z',
+    evidence: [{ kind: 'test-output', summary: 'ℹ fail 2' }], // ref YOK → eşleştirilemez
+  });
+  const why = buildCard([komutsuz], { now: NOW }).why;
+  assert.ok(why.includes('2026-07-11')); // tarih yine yazılır
+  assert.equal(why.includes('yeşile döndüğü'), false); // ama kanıtsız iddia edilmez
+});
+
+// ── kartın gösterdiği gerçeğin TARİHİ ────────────────────────────────────────
+
+test('factDate = gerçeğin kendi tarihi (kartın üretim tarihiyle karışmaz)', () => {
+  const eski = testClaim('test-s1-0', { createdAt: '2026-07-11T09:00:00.000Z' });
+  const card = buildCard([eski], { now: NOW });
+  assert.equal(card.factDate, eski.createdAt);
+  assert.equal(card.updatedAt, NOW.toISOString());
+  assert.notEqual(card.factDate, card.updatedAt); // 17 günlük fark kartta görünür
+
+  // Kanıtlı-ama-onaysız kartta da gerçeğin tarihi taşınır.
+  const kanitli = claim('dosya-git-s1', {
+    level: 'dosya-kaniti',
+    createdAt: '2026-07-27T10:00:00.000Z',
+    evidence: [{ kind: 'git-diff', summary: 'git: 1 dosya' }],
+  });
+  const onayKarti = buildCard([kanitli], { now: NOW });
+  assert.equal(onayKarti.rule, 'insan-onayi-bekliyor');
+  assert.equal(onayKarti.factDate, kanitli.createdAt);
+
+  // Tam kartta (her şey insan onaylı) da.
+  const onayli = buildCalisiyorClaim('Giriş akışı', {
+    by: 'Ekin',
+    at: '2026-07-28T11:00:00.000Z',
+    decision: 'approved',
+  });
+  assert.equal(buildCard([onayli], { now: NOW }).factDate, onayli.createdAt);
+
+  // Kaydı olmayan boş kartta UYDURULMAZ.
+  assert.equal(buildCard([], { now: NOW }).factDate, undefined);
 });
 
 test('test sayısı ATIFLI: gerekçe hangi komutun sonucu olduğunu söyler', () => {

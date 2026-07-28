@@ -319,3 +319,23 @@ test('eleme yoksa dürüst "elenen kayıt yok" cümlesi', () => {
   const html = renderPano(st);
   assert.ok(html.includes('elenen kayıt yok'));
 });
+
+test('kart gerçeğinin KENDİ tarihi panoda görünür (tazelik damgası yanıltmaz)', () => {
+  const st = stateFixture();
+  const eskiKirik = claimFixture({
+    id: 'test-eski-0',
+    text: 'Test koşumunda 2 test başarısız, 17 test geçti (npm test).',
+    level: 'test-kaniti',
+    kind: 'test',
+    evidence: [{ kind: 'test-output', summary: 'ℹ fail 2', ref: 'npm test' }],
+    signals: { failedTests: 2, passedTests: 17 },
+    createdAt: '2026-07-11T09:00:00Z',
+  });
+  st.claims = [eskiKirik];
+  st.card = buildCard(st.claims, { now: NOW });
+
+  const html = renderPano(st);
+  assert.ok(html.includes('Bu gerçek'), 'gerçeğin tarihi kartta ayrı satırda durmalı');
+  assert.ok(html.includes('2026-07-11 09:00'), 'gösterilen tarih kaydın kendi tarihi olmalı');
+  assert.ok(html.includes('Kart güncellendi'), 'kartın üretim damgası ayrı kalır');
+});

@@ -227,6 +227,12 @@ export interface Card {
   fact: string;
   /** (a) Kesinlik seviyesi — açık, gizlenmez. */
   factLevel: EvidenceLevel;
+  /**
+   * (a) Gerçeğin KENDİ tarihi = dayandığı claim'in createdAt'i. updatedAt ile
+   * karıştırılmasın: kart bugün üretilir, gösterdiği koşum 17 gün önceki
+   * olabilir. Kaydı olmayan kartta (kayit-yok) yoktur — uydurulmaz.
+   */
+  factDate?: string; // ISO-8601
   /** (b) Kanıt — git diff / test çıktısı / insan onayı, üç ayrı satır. */
   evidence: CardEvidence;
   /** (c) Eksik/belirsiz — EN önemli TEK bilinmeyen. */

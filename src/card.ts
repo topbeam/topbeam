@@ -9,7 +9,8 @@
  * ÖNCELİK SIRASI (RULE_ORDER, ilk eşleşen kazanır):
  *  1. kirik-test   — test çıktısında başarısız/hata kaydı. Kırık test dururken
  *                    üstüne konan her iş şüphelidir → her şeyin önünde. AMA
- *                    kayıt SONRADAN yeşillendiyse manşete çıkmaz (aşağı bak).
+ *                    AYNI DİZİNDE sonradan yeşil bir koşum varsa manşete çıkmaz
+ *                    (aşağı bak); bayat kayıt ise TARİHİYLE birlikte yazılır.
  *  2. kritik-dosya — doğrulanmamış iş ödeme/kimlik/şema/yapılandırma dosyasına
  *                    dokunmuş: sessiz hatanın en pahalı olduğu yer.
  *  3. kayip-riski  — çok dosyalı küme, git kaydında izi yok: en çok emek, en az kanıt.
@@ -37,9 +38,13 @@
  * - Çalışmayacak komut ÖNERİLMEZ: git deposu olmayan dizinde 'git status'
  *   göstermek sahte affordance'tır (kullanıcıyı hata mesajına yollar) →
  *   o dalda hareket insan onayına döner (CardOptions.isGitRepo === false).
- * - KART KENDİ LOG'UYLA ÇELİŞMEZ: aynı test komutu daha SONRA 0 başarısız
- *   sonuç verdiyse, eski kırık koşum manşete çıkarılmaz. Kayıt silinmez
+ * - KART KENDİ LOG'UYLA ÇELİŞMEZ: aynı DİZİNDE daha SONRA yeşil bir test
+ *   koşumu kaydedildiyse, eski kırık koşum manşete çıkarılmaz. Kayıt silinmez
  *   (log'da durur) — yalnız "sıradaki hareket" olmaktan düşer.
+ * - TAZELİK YALAN SÖYLEMEZ: kart bugün üretilir ama gösterdiği gerçek eski
+ *   olabilir. Bu yüzden kartta gerçeğin kendi TARİHİ (factDate) durur ve bayat
+ *   bir kırık koşum manşete çıkarken tarihini + yaşını AÇIKÇA yazar — "kart
+ *   güncellendi" damgası eski bir hatayı bugünün ölçümü gibi göstermez.
  * - Gerekçe cümlesinde bir test sayısı geçiyorsa HANGİ KOMUTA ait olduğu da
  *   yazar (yanlış atıf şüphesinin panzehiri); komut kayıttan gelir, uydurulmaz.
  */
@@ -97,6 +102,22 @@ export const HEURISTIC = {
   kayipRiskiDosya: 4,
   /** Doğrulanmamış işlerin HEPSİ bu kadar gün eskiyse "bayat" (taze iş yok). */
   bayatGun: 3,
+  /**
+   * Kırık test kaydı bu yaştan (gün) eskiyse manşet cümlesi kaydın TARİHİNİ ve
+   * YAŞINI açıkça yazar.
+   *
+   * NEDEN 7: bir çalışma haftası. Aynı test bir hafta boyunca bir daha
+   * koşmadıysa o sonuç artık "bugünün ölçümü" değildir; kartın taze damgasıyla
+   * yan yana durunca kullanıcıya bugün kırılmış gibi okunur (üye jürisinin
+   * yakaladığı yanılgı: 17 gün önceki hata, bugünün tarihiyle).
+   *
+   * NEDEN MANŞETTEN DÜŞÜRMÜYORUZ (bilinçli karar): yeşile döndüğü kayıtlarda
+   * GÖRÜNMEYEN bir kırık koşumu sırf eskidiği için gizlemek, dürüstlük yasasını
+   * yaşlandırma ile delmek olurdu — kayıt hâlâ bilinen tek sonuç. Yanıltıcı olan
+   * kaydın kendisi değil, TARİHSİZ gösterilmesiydi → etiketliyoruz, saklamıyoruz.
+   * (Yeşillenen kayıt zaten bir üst mekanizmayla manşetten düşer.)
+   */
+  bayatKirikGun: 7,
   /** Küme kuralının tetiklenmesi için aynı oturumda gereken doğrulanmamış kayıt. */
   kumeEnAz: 2,
   /** Gerekçe cümlesinde ad ad sayılan kritik dosya sayısı. */
@@ -271,6 +292,16 @@ function gunFarki(iso: string, now: Date): number | null {
   const ms = now.getTime() - t;
   if (ms < 0) return 0; // gelecekten gelen kayıt: yaş 0, "bayat" sayılmaz
   return Math.floor(ms / 86_400_000);
+}
+
+/**
+ * ISO damgasının GÜN kısmı (YYYY-AA-GG) — cümlede geçen tarih. Yerel saat
+ * dilimine çevrilmez (deterministik: aynı kayıt her makinede aynı tarihi verir);
+ * biçim okunamıyorsa null döner ve cümle tarihsiz kurulur (uydurma yok).
+ */
+function tarihKisa(iso: string): string | null {
+  const m = /^(\d{4}-\d{2}-\d{2})/.exec(iso.trim());
+  return m === null ? null : (m[1] ?? null);
 }
 
 /** Claim kanıtlarını kartın ÜÇ AYRI satırına eşle — olmayan tür null kalır. */
@@ -560,19 +591,53 @@ function yesilKosum(claim: Claim): boolean {
 }
 
 /**
+ * Açık `cd` hedefi yazılmamış koşumun dizini = PROJE KÖKÜ.
+ *
+ * Ocean tek projeye bağlıdır (.ocean o projenin içindedir), dolayısıyla dizin
+ * belirtmeden koşulan bir komut o projenin kökünde koşmuştur. Sentinel gerçek
+ * bir yol olamayacak bir karakterle başlar ki 'kok' adlı bir dizinle karışmasın.
+ */
+const PROJE_KOKU = ' proje-koku';
+
+/** Koşumun proje-göreli dizini (açık `cd` hedefi ya da proje kökü). */
+function dizin(k: Kosum): string {
+  return k.scope ?? PROJE_KOKU;
+}
+
+/**
+ * Yeşil koşum, kırık koşumu manşetten düşürür mü?
+ *
+ * BİRİNCİL ÖLÇÜT DİZİN: aynı dizinde daha sonra yeşil bir test koşumu
+ * kaydedildiyse düşürür — komut metni birebir aynı olmasa bile. Eski davranış
+ * komut ÇEKİRDEĞİNE bağlıydı; o yüzden 'node --test src/a.test.ts' kırığı,
+ * aynı dizinde sonradan yeşil geçen 'npm test' kaydına rağmen manşette kalıyordu
+ * (kart kendi log'uyla çelişiyordu — üye jürisinin maddesi).
+ *
+ * ÇEKİRDEK EŞLEŞMESİ EK SİNYAL olarak durur: dizin bilgisi iki taraftan birinde
+ * yoksa (biri açıkça `cd` yazmış, öteki yazmamış) aynı çekirdek yine de aynı
+ * koşumdur. Böylece "proje kökü farklı yazılmış aynı komut" eşleşmesi korunur.
+ *
+ * BİLİNEN SINIR (dürüstçe): dizin bazlı eşleşme, aynı dizinde koşan DAR bir
+ * yeşil koşumun (tek test dosyası) GENİŞ bir kırık koşumu da manşetten
+ * düşürmesine izin verir — koşumun kapsam genişliği ölçülemez, karşılaştırma
+ * uydurma olurdu. Bu düşürme "test düzeldi" demek DEĞİLDİR: kayıt log'da aynen
+ * durur, kart yalnız onu "sıradaki hareket" olarak öne çıkarmaz.
+ */
+function yesilDusururMu(kirik: Kosum, yesil: Kosum): boolean {
+  if (dizin(kirik) === dizin(yesil)) return true; // aynı dizin → düşer
+  if (kirik.core !== yesil.core) return false;
+  // Çekirdek aynı: dizin yalnız İKİ tarafta da açıkça yazılmışsa ayırır.
+  return kirik.scope === null || yesil.scope === null;
+}
+
+/**
  * Kırık test kaydı SONRADAN yeşillendi mi?
  *
- * Dogfood dersi (üye jürisi): kart, kendi log'unda yeşillendiği görünen bir
- * testi manşete çıkarıyordu — kart kendi kanıtıyla çelişiyordu. Kural: aynı
- * koşumun DAHA SONRAKİ bir kaydı 0 başarısız + >0 geçen sonuç verdiyse bu
- * kırık kayıt geçmiştir, manşetten düşer.
+ * Kural: kırık kaydın dizininde (yukarı bak) DAHA SONRA 0 başarısız + >0 geçen
+ * bir koşum kaydedildiyse bu kırık kayıt geçmiştir, manşetten düşer.
  *
- * Muhafazakâr taraf: komut kaydı yoksa ya da eşleşmiyorsa DÜŞMEZ (kırık
- * kalır) — yanlış "temizlendi" demektense fazladan uyarmak yeğdir.
- *
- * BİLİNEN SINIR (dürüstçe): tek Ocean kökü altında birkaç alt-proje varsa ve
- * iki oturum da dizini AÇIKÇA yazmadan aynı komutu ('npm test') koştuysa,
- * kayıtlar aynı koşum sayılır. Kayıt silinmez — log'da ikisi de durur.
+ * Muhafazakâr taraf: komut kaydı yoksa DÜŞMEZ (kırık kalır) — yanlış
+ * "temizlendi" demektense fazladan uyarmak yeğdir.
  */
 function sonradanYesillendi(claim: Claim, all: readonly Claim[]): boolean {
   const key = kosumAnahtari(claim);
@@ -582,9 +647,8 @@ function sonradanYesillendi(claim: Claim, all: readonly Claim[]): boolean {
     if (!sonraMi(c.createdAt, claim.createdAt)) continue;
     if (!yesilKosum(c)) continue;
     const other = kosumAnahtari(c);
-    if (other === null || other.core !== key.core) continue;
-    if (other.scope !== null && key.scope !== null && other.scope !== key.scope) continue;
-    return true;
+    if (other === null) continue;
+    if (yesilDusururMu(key, other)) return true;
   }
   return false;
 }
@@ -623,14 +687,39 @@ function kuralKirikTest(ctx: Ctx): Secim | null {
   const atif = komutAtfi(claim);
   const atifOn = atif !== undefined ? `${atif}: ` : '';
 
-  const why =
+  /**
+   * BAYAT KAYIT ETİKETİ. Kayıt bayatKirikGun'den eskiyse cümle tarihi ve yaşı
+   * söyler; kartın "bugün güncellendi" damgası eski hatayı taze göstermesin.
+   * "Yeşile döndüğü görünmüyor" ancak komut kaydı VARSA söylenir — komutsuz
+   * kayıtta eşleştirme yapılamadığı için o iddia kanıtsız olurdu.
+   */
+  const yas = gunFarki(claim.createdAt, ctx.now);
+  const tarih = tarihKisa(claim.createdAt);
+  const bayat = yas !== null && tarih !== null && yas >= HEURISTIC.bayatKirikGun;
+  const yesilKaydiAranabilir = kosumAnahtari(claim) !== null;
+  const bayatKuyruk = bayat
+    ? ` ama kayıt ${tarih} tarihli — ${yas} gün önceki koşum, bugünün ölçümü değil${
+        yesilKaydiAranabilir ? '; yeşile döndüğü kayıtlarda görünmediği için hâlâ önde' : ''
+      }.`
+    : null;
+
+  const bas =
     failed !== undefined
-      ? `Kayıtlarda kırık test var (${atifOn}${failed} başarısız) — kırık test dururken üstüne konan iş de şüpheli, o yüzden bu her şeyin önünde.`
-      : `Test komutu sıfır-dışı çıkışla bitti (${atifOn}exit ${s?.exit}) — kırık koşum sinyali, doğrulanmamış işlerin önüne geçer.`;
+      ? `Kayıtlarda kırık test var (${atifOn}${failed} başarısız)`
+      : `Test komutu sıfır-dışı çıkışla bitti (${atifOn}exit ${s?.exit})`;
+  const tazeKuyruk =
+    failed !== undefined
+      ? ' — kırık test dururken üstüne konan iş de şüpheli, o yüzden bu her şeyin önünde.'
+      : ' — kırık koşum sinyali, doğrulanmamış işlerin önüne geçer.';
+  const why = `${bas}${bayatKuyruk ?? tazeKuyruk}`;
+
+  const bayatNot = bayat ? ` — bu sonuç ${tarih} tarihli koşumdan, ${yas} gün önce` : '';
   const unknown =
     failed !== undefined
-      ? 'Testin şu an hâlâ kırık olup olmadığı bilinmiyor — bu sonuç son kayıtlı koşumdan.'
-      : 'Komutun neden hata koduyla bittiği ve şu an hâlâ hata verip vermediği bilinmiyor.';
+      ? bayat
+        ? `Testin şu an hâlâ kırık olup olmadığı bilinmiyor${bayatNot}.`
+        : 'Testin şu an hâlâ kırık olup olmadığı bilinmiyor — bu sonuç son kayıtlı koşumdan.'
+      : `Komutun neden hata koduyla bittiği ve şu an hâlâ hata verip vermediği bilinmiyor${bayatNot}.`;
 
   return {
     claim,
@@ -786,6 +875,7 @@ function kartYap(secim: Secim, cevre: Cevre, updatedAt: string): Card {
     id: secim.claim.id,
     fact: secim.claim.text, // AYNEN
     factLevel: secim.claim.level, // AYNEN — yükseltme yok
+    factDate: secim.claim.createdAt, // gerçeğin kendi tarihi (kart tarihi DEĞİL)
     evidence: evidenceLines(secim.claim),
     unknown: secim.unknown ?? upgradeUnknown(secim.claim),
     action: secim.action ?? upgradeAction(secim.claim, cevre),
@@ -850,6 +940,7 @@ export function buildCard(claims: readonly Claim[], opts: CardOptions = {}): Car
       id: pickEvidenced.id,
       fact: pickEvidenced.text,
       factLevel: pickEvidenced.level,
+      factDate: pickEvidenced.createdAt,
       evidence: evidenceLines(pickEvidenced),
       unknown: 'Ürünün senin gözünle istenen davranışı verdiği henüz doğrulanmadı.',
       action: { verb: 'Sonucu kendin doğrula.', command: verifyCommand(pickEvidenced.id) },
@@ -869,6 +960,7 @@ export function buildCard(claims: readonly Claim[], opts: CardOptions = {}): Car
     id: 'kart-tam',
     fact: latest.text,
     factLevel: latest.level,
+    factDate: latest.createdAt,
     evidence: evidenceLines(latest),
     unknown: 'Şu an bekleyen doğrulanmamış iş görünmüyor.',
     action: { verb: 'Claude ile sıradaki işi başlat.' },

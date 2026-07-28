@@ -112,6 +112,13 @@ function renderCard(card: Card): string {
       ${levelPill(card.factLevel)}
     </div>
     <h2 class="fact">${esc(card.fact)}</h2>
+    ${
+      // Gerçeğin KENDİ tarihi — kartın güncellenme damgasıyla karışmasın diye
+      // fact'in hemen altında durur (kart bugün üretilir, koşum eski olabilir).
+      card.factDate !== undefined
+        ? `<p class="factstamp">Bu gerçek <span class="mono">${esc(fmtTs(card.factDate))}</span> tarihli kayıttan</p>`
+        : ''
+    }
     <div class="evrows">
       ${row('Git diff', ev.gitDiff)}
       ${row('Test çıktısı', ev.testOutput)}
@@ -379,6 +386,7 @@ header.top .goal .k{font-family:var(--mono);font-size:9.5px;letter-spacing:.14em
 .heroTop{display:flex;align-items:center;gap:10px;margin-bottom:14px}
 .heroTop .pill{margin-left:auto}
 .fact{font-size:21px;font-weight:600;letter-spacing:-.02em;line-height:1.24;max-width:64ch}
+.factstamp{margin-top:7px;font-size:11px;color:var(--muted)}
 .pill{font-family:var(--mono);font-size:9px;letter-spacing:.09em;text-transform:uppercase;padding:3px 7px;border-radius:6px;font-weight:500;white-space:nowrap}
 .ev-test{color:var(--ok);background:rgba(52,211,153,.13)}
 .ev-file{color:var(--info);background:rgba(56,189,248,.12)}
