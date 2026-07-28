@@ -3,13 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Ocean — Claude ne yaptı? Şimdi ne yapmalısın?</title>
-<meta name="description" content="Ocean, Claude Code transcript'ini ve git'i deterministik okur; hangi iddianın kanıtı olduğunu ve sıradaki tek hareketi söyler. LLM yok, ağ yok, senin makinende.">
+<title>Topbeam — Claude ne yaptı? Şimdi ne yapmalısın?</title>
+<meta name="description" content="Topbeam, Claude Code transcript'ini ve git'i deterministik okur; hangi iddianın kanıtı olduğunu ve sıradaki tek hareketi söyler. LLM yok, ağ yok, senin makinende.">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#161b14">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23161b14'/%3E%3Cpath d='M5 16h22' stroke='%23edf1e8' stroke-opacity='.22' stroke-width='2' stroke-linecap='round'/%3E%3Ccircle cx='16' cy='16' r='4.5' fill='%234dd894'/%3E%3C/svg%3E">
 <style>
-/* ── Ocean landing · REVERI İşlik · tek dosya, dış istek yok ─────────────── */
+/* ── Topbeam landing · REVERI İşlik · tek dosya, dış istek yok ───────────── */
 
 :root{
   --bg:#161b14;
@@ -297,6 +297,16 @@ a.lnk:hover,a.lnk:focus-visible{border-bottom-color:var(--acc)}
 
 /* ── 7. FOOTER ─────────────────────────────────────────────────────────── */
 footer{border-top:1px solid var(--line-soft);padding-block:clamp(2.5rem,6vw,3.5rem);background:#131811}
+.origin{
+  font-family:var(--serif);
+  font-size:clamp(1rem,1.2vw + .72rem,1.15rem);
+  line-height:1.5;color:var(--ink2);
+  border-left:2px solid var(--apricot);
+  padding-left:clamp(.9rem,2.5vw,1.4rem);
+  margin:0 0 clamp(1.6rem,4vw,2.2rem);
+  max-width:38rem;
+}
+.origin b{color:var(--ink);font-weight:400}
 .fline{display:flex;flex-wrap:wrap;gap:.4rem 1.1rem;font-size:.82rem;color:var(--ink2)}
 .fline span::before{content:"·";margin-right:1.1rem;opacity:.5}
 .fline span:first-child::before{content:none;margin:0}
@@ -319,20 +329,20 @@ footer a:hover{border-bottom-color:var(--acc)}
   <div class="wrap">
     <div class="brand">
       <span class="dot" aria-hidden="true"></span>
-      <span class="name">Ocean</span>
+      <span class="name">Topbeam</span>
       <span class="by">by REVERI</span>
     </div>
 
     <h1>Claude ne yaptı?<br><span class="q2">Şimdi ne yapmalısın?</span></h1>
 
     <p class="lead">
-      Ocean, Claude Code transcript'ini ve git'in kendisini deterministik okur —
+      Topbeam, Claude Code transcript'ini ve git'in kendisini deterministik okur —
       LLM çağrısı yok, ağ çağrısı yok, her şey senin makinende. Modelin
       &ldquo;bitti, çalışıyor&rdquo; cümlesi özete giremez; yalnız kayıt girer.
     </p>
 
     <p class="promise">
-      Ocean sana projenin hikâyesini anlatmaz; mevcut gerçeği ve
+      Topbeam sana projenin hikâyesini anlatmaz; mevcut gerçeği ve
       ilerlemek için gereken tek hareketi söyler.
     </p>
 
@@ -340,23 +350,33 @@ footer a:hover{border-bottom-color:var(--acc)}
       <span class="eyebrow">Kurulum</span>
       <!-- YAYIN GÜNÜ: npm publish yapıldıktan SONRA — (1) .cmd'den "soon" sınıfını kaldır,
            (2) <span class="soonTag"> yerine <button class="copy" type="button"
-               data-copy="npx ocean-code init">Kopyala</button> koy,
-           (3) aşağıdaki .prelaunch bloğunu sil. Öncesinde hiçbirini yapma. -->
+               data-copy="npx topbeam init">Kopyala</button> koy,
+           (3) aşağıdaki .prelaunch bloğunun BİRİNCİ paragrafını (yayın durumu) sil;
+               İKİNCİ paragraf (ad geçişi / .ocean klasörü) kalsın — o hâlâ doğru.
+           Öncesinde hiçbirini yapma. -->
       <div class="cmd soon">
-        <code>npx ocean-code init</code>
+        <code>npx topbeam init</code>
         <span class="soonTag">yayından sonra</span>
       </div>
 
-      <p class="tiny prelaunch">
-        <b>Yayın durumu:</b> Ocean henüz npm'e yayınlanmadı — yukarıdaki komut bugün
-        çalışmıyor. Bu yüzden kopyala düğmesi de yok: çalışmayan komutu kopyalatmak
-        Ocean'ın kendi kuralına aykırı olurdu.
-        Paket adı <code>ocean-code</code>; npm'deki <code>ocean</code> ve
-        <code>ocean-cli</code> başka kişilerin ilgisiz paketleridir, onları kurma.
-      </p>
+      <div class="tiny prelaunch">
+        <p>
+          <b>Yayın durumu:</b> Topbeam henüz npm'e yayınlanmadı — yukarıdaki komut bugün
+          çalışmıyor. Bu yüzden kopyala düğmesi de yok: çalışmayan komutu kopyalatmak
+          Topbeam'in kendi kuralına aykırı olurdu.
+          Paket adı <code>topbeam</code> — npm'de bugün boş (kontrol edildi).
+          Kısaltması yok: <code>beam</code> diye bir komut olmayacak.
+        </p>
+        <p>
+          <b>Ad geçişi:</b> ürün 2026-07-28'de <em>Ocean</em> adından Topbeam'e geçti —
+          paket adı, komut adı ve arayüz metinleri artık <code>topbeam</code>.
+          Diskteki çalışma klasörü bilerek <code>.ocean/</code> kaldı: mevcut kurulumlarda
+          veri göçü riski çıkmasın diye. Tek istisna bu, gizlemiyorum.
+        </p>
+      </div>
 
       <p class="tiny reach">
-        Bugün denemenin tek yolu var: <a class="lnk" href="mailto:info@reveriajans.com?subject=Ocean%20erken%20eri%C5%9Fim">erken erişim için yaz</a>
+        Bugün denemenin tek yolu var: <a class="lnk" href="mailto:info@reveriajans.com?subject=Topbeam%20erken%20eri%C5%9Fim">erken erişim için yaz</a>
         — <span class="mail">info@reveriajans.com</span>. Otomatik liste yok, cevabı insan yazar.
       </p>
 
@@ -381,7 +401,7 @@ footer a:hover{border-bottom-color:var(--acc)}
     </ol>
 
     <p class="notpad">
-      Ocean ikinci bir görev panosu oluşturmaz — mevcut kanıtı kendi okur.
+      Topbeam ikinci bir görev panosu oluşturmaz — mevcut kanıtı kendi okur.
     </p>
 
     <div class="field">
@@ -401,9 +421,9 @@ footer a:hover{border-bottom-color:var(--acc)}
   <div class="wrap narrow">
     <div class="head">
       <span class="eyebrow acc">Gerçek pano çıktısı</span>
-      <h2>Ocean tek bir şey gösterir.</h2>
+      <h2>Topbeam tek bir şey gösterir.</h2>
       <p class="small">
-        Aşağıdaki kart Ocean'ın kendi geliştirilmesi sırasında üretildi. Birebir,
+        Aşağıdaki kart Topbeam'in kendi geliştirilmesi sırasında üretildi. Birebir,
         düzeltilmeden. Uydurma örnek değil.
       </p>
     </div>
@@ -459,6 +479,11 @@ footer a:hover{border-bottom-color:var(--acc)}
     <p class="tiny cardnote">
       Kartta tek bir hareket var. Liste değil, öncelik sırası değil — sıradaki tek hareket.
     </p>
+    <p class="tiny cardnote" style="margin-top:.6rem">
+      Kart, ürünün adı değişmeden önce üretildi; içindeki komut <code>ocean verify</code> yazıyor —
+      bugünkü sürüm <code>topbeam verify</code> yazıyor. Kartı elle düzeltmedim: düzeltseydim
+      üstündeki &ldquo;birebir, düzeltilmeden&rdquo; cümlesi yalan olurdu.
+    </p>
   </div>
 </section>
 
@@ -471,28 +496,28 @@ footer a:hover{border-bottom-color:var(--acc)}
     <ol class="steps">
       <li>
         <span class="n">01</span>
-        <h3>npx ocean-code init</h3>
-        <p>Projeyi bağlar. <code>.ocean/</code> kurulur, projenin CLAUDE.md'sine kısa bir Ocean bölümü eklenir. Sen elle bir şey doldurmazsın.</p>
+        <h3>npx topbeam init</h3>
+        <p>Projeyi bağlar. Çalışma klasörü kurulur (adı <code>.ocean/</code> — ürünün eski adından kalma, veri göçü olmasın diye korundu), projenin CLAUDE.md'sine kısa bir Topbeam bölümü eklenir. Sen elle bir şey doldurmazsın.</p>
       </li>
       <li>
         <span class="n">02</span>
         <h3>Normal çalış</h3>
-        <p>Claude Code ile her zamanki gibi devam et. Ocean arada bir şey istemez, akışını bölmez, ayrı bir yere kayıt tutturmaz.</p>
+        <p>Claude Code ile her zamanki gibi devam et. Topbeam arada bir şey istemez, akışını bölmez, ayrı bir yere kayıt tutturmaz.</p>
       </li>
       <li>
         <span class="n">03</span>
-        <h3>npx ocean-code sync</h3>
+        <h3>npx topbeam sync</h3>
         <p>Transcript kayıtları + git gerçekleri okunur; kanıt-seviyeli iddialar, log geçmişi ve kart üretilir. <code>.ocean/pano.html</code> yazılır.</p>
       </li>
       <li>
         <span class="n">04</span>
-        <h3>npx ocean-code open</h3>
+        <h3>npx topbeam open</h3>
         <p>Pano yolunu yazdırır. Tarayıcıyı otomatik açmaz — sen açarsın.</p>
       </li>
     </ol>
 
     <p class="tiny" style="margin-top:1.1rem">
-      Beşinci komut yalnız senin için: <code>npx ocean-code verify &lt;id&gt;</code> — bir iddianın
+      Beşinci komut yalnız senin için: <code>npx topbeam verify &lt;id&gt;</code> — bir iddianın
       kanıtlarını gösterir, onayını sorar. İnsan onayı tek meşru yükseltme yoludur ve geri alınmaz.
       Pasaportun tüm maddeleri onaylandığında bir kez bildirim düşer.
     </p>
@@ -500,9 +525,9 @@ footer a:hover{border-bottom-color:var(--acc)}
     <p class="tiny" style="margin-top:.7rem">
       Yukarıdaki dört başlıktaki <code>npx</code> biçimi yayın sonrasını gösterir —
       paket npm'e çıkana kadar bu komutlar çalışmaz (yukarıdaki yayın durumu notu).
-      Paket adı <code>ocean-code</code>, komut adı <code>ocean</code>: global kurarsan
-      (<code>npm i -g ocean-code</code>) komutlar kısaca <code>ocean sync</code> olur —
-      panonun kendi çıktısında gördüğün ad budur.
+      Paket adı ve komut adı aynı: <code>topbeam</code>. Global kurarsan
+      (<code>npm i -g topbeam</code>) komutlar kısaca <code>topbeam sync</code> olur —
+      yayın sürümünde panonun kendi çıktısında göreceğin ad budur.
     </p>
   </div>
 </section>
@@ -512,7 +537,7 @@ footer a:hover{border-bottom-color:var(--acc)}
   <div class="wrap narrow">
     <span class="eyebrow">Ürünün anayasası</span>
     <h2>&ldquo;Değişti&rdquo; ile &ldquo;çalışıyor&rdquo; aynı şey değildir.</h2>
-    <p class="lead">Ocean bu ikisini asla aynı kutuya koymaz. Her iddia bir seviye taşır.</p>
+    <p class="lead">Topbeam bu ikisini asla aynı kutuya koymaz. Her iddia bir seviye taşır.</p>
 
     <ul class="levels">
       <li>
@@ -521,7 +546,7 @@ footer a:hover{border-bottom-color:var(--acc)}
       </li>
       <li>
         <span class="badge b-seems">Uygulandı görünüyor</span>
-        <p>Düzenleme kaydı var, ama git'te karşılığı yok. Ocean burada &ldquo;oldu&rdquo; demez; ne bilmediğini söyler.</p>
+        <p>Düzenleme kaydı var, ama git'te karşılığı yok. Topbeam burada &ldquo;oldu&rdquo; demez; ne bilmediğini söyler.</p>
       </li>
       <li>
         <span class="badge b-none">Doğrulanmadı</span>
@@ -548,7 +573,7 @@ footer a:hover{border-bottom-color:var(--acc)}
       <div class="drow"><span class="who">ccusage</span><span class="what">ne harcadığını söyler</span></div>
       <div class="drow"><span class="who">CodeRabbit</span><span class="what">kodun iyi mi diye tahmin eder</span></div>
       <div class="drow"><span class="who">clerk</span><span class="what">hikâye anlatır</span></div>
-      <div class="drow me"><span class="who">Ocean</span><span class="what">Claude'un hangi iddiasının kanıtı olduğunu ve tek hareketi söyler — LLM'siz, deterministik, senin makinende</span></div>
+      <div class="drow me"><span class="who">Topbeam</span><span class="what">Claude'un hangi iddiasının kanıtı olduğunu ve tek hareketi söyler — LLM'siz, deterministik, senin makinende</span></div>
     </div>
   </div>
 </section>
@@ -559,7 +584,7 @@ footer a:hover{border-bottom-color:var(--acc)}
     <span class="eyebrow">Fiyat</span>
     <h2>Çekirdek ücretsiz. Çekirdek açık.</h2>
     <p class="lead">
-      Ocean'ın okuyucu çekirdeği <b>MIT lisanslı</b> — kanıt kuralları, transcript ∩ git
+      Topbeam'in okuyucu çekirdeği <b>MIT lisanslı</b> — kanıt kuralları, transcript ∩ git
       kesişimi ve kart okunabilir kod. Ücretli katman kapalı kalır: <em>open core</em>.
     </p>
 
@@ -579,13 +604,13 @@ footer a:hover{border-bottom-color:var(--acc)}
           <li>Tek proje</li>
           <li>Tam kart — sıradaki tek hareket</li>
           <li>Log geçmişi</li>
-          <li>Manuel doğrulama (<code>ocean verify</code>)</li>
+          <li>Manuel doğrulama (<code>topbeam verify</code>)</li>
           <li>Temel pasaport kaydı (o projeye ait)</li>
         </ul>
       </div>
 
       <div class="plan pro">
-        <h3>Ocean Pro</h3>
+        <h3>Topbeam Pro</h3>
         <p class="small">Birden fazla proje.</p>
         <p class="price">$5<span class="per"> / ay</span> · $50<span class="per"> / yıl</span></p>
         <p class="founding">Founding fiyatı — sonra $9.</p>
@@ -616,15 +641,19 @@ footer a:hover{border-bottom-color:var(--acc)}
 <!-- ══ 7 · FOOTER ═════════════════════════════════════════════════════════ -->
 <footer>
   <div class="wrap">
+    <p class="origin">
+      <b>Topbeam.</b> İnşaatta son kirişin en tepeye çakıldığı ana <em>topping out</em> denir
+      — yapının bittiğini ilan eden tören; pasaportundaki son maddenin onaylanması da odur.
+    </p>
     <div class="fline">
-      <span>Ocean by REVERI</span>
+      <span>Topbeam by REVERI</span>
       <span>Lokal-first</span>
       <span>Kanıta dayalı</span>
       <span>MIT lisanslı çekirdek</span>
       <span>Claude Code için üretildi</span>
     </div>
     <p class="fbot">
-      <a href="mailto:info@reveriajans.com?subject=Ocean%20erken%20eri%C5%9Fim">info@reveriajans.com</a>
+      <a href="mailto:info@reveriajans.com?subject=Topbeam%20erken%20eri%C5%9Fim">info@reveriajans.com</a>
       &nbsp;·&nbsp;
       <a href="https://www.reveriajans.com" rel="noopener">reveriajans.com</a>
     </p>
