@@ -1,6 +1,6 @@
 {
   "name": "topbeam",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Topbeam — vibe coder için dürüst proje panosu: Claude Code transcript'i + git gerçeklerinden deterministik log, kanıt seviyeli durum ve sıradaki-tek-hareket kartı. LLM yok, local-first; CI okuması opsiyonel ve --no-ci ile kapatılabilir.",
   "type": "module",
   "license": "MIT",
@@ -32,7 +32,8 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "test": "node --test \"src/**/*.test.ts\"",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run typecheck && npm test && npm run build && node scripts/yayin-kapisi.mjs"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

@@ -31,7 +31,7 @@ export const SCHEMA_VERSION = 2;
  * MAKBUZ kendini `v0.1.0` diye tanıttı. Makbuz dışarıya gösterilen belgedir;
  * üstünde yanlış sürüm yazması, bu üründe kabul edilemez bir yanlış beyandır.
  */
-export const TOOL_VERSION = '0.1.1';
+export const TOOL_VERSION = '0.1.2';
 
 /**
  * Proje kökünde Topbeam veri dizini ve durum dosyası.
