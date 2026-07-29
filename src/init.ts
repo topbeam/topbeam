@@ -11,7 +11,7 @@
  */
 import { readFile, writeFile, appendFile, mkdir } from 'node:fs/promises';
 import { basename, join } from 'node:path';
-import { newOceanState, type LogEntry } from './types.ts';
+import { newOceanState, OCEAN_DIR, type LogEntry } from './types.ts';
 import { goalPath, guvenliYazDisa, notesPath, oceanDir, readState, statePath, writeState } from './state.ts';
 
 export const CLAUDE_MD_MARKER = '## Topbeam';
@@ -127,6 +127,46 @@ export async function runInit(cwd: string, opts: { now?: Date } = {}): Promise<I
   else {
     await guvenliYazDisa(cwd, notesPath(cwd), NOTES_TEMPLATE);
     created.push('.ocean/notes.md');
+  }
+
+  /**
+   * .gitignore — `.ocean/` satırı yoksa EKLE.
+   *
+   * Neden (2026-07-29 sertleştirme bulgusu): `.ocean/state.json` bu projede
+   * koşulmuş KOMUT METİNLERİNİ ve Claude'un beyan satırlarını taşır; pano ve
+   * defter de öyle. Maskeleme kaçırırsa bunlar kullanıcının deposuna, oradan da
+   * public bir repoya gidebiliyordu. `git add -A` yapan kullanıcı bunu FARK
+   * ETMEDEN yapıyor — ölçüldü.
+   *
+   * ⚠️ Asimetri utancı: Topbeam'in KENDİ deposunda `.ocean/` zaten gitignore'lu.
+   * Yazar kendini korumuş, kullanıcıyı korumamıştı. Artık ikisi aynı.
+   *
+   * Bilinçli olarak izlemek isteyen satırı silebilir; biz sormadan EKLERİZ ama
+   * ekrana YAZARIZ — sessiz değişiklik yok.
+   */
+  const gitignorePath = join(cwd, '.gitignore');
+  let gi = '';
+  try {
+    gi = await readFile(gitignorePath, 'utf8');
+  } catch {
+    gi = '';
+  }
+  const oceanKurali = `${OCEAN_DIR}/`;
+  const zatenVar = gi
+    .split('\n')
+    .map((l) => l.trim())
+    .some((l) => l === oceanKurali || l === OCEAN_DIR || l === `/${oceanKurali}`);
+  if (!zatenVar) {
+    const ayrac = gi === '' || gi.endsWith('\n') ? '' : '\n';
+    await guvenliYazDisa(
+      cwd,
+      gitignorePath,
+      `${ayrac}\n# Topbeam çalışma verisi — komut metinleri ve onay defteri içerir.\n${oceanKurali}\n`,
+      'ekle',
+    );
+    created.push(`.gitignore → "${oceanKurali}" eklendi (komut metinleri depoya girmesin)`);
+  } else {
+    skipped.push(`.gitignore (${oceanKurali} zaten var)`);
   }
 
   // CLAUDE.md — "## Topbeam" bölümü yoksa APPEND; varsa dokunma.

@@ -69,6 +69,7 @@ import {
 } from './collect/claude.ts';
 import type { GitCommit, GitFacts } from './collect/git.ts';
 import { buildCiClaims, type CiFacts } from './collect/ci.ts';
+import { redact } from './redact.ts';
 
 // ── sınırlar ─────────────────────────────────────────────────────────────────
 
@@ -219,10 +220,19 @@ export function kisaltYollar(
   let disari = 0;
   let out = text;
 
+  /**
+   * SOL ANKRAJ (2026-07-29 sertleştirme bulgusu). Desenlerin sol sınırı yoktu:
+   * HOME=/tmp/x iken '/private/tmp/x/work' metninin ORTASINDAKİ '/tmp/x'
+   * yakalanıyor ve kullanıcıya `/private~/work` gibi anlamsız bir yol
+   * gösteriliyordu (macOS'ta /tmp → /private/tmp olduğu için sık). Yol maskesi
+   * ancak bir YOL SINIRINDA başlarsa doğrudur.
+   */
+  const SOL = '(?<![A-Za-z0-9_.~-])';
+
   const root = projectCwd === '' ? '' : resolve(projectCwd);
   // Sınır kontrolü (lookahead): '/a/b' deseni '/a/bc' yolunu yakalamasın.
   if (root !== '' && root !== sep) {
-    out = out.replace(new RegExp(`${escapeRe(root)}(?=$|[/\\s"'\`;:,)\\]])`, 'g'), () => {
+    out = out.replace(new RegExp(`${SOL}${escapeRe(root)}(?=$|[/\\s"'\`;:,)\\]])`, 'g'), () => {
       hits++;
       return '.';
     });
@@ -231,7 +241,7 @@ export function kisaltYollar(
   const ev = home === '' ? '' : resolve(home);
   if (ev !== '' && ev !== sep && ev !== root) {
     // Kuyruk sınıfı kabuk ayraçlarını dışarıda bırakır (komutun geri kalanı yenmez).
-    const re = new RegExp(`${escapeRe(ev)}((?:/[^\\s"'\`;:,)\\]|&<>]+)*)`, 'g');
+    const re = new RegExp(`${SOL}${escapeRe(ev)}((?:/[^\\s"'\`;:,)\\]|&<>]+)*)`, 'g');
     out = out.replace(re, (_m, tail: string) => {
       hits++;
       disari++;
@@ -628,7 +638,11 @@ function testClaims(
   signals.forEach((sig, i) => {
     const ts = sig.ts ?? session.lastTs ?? fallbackTs;
     const komut = yaz.komut(sig.command);
-    const cmd = shortCmd(komut);
+    // SIRA ÖNEMLİ (2026-07-29): önce MASKELE, sonra KIRP. Tersi yapılınca
+    // 60. karakterde kesilen bir anahtar ('…tok=sk-CANARY78') desenin
+    // uzunluk şartını sağlamıyor ve state.json'a düz metin giriyordu.
+    // redact idempotenttir; yazma anındaki ikinci geçiş zararsızdır.
+    const cmd = shortCmd(redact(komut).text);
     const id = `test-${session.sessionId}-${i}`;
     const hasNumbers = sig.passed !== null || sig.failed !== null;
 

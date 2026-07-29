@@ -86,3 +86,29 @@ test('mevcut CLAUDE.md korunur, bölüm SONUNA eklenir', async () => {
   assert.ok(claudeMd.includes(CLAUDE_MD_MARKER));
   assert.ok(claudeMd.indexOf(CLAUDE_MD_MARKER) > claudeMd.indexOf('Önemli kurallarım'));
 });
+
+test('.gitignore: .ocean/ eklenir — kullanıcının komut günlüğü deposuna girmesin', async () => {
+  // Asimetri utancı: Topbeam'in KENDİ deposunda .ocean/ gitignore'luydu ama
+  // kullanıcıya eklenmiyordu. `git add -A` yapan kullanıcı state.json'ı
+  // (komut metinleri + beyanlar) fark etmeden repoya sokuyordu.
+  const dir = await tmpProj();
+  await writeFile(join(dir, '.gitignore'), 'node_modules/\n', 'utf8');
+  const res = await runInit(dir);
+
+  const gi = await readFile(join(dir, '.gitignore'), 'utf8');
+  assert.ok(gi.includes('node_modules/'), 'mevcut kurallar korunmalı');
+  assert.ok(gi.includes('.ocean/'), '.ocean/ eklenmeli');
+  assert.ok(res.created.some((c) => c.includes('.gitignore')), 'sessiz değişiklik yok — ekranda söylenmeli');
+
+  // İdempotent: ikinci init tekrar eklemez
+  await runInit(dir);
+  const gi2 = await readFile(join(dir, '.gitignore'), 'utf8');
+  assert.equal(gi2.split('.ocean/').length - 1, 1, '.ocean/ satırı çiftlenmemeli');
+});
+
+test('.gitignore yoksa oluşturulur', async () => {
+  const dir = await tmpProj();
+  await runInit(dir);
+  const gi = await readFile(join(dir, '.gitignore'), 'utf8');
+  assert.ok(gi.includes('.ocean/'));
+});

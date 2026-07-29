@@ -144,7 +144,17 @@ export async function runSync(cwd: string, opts: SyncOptions = {}): Promise<Sync
   const ci = await collectCi(cwd, git, { ...(opts.noCi === true ? { noCi: true } : {}) });
 
   // 2) Gerçek motoru — beyanlar log'a "Beyan:" önekiyle girer (rozet: beyan).
-  const truth = buildTruth(claude, git, { includeBeyan: true, now, ci });
+  /**
+   * BEYAN KAPISI (2026-07-29 sertleştirme bulgusu): Claude'un serbest metin
+   * `description` beyanları kapsam filtresinden GEÇMİYORDU. Ata-dizin
+   * oturumunda bu, başka bir işin — ölçülen vakada bir MÜŞTERİ ADININ —
+   * panoya ve state.json'a düşmesi demekti:
+   *     "Beyan: MUSTERI-X teklifini depoya kopyala ve test et"
+   * Beyan zaten KANIT DEĞİL; ata oturumda ise sadece gürültü + risk.
+   * Bu yüzden ata oturumu varsa beyan satırları hiç üretilmez.
+   */
+  const ataOturumVar = claude.sessions.some((s) => s.fromAncestor);
+  const truth = buildTruth(claude, git, { includeBeyan: !ataOturumVar, now, ci });
   const notes = [...truth.notes];
 
   // 3) notes.md — Claude'un 1-satır notları (beyan; kanıt değil).

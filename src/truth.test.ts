@@ -845,3 +845,15 @@ test('COMMIT KANITI: zaman okunamıyorsa kanıt kurulmaz (kaçırmak > yanlış 
   const { claims } = buildTruth(claude, git, { now: NOW });
   assert.equal(claims.some((c) => c.id === 'dosya-git-s1'), false);
 });
+
+test('YOL MASKESİ ANKRAJI: /private/tmp/x içindeki /tmp/x yakalanmaz (/private~ üretilmez)', () => {
+  // Ölçülen kusur: macOS'ta /tmp → /private/tmp; HOME=/tmp/lab iken sync notu
+  // "kayıtlar ÜST dizin oturumundan okundu (/private~/work)" diyordu.
+  const r = kisaltYollar('kayıt: /private/tmp/lab/work/proje', '', '/tmp/lab');
+  assert.equal(r.text.includes('/private~'), false, 'yol ortasında ~ üretilmemeli');
+  assert.equal(r.text, 'kayıt: /private/tmp/lab/work/proje', 'sınırda başlamayan eşleşme dokunulmamalı');
+
+  // Gerçekten sınırda başlıyorsa maskelenmeli (koruma fazla sıkı olmamalı)
+  const r2 = kisaltYollar('cd /tmp/lab/work', '', '/tmp/lab');
+  assert.ok(r2.text.includes('~/work'), 'sınırda başlayan ev yolu maskelenmeli');
+});
