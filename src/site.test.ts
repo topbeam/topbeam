@@ -15,8 +15,17 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
-const SITE = join(dirname(fileURLToPath(import.meta.url)), '..', 'site', 'index.html');
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
+const SITE = join(ROOT, 'site', 'index.html');
 const html = readFileSync(SITE, 'utf8');
+
+/** Gerçek paket kimliği — landing iddiaları buna karşı sınanır (tek doğru kaynak). */
+const pkgJson = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')) as {
+  name: string;
+  version: string;
+};
+const PKG_NAME = pkgJson.name;
+const PKG_VERSION = pkgJson.version;
 
 /**
  * Yorumlar kullanıcıya render EDİLMEZ; yayın-günü talimatı da bir yorumda duruyor.
@@ -42,25 +51,36 @@ function hrefs(source: string): string[] {
   return out;
 }
 
-test('landing: kopyala butonu ÇALIŞMAYAN komut taşımaz (npx yayın öncesi kopyalatılmaz)', () => {
+test('landing: kopyalatılan kurulum komutu BİZİM paketimizi kurar (yabancı paket kurdurma yasağı)', () => {
+  // 2026-07-29 yayınından ÖNCE bu kural "npx hiç kopyalatılmaz" idi (paket yoktu).
+  // Paket yayında olduğu için kural yön değiştirdi ama GEVŞEMEDİ: kopyalanan komut
+  // ziyaretçinin makinesinde çalışacak — bizim adımızdan BAŞKA bir paket adı
+  // kopyalatmak, yabancının kodunu kurdurmak demektir (ad geçişinde yaşanan risk).
   const payloads = copyPayloads(live);
   assert.ok(payloads.length > 0, 'en az bir kopyala butonu bekleniyordu');
+  const re = /\b(?:npx(?:\s+--yes)?|npm\s+i(?:nstall)?(?:\s+-g)?)\s+(?:--\S+\s+)*([@\w./-]+)/;
   for (const p of payloads) {
-    assert.ok(
-      !/\bnpx\b|\bnpm i\b|\bnpm install -g\b/.test(p),
-      `yayın öncesi çalışmayan komut kopyalatılıyor: "${p}"`,
-    );
+    const m = re.exec(p);
+    if (m === null) continue; // kurulum komutu değil (ör. `topbeam sync`)
+    const pkg = (m[1] ?? '').replace(/@[^/@]+$/, ''); // sürüm ekini at
+    assert.equal(pkg, PKG_NAME, `kopyala butonu BAŞKA paketi kurduruyor: "${p}"`);
   }
 });
 
-test('landing: npx komutu gösteriliyorsa "yayından sonra" işareti ve yayın durumu notu yanında', () => {
+test('landing: yayın durumu GERÇEĞİ söyler (yayındayken "yayınlanmadı" yazamaz, tersi de)', () => {
   // Paket adı Topbeam'e taşındı; eski ad da kontrol edilir ki landing hangi
   // adı taşırsa taşısın nöbetçi SUSMASIN (ad değişince kural sessizce düşmesin).
   if (!/npx (topbeam|ocean-code)/.test(html)) return; // komut kaldırıldıysa kural konusuz
-  assert.match(html, /class="cmd soon"/, '.cmd.soon işareti yok — komut çalışıyormuş gibi duruyor');
-  assert.match(html, /yayından sonra/, '"yayından sonra" etiketi yok');
-  assert.match(html, /Yayın durumu:/, 'yayın durumu notu yok');
-  assert.match(html, /henüz npm'e yayınlanmadı/, 'yayınlanmadığı açıkça yazmıyor');
+  // Sayfa, kurulum komutunu çalışır gibi sunuyorsa yayın-öncesi dilinden ESER kalmamalı.
+  for (const eski of [/class="cmd soon"/, /yayından sonra/, /henüz npm'e yayınlanmadı/]) {
+    assert.ok(!eski.test(live), `paket yayındayken yayın-öncesi ifadesi duruyor: ${eski}`);
+  }
+  // Ve yayın iddiası package.json'daki GERÇEK sürümle birebir eşleşmeli.
+  assert.match(live, /Yayında:/, 'yayın durumu notu yok');
+  assert.ok(
+    live.includes(`${PKG_NAME}@${PKG_VERSION}`),
+    `landing sürümü package.json ile uyuşmuyor (beklenen ${PKG_NAME}@${PKG_VERSION})`,
+  );
 });
 
 test('landing: en az bir ÇALIŞAN yüksek-niyet yolu var (mailto)', () => {
