@@ -14,6 +14,8 @@ import { runSync } from './sync.ts';
 import { runVerify } from './verify.ts';
 import { runMakbuz } from './makbuz.ts';
 import { runUninstall } from './uninstall.ts';
+import { gozlemEkle } from './gozlem.ts';
+import { userInfo } from 'node:os';
 import { GuvenliYazmaHatasi, panoPath } from './state.ts';
 
 function out(s: string): void {
@@ -41,6 +43,10 @@ Komutlar:
                   YALNIZ terminalden: cevap pipe/otomasyondan gelirse onay
                   kaydedilmez (insan onayı = gerçek insan)
   open            Pano yolunu göster (tarayıcıyı otomatik AÇMAZ)
+  gozlem "<metin>"  Kendi gözlemini kayda geçir — MAKİNE DIŞI işin için
+                  ("kullandım, şunu gördüm"). KANIT DEĞİLDİR: seviyesi
+                  "doğrulanmadı" kalır ve panoda "insan beyanı" rozetiyle
+                  ölçümden AYRI görünür. verify ile onaylanabilir.
   uninstall       Topbeam'in senin dosyalarına bıraktığı izleri geri al
                   (CLAUDE.md bölümü + .gitignore satırı). .ocean/ BİLEREK KALIR:
                   içindeki imzalı onay defterin yeniden üretilemez.
@@ -244,6 +250,29 @@ async function cmdOpen(_args: Args): Promise<void> {
 
 // ── yönlendirici ─────────────────────────────────────────────────────────────
 
+async function cmdGozlem(args: Args): Promise<void> {
+  const metin = args.positional.join(' ').trim();
+  if (metin === '') {
+    fail('Kullanım: topbeam gozlem "kullandım, şunu gördüm"\n' +
+      'Bu bir KANIT değildir — makinenin göremediği işini kayda geçirir.');
+  }
+  const kullanici = (() => {
+    try {
+      return userInfo().username;
+    } catch {
+      return '';
+    }
+  })();
+  if (kullanici.trim() === '') {
+    fail('Kimlik okunamadı (işletim sistemi kullanıcı adı) — imzasız gözlem yazılmaz.');
+  }
+  const res = await gozlemEkle(process.cwd(), metin, { by: kullanici });
+  if (!res.ok) fail(res.error ?? 'Gözlem yazılamadı.');
+  out(`Gözlem kaydedildi: ${res.id}  (imza: ${kullanici})`);
+  out('  Bu bir KANIT DEĞİL — senin beyanın. Panoda "insan beyanı" rozetiyle görünür.');
+  out('  Sıradaki adım: topbeam sync   (sonra istersen: topbeam verify <söz-id>)');
+}
+
 async function cmdUninstall(args: Args): Promise<void> {
   const cwd = process.cwd();
   const res = await runUninstall(cwd, { purge: args.flags.purge === true });
@@ -283,6 +312,9 @@ async function main(): Promise<void> {
       break;
     case 'makbuz':
       await cmdMakbuz(args);
+      break;
+    case 'gozlem':
+      await cmdGozlem(args);
       break;
     case 'uninstall':
       await cmdUninstall(args);

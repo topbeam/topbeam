@@ -251,8 +251,46 @@ export function buildTeslim(
       status = 'completed';
       reason = n > 1 ? `${n} kaydın hepsi insan onaylı.` : '1 kayıt insan onaylı.';
     } else if (verification !== undefined) {
-      status = 'partial';
-      reason = `Onaydan sonra bu söze yeni kayıt eşleşti — ${onayliSayi}/${n} kayıt insan onaylı.`;
+      /**
+       * ⚠️ ONAY GERİ ALINMAZ (2026-07-30, canlı ölçümle bulundu).
+       *
+       * Eskiden burada status 'partial'a düşüyordu: sözü onayladıktan SONRA aynı
+       * alanda yeni iş yapınca yeni bir doğrulanmamış kayıt aynı söze eşleşiyor
+       * ve BAR GERİLİYORDU. Ölçüldü: 1/5 → 0/5, hem de insan imzası defterde
+       * dururken.
+       *
+       * Bu, Sisifos barının İKİNCİ yüzüydü: paydayı sabitlemiştik, bu kez PAY
+       * eriyordu. Sonuç aynı — çalıştıkça bitiş uzaklaşıyor, yani ürünün çözmek
+       * için var olduğu şeyin ta kendisi.
+       *
+       * Doğru model: **onay, insanın o an gördüğü şey hakkında bir olgudur.**
+       * Sonradan yapılan iş onu geçersizleştirmez; ancak YENİ, ayrı bir iştir.
+       * Söz `completed` kalır — ama yeni kayıt SESSİZ DE KALMAZ: gerekçede
+       * kaç yeni kaydın onaydan sonra geldiği yazılır.
+       */
+      /**
+       * İNCE AYRIM: "onay geri alınmaz" ≠ "dayanağı buharlaşsa da onaylı kalır".
+       *   - En az BİR onaylı kayıt duruyorsa → completed (yeni iş onu bozmaz)
+       *   - HİÇ onaylı kayıt kalmadıysa → completed DEMEK YALAN olur.
+       *     (Onaylanan kaydın kendisi düşmüş demektir: transcript değişmiş ya da
+       *     30 günlük saklama silmiş olabilir. İmza defterde durur, ama söz
+       *     "tamam" diye gösterilemez.)
+       */
+      const yeni = n - onayliSayi;
+      if (onayliSayi > 0) {
+        status = 'completed';
+        reason =
+          yeni > 0
+            ? `İnsan onaylı (${verification.at.slice(0, 10)}). Onaydan SONRA bu alanda ${yeni} yeni ` +
+              'doğrulanmamış kayıt oluştu — onay geri alınmaz, ama yeni iş ayrı bir iştir.'
+            : `${onayliSayi}/${n} kayıt insan onaylı.`;
+      } else {
+        status = 'partial';
+        reason =
+          `İmza defterde duruyor (${verification.at.slice(0, 10)}) ama onayladığın kayıt artık ` +
+          'yeniden üretilemiyor (transcript değişmiş ya da saklama süresi silmiş olabilir) — ' +
+          'söz "tamam" diye gösterilemez.';
+      }
     } else if (onayliSayi > 0) {
       status = 'partial';
       reason = `${onayliSayi}/${n} kayıt insan onaylı — söz henüz tamam değil.`;

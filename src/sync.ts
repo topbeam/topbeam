@@ -30,6 +30,7 @@ import { buildTruth, collapseRepeats } from './truth.ts';
 import { buildCard, scriptsFromPackageJson } from './card.ts';
 import { buildTeslim } from './goal.ts';
 import { buildDefter } from './passport.ts';
+import { gozlemClaims, gozlemleriOku } from './gozlem.ts';
 import { renderPano } from './pano.ts';
 import {
   panoPath,
@@ -166,7 +167,18 @@ export async function runSync(cwd: string, opts: SyncOptions = {}): Promise<Sync
   }));
 
   // 4) Birleştir.
-  const { merged, droppedStale } = mergeClaims(state.claims, truth.claims);
+  /**
+   * İNSAN GÖZLEMLERİ — makine kanıtının yanına, ONA KARIŞMADAN eklenir.
+   * Seviyeleri gozlem.ts'te 'dogrulanmadi' olarak kilitli; buradan yükseltilemez.
+   * Motor bunları yeniden üretemez (transcript'te yoklar), o yüzden HER sync'te
+   * defterden tazelenir — yoksa mergeClaims onları "kanıtı üretilemedi" diye düşürürdü.
+   */
+  const { kayitlar: gozlemler, atlanan: bozukGozlem } = await gozlemleriOku(cwd);
+  if (bozukGozlem > 0) {
+    notes.push(`${bozukGozlem} gözlem satırı okunamadı ve atlandı (bozuk JSON) — sessiz silme yok.`);
+  }
+  const tazeClaims = [...truth.claims, ...gozlemClaims(gozlemler)];
+  const { merged, droppedStale } = mergeClaims(state.claims, tazeClaims);
   if (droppedStale > 0) {
     notes.push(
       `${droppedStale} eski doğrulanmamış claim bu senkronda yeniden üretilmedi ve düşürüldü (transcript değişmiş olabilir); pasaport maddeleri iz olarak korunur.`,

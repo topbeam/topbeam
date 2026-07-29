@@ -103,7 +103,11 @@ export function toBpLevel(level: EvidenceLevel): BpEvidenceLevel {
  * - test  : test-koşumu iddiası
  * - durum : "çalışıyor" tipi durum iddiası — YALNIZ verify akışı üretir
  */
-export type ClaimKind = 'dosya' | 'test' | 'durum';
+/**
+ * - gozlem : İNSANIN kendi tanıklığı (`topbeam gozlem`). ÖLÇÜM DEĞİL —
+ *   seviyesi her zaman 'dogrulanmadi', kanıt türü 'insan-gozlemi'.
+ */
+export type ClaimKind = 'dosya' | 'test' | 'durum' | 'gozlem';
 
 /**
  * Claim'e bağlı YAPISAL sinyaller — kart heuristiğinin okuduğu tek girdi.

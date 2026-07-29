@@ -290,7 +290,7 @@ test('kısmi onay "tamam" göstermez: 1/2 kayıt onaylıysa madde partial', () =
   assert.equal(maddeOnayli(defter(['t1']), p[0] as PassportItem), false);
 });
 
-test('onaydan SONRA yeni kayıt eşleşirse madde partial olur (sessiz "tamam" yok)', () => {
+test('ONAY GERİ ALINMAZ: onaydan sonra yeni kayıt gelse de madde completed KALIR (ama yeni iş söylenir)', () => {
   const items = parseGoalItems('- [ ] test: testler yeşil\n');
   const once = buildTeslim([], [claim('t1', { kind: 'test', level: 'insan-onayi' })], items).map(
     (p): PassportItem => ({
@@ -305,9 +305,18 @@ test('onaydan SONRA yeni kayıt eşleşirse madde partial olur (sessiz "tamam" y
     [claim('t1', { kind: 'test', level: 'insan-onayi' }), claim('t2', { kind: 'test', level: 'test-kaniti' })],
     items,
   );
-  assert.equal(sonra[0]?.status, 'partial');
-  assert.ok(sonra[0]?.reason?.includes('Onaydan sonra'));
+  // Ölçülen kusur (2026-07-30): burası 'partial'a düşüyordu ve BAR GERİLİYORDU
+  // (1/5 → 0/5), hem de insan imzası defterde dururken. Sisifos'un ikinci yüzü:
+  // paydayı sabitlemiştik, bu kez pay eriyordu. Onay, insanın o an gördüğü şey
+  // hakkında bir olgudur; sonraki iş onu geçersizleştirmez.
+  assert.equal(sonra[0]?.status, 'completed', 'onay geri alınamaz');
   assert.equal(sonra[0]?.verification?.by, 'ekin', 'insan kararı kaydı durur');
+  // ...ama yeni iş SESSİZ DE KALMAZ — gerekçe onu söylemeli.
+  assert.ok(
+    sonra[0]?.reason?.includes('Onaydan SONRA'),
+    `yeni kayıt gerekçede görünmeli: ${sonra[0]?.reason}`,
+  );
+  assert.ok(sonra[0]?.reason?.includes('1 yeni'), 'kaç yeni kayıt olduğu sayıyla yazılmalı');
 });
 
 test('elle atılan `[x]` tik BEYANDIR: barı doldurmaz, sessizce de yutulmaz', () => {

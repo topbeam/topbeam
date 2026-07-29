@@ -190,11 +190,29 @@ export function logSatiriOnayli(ledger: VerificationLedger, ts: string): boolean
   return ledger.zamanlar.has(ts);
 }
 
-/** Pasaport maddesi "doğrulandı" sayılır mı — defterle desteklenen tik. */
+/**
+ * Pasaport maddesi "doğrulandı" sayılır mı — defterle desteklenen tik.
+ *
+ * ⚠️ ONAY GERİ ALINMAZ (2026-07-30, canlı ölçümle bulundu).
+ * Kural eskiden `birimOnayli` idi: maddenin O ANKİ TÜM kayıtları onaylı olmalı.
+ * Sonuç: sözü onayladıktan sonra aynı alanda yeni iş yapınca yeni bir
+ * doğrulanmamış kayıt maddeye ekleniyor ve ROZET DÜŞÜYORDU. Ölçüldü: bar
+ * 1/5 → 0/5, hem de insan imzası defterde dururken.
+ *
+ * Bu, Sisifos barının ikinci yüzüydü: paydayı sabitlemiştik, bu kez PAY
+ * eriyordu. Onay, insanın o an gördüğü şey hakkında bir OLGUDUR; sonraki iş
+ * onu geçersizleştirmez.
+ *
+ * Yeni kural — hâlâ FAIL-CLOSED, sadece doğru şeye bakıyor:
+ *   madde bir imza taşıyor (verification) VE defterde o ANA ait geçerli bir
+ *   kayıt gerçekten var. Maddenin kendi iddiası yetmez; defter hakemdir.
+ * İmzası olmayan maddeler için eski (tüm-kayıtlar) kuralı geçerli kalır.
+ */
 export function maddeOnayli(ledger: VerificationLedger, item: PassportItem): boolean {
-  return (
-    item.status === 'completed' && item.level === 'insan-onayi' && birimOnayli(ledger, item.claimIds)
-  );
+  if (item.status !== 'completed' || item.level !== 'insan-onayi') return false;
+  const v = item.verification;
+  if (v !== undefined) return logSatiriOnayli(ledger, v.at);
+  return birimOnayli(ledger, item.claimIds);
 }
 
 /** Defterle desteklenen "doğrulandı" sayısı (pano ve CLI aynı sayıyı verir). */
