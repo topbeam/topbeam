@@ -423,14 +423,31 @@ test('DÜRÜSTLÜK: kaynak metinlerde mutlakçı kapı iddiası bulunmaz', async
   // satırımızdır ve muaf sayılır; gerçek ihlal daha aşağıdadır ve hiç bakılmadan
   // geçer. Bu yüzden TÜM eşleşmeler gezilir (global bayrak + döngü) ve muafiyet
   // eşleşme BAŞINA değerlendirilir. Nöbetçinin kendisi de mutasyonla sınanmalıdır.
+  /**
+   * ⚠️ İNGİLİZCE DESENLER ŞART (2026-07-30, register denetimi yakaladı).
+   * Desenler yalnız Türkçeydi. Yüzeyler İngilizceye taşınınca bu test YEŞİL
+   * kalıp HİÇBİR ŞEYİ korumayacaktı — üstelik README "bir test bunu engelliyor"
+   * diye söz veriyor. Yani nöbetçinin kendisi, yasakladığı şeyin ta kendisi
+   * olacaktı: yanlış etiketli bir dürüstlük rozeti.
+   */
   const yasak: Array<[string, string]> = [
+    // ── Türkçe ──
     ['bot(?:lar)?\\s+onay\\s+veremez', '"bot onay veremez" — script(1) ile geçilebiliyor'],
     ['ajan\\s+(?:onay\\s+veremez|taklit\\s+edemez)', '"ajan taklit edemez" — pty ile taklit edilebiliyor'],
     ["TTY'?yi\\s+taklit\\s+edemez", 'TTY taklit edilebiliyor (script/expect/node-pty)'],
     ['halüsinasyon\\s+yapısal\\s+olarak\\s+imkânsız', 'eşleme sezgisel — "imkânsız" fazla söz'],
+    // ── İngilizce (aynı yasaklar, aynı gerekçeler) ──
+    ['(?:a\\s+)?bots?\\s+cannot\\s+(?:approve|sign|verify)', '"bots cannot approve" — script(1) passes it'],
+    ['(?:an\\s+)?agents?\\s+(?:cannot|can.?t)\\s+(?:approve|fake|spoof|impersonate)', '"agents cannot fake it" — a pty can'],
+    ['cannot\\s+(?:be\\s+)?(?:faked|spoofed|forged)', '"cannot be faked" — a pty fakes it'],
+    ['structurally\\s+impossible', 'the matching is heuristic — "impossible" overclaims'],
+    ['impossible\\s+to\\s+(?:fake|hallucinate|forge)', 'overclaim — measured otherwise'],
+    ['hallucination\\s+is\\s+(?:structurally\\s+)?impossible', 'model sentence cannot enter, but the MATCHING still can be wrong — overclaim'],
+    ['guarantee[sd]?\\s+(?:that\\s+)?(?:no|nothing)', 'unmeasurable guarantee'],
   ];
   /** Yasağı ANLATAN bağlam (belge/uyarı) ihlal sayılmaz. */
-  const MUAF = /YANLIŞ|yanlış|kullanılamaz|kullanılmaz|eskiden|geçilebil|aşılabil|taklit edilebil/;
+  const MUAF =
+    /YANLIŞ|yanlış|kullanılamaz|kullanılmaz|eskiden|geçilebil|aşılabil|taklit edilebil|is not true|never used|overclaim|used to say|passes it|a pty can|measured otherwise/;
 
   const ihlaller: string[] = [];
   for (const dosya of hedefler) {
