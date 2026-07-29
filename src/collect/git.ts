@@ -89,11 +89,34 @@ interface GitCmd {
   timedOut: boolean;
 }
 
+/**
+ * Git bazı yolları çift tırnak içinde verir (boşluk/özel karakter). quotepath
+ * kapalı olsa da tırnaklama sürebilir; tırnak yolun parçası DEĞİLDİR.
+ */
+function tirnaksiz(yol: string): string {
+  const y = yol.trim();
+  if (y.length >= 2 && y.startsWith('"') && y.endsWith('"')) return y.slice(1, -1);
+  return y;
+}
+
+/**
+ * ⚠️ `core.quotepath=false` ZORUNLU (2026-07-29 sertleştirme bulgusu).
+ *
+ * Git, ASCII dışı dosya adlarını VARSAYILAN olarak sekizli kaçışlarla verir:
+ *     çıkış-raporu.ts  →  "\303\247\304\261k\304\261\305\237-raporu.ts"
+ * Topbeam bu diziyi transcript'teki gerçek yolla eşleştiremiyordu; sonuç, sakin
+ * ama DÜPEDÜZ YANLIŞ bir cümleydi: dosya `git status`'ta gözle görünürken araç
+ * "git'te izi yok" diyor ve barı geriletiyordu. Türkçe, Almanca, Fransızca,
+ * Japonca — ASCII dışı ad kullanan herkesi vuruyordu.
+ *
+ * `LC_ALL=C` ortamı bu davranışı ETKİLEMEZ (quotepath ayrı bir git ayarıdır),
+ * o yüzden env değil, komut düzeyinde `-c` ile kapatılır.
+ */
 function runGit(bin: string, args: string[], cwd: string, timeoutMs: number): Promise<GitCmd> {
   return new Promise((done) => {
     execFile(
       bin,
-      args,
+      ['-c', 'core.quotepath=false', ...args],
       {
         cwd,
         timeout: timeoutMs,
@@ -199,7 +222,24 @@ export async function collectGit(cwd: string, opts: GitCollectOptions = {}): Pro
   if (st.ok) {
     const lines = st.stdout.split('\n').filter((l) => l.length > 3);
     for (const l of lines.slice(0, MAX_DIRTY_FILES)) {
-      facts.dirtyFiles.push({ status: l.slice(0, 2), path: l.slice(3) });
+      const durum = l.slice(0, 2);
+      const ham = l.slice(3);
+      /**
+       * YENİDEN ADLANDIRMA (2026-07-29 bulgusu): porcelain biçimi
+       *     R  eski/yol.ts -> yeni/yol.ts
+       * veriyor. Tek yol gibi ayrıştırılınca HİÇBİRİ eşleşmiyordu → transcript'te
+       * düzenlenen dosya "git'te izi yok" sayılıyordu. HER İKİ yol da kanıt
+       * kümesine girer: transcript eski adı da yeni adı da taşıyabilir.
+       */
+      const ok = ham.indexOf(' -> ');
+      if (durum.includes('R') && ok !== -1) {
+        const eski = tirnaksiz(ham.slice(0, ok));
+        const yeni = tirnaksiz(ham.slice(ok + 4));
+        if (eski !== '') facts.dirtyFiles.push({ status: durum, path: eski });
+        if (yeni !== '') facts.dirtyFiles.push({ status: durum, path: yeni });
+        continue;
+      }
+      facts.dirtyFiles.push({ status: durum, path: tirnaksiz(ham) });
     }
     if (lines.length > MAX_DIRTY_FILES) {
       facts.notes.push(`Kirli dosya listesi ${MAX_DIRTY_FILES} ile sınırlandı (toplam ${lines.length}).`);
@@ -225,6 +265,7 @@ export async function collectGit(cwd: string, opts: GitCollectOptions = {}): Pro
   );
   if (log.ok) {
     let kirpilanCommit = 0;
+    let bozukCommit = 0;
     for (const kayit of log.stdout.split('\x1e')) {
       if (!kayit.trim()) continue;
       const satirlar = kayit.split('\n');
@@ -232,7 +273,17 @@ export async function collectGit(cwd: string, opts: GitCollectOptions = {}): Pro
       const full = parts[0];
       const hash = parts[1];
       const date = parts[2];
+      /**
+       * COMMIT ENJEKSİYONU KAPISI (2026-07-29): commit KONUSU içine sekme +
+       * sahte alanlar yazan biri, kayıt listesine uydurma commit sokabiliyordu.
+       * Biçim doğrulanır: tam SHA 40 hane hex OLMALI ve kısa hash onun ÖNEKİ.
+       * Uymayan kayıt DÜŞER ve sayılır — sessiz kabul yok.
+       */
       if (!full || !hash || !date) continue;
+      if (!/^[0-9a-f]{40}$/.test(full) || !full.startsWith(hash)) {
+        bozukCommit++;
+        continue;
+      }
       const files: string[] = [];
       let toplam = 0;
       for (const s of satirlar.slice(1)) {
@@ -243,6 +294,11 @@ export async function collectGit(cwd: string, opts: GitCollectOptions = {}): Pro
       }
       if (toplam > MAX_COMMIT_FILES) kirpilanCommit++;
       facts.recentCommits.push({ hash, full, date, subject: parts.slice(3).join('\t'), files });
+    }
+    if (bozukCommit > 0) {
+      facts.notes.push(
+        `${bozukCommit} commit kaydı ayrıştırılamadı ve atlandı (hash biçimi beklenen 40-hane değil).`,
+      );
     }
     if (kirpilanCommit > 0) {
       facts.notes.push(
