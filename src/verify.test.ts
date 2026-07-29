@@ -394,6 +394,30 @@ test('DÜRÜSTLÜK: kaynak metinlerde mutlakçı kapı iddiası bulunmaz', async
   await tara(pjoin(kok, 'src'));
   hedefler.push(pjoin(kok, 'README.md'), pjoin(kok, 'site', 'index.html'));
 
+  /**
+   * TEST ADLARI DA YÜZEYDİR (2026-07-29'da elle yakalandı, nöbetçi kaçırmıştı).
+   * `cli.test.ts` içinde bir test adı hâlâ "bot insan onayı yazamaz" diyordu —
+   * yani yasakladığımız cümle, yasağı koyan projenin kendi test çıktısında
+   * duruyordu. Public depoda bu, tam olarak "başka nerede yalan söylüyor?"
+   * sorusunu doğuran şey. Test DOSYALARI taranmaz (desen listesi orada yaşar),
+   * ama test ADLARI taranır.
+   */
+  const testAdlari: string[] = [];
+  async function adlariTopla(d: string): Promise<void> {
+    for (const e of await readdir(d, { withFileTypes: true })) {
+      if (e.name === 'node_modules' || e.name.startsWith('.')) continue;
+      const pth = pjoin(d, e.name);
+      if (e.isDirectory()) await adlariTopla(pth);
+      else if (e.name.endsWith('.test.ts')) {
+        const metin = await readFile(pth, 'utf8');
+        for (const m of metin.matchAll(/^test\(\s*(['"`])([\s\S]*?)\1/gm)) {
+          testAdlari.push(`${pth.replace(kok, '')}: ${m[2] ?? ''}`);
+        }
+      }
+    }
+  }
+  await adlariTopla(pjoin(kok, 'src'));
+
   // DİKKAT — bu nöbetçinin bir kez düştüğü tuzak (2026-07-29): `re.exec()` yalnız
   // İLK eşleşmeyi döndürür. İlk eşleşme çoğu zaman yasağı ANLATAN kendi belge
   // satırımızdır ve muaf sayılır; gerçek ihlal daha aşağıdadır ve hiç bakılmadan
@@ -423,6 +447,12 @@ test('DÜRÜSTLÜK: kaynak metinlerde mutlakçı kapı iddiası bulunmaz', async
       }
     }
   }
+  for (const ad of testAdlari) {
+    for (const [kalip, neden] of yasak) {
+      if (new RegExp(kalip, 'i').test(ad)) ihlaller.push(`TEST ADI — ${ad} (${neden})`);
+    }
+  }
+
   assert.deepEqual(ihlaller, [], `mutlakçı iddia geri gelmiş:\n${ihlaller.join('\n')}`);
 });
 

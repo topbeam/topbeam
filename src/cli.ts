@@ -30,7 +30,9 @@ Topbeam v${TOOL_VERSION} — dürüst proje panosu (local-first, LLM'siz)
 Kullanım: topbeam <komut> [seçenekler]
 
 Komutlar:
-  init            Bu projeyi Topbeam'e bağla (.ocean/ kurulumu + CLAUDE.md entegrasyonu)
+  init            Bu projeyi Topbeam'e bağla (.ocean/ kurulumu + .gitignore satırı)
+                  CLAUDE.md'ye bölüm eklemek için ONAYINI SORAR — otomasyonda
+                  sormaz ve EKLEMEZ (--claude-md ile açıkça istenir)
   sync            Claude Code transcript + git gerçeklerinden log ve kartı güncelle
   verify <id>     Bir işi doğrula (insan onayı kaydet — kanıt seviyesi yükselir)
                   <id> tek kayıt ya da teslim sözü (soz-…) olabilir; söz
@@ -45,6 +47,8 @@ Komutlar:
                   yazılır. Onaysız madde ONAYLI görünmez.
 
 Seçenekler:
+  --claude-md     init: CLAUDE.md'ye "## Topbeam" bölümünü SORMADAN ekle
+  --no-claude-md  init: CLAUDE.md'ye hiç dokunma
   --html          makbuz: tek dosya HTML de üret (dış istek yok)
   --no-ci         sync: opsiyonel CI okumasını tamamen kapat (TOPBEAM_NO_CI=1
                   ile aynı) — Topbeam tümüyle lokal kalır, tek dış çağrı yapılmaz
@@ -57,9 +61,21 @@ veya insan onayıyla söylenir. Özet deterministiktir (LLM yok).
 
 // ── komutlar ─────────────────────────────────────────────────────────────────
 
-async function cmdInit(_args: Args): Promise<void> {
+async function cmdInit(args: Args): Promise<void> {
   const cwd = process.cwd();
-  const res = await runInit(cwd);
+  /**
+   * CLAUDE.md kararı KULLANICININ (2026-07-29). Terminalde sorulur ve eklenecek
+   * metin önce EKRANA basılır — kör onay istemiyoruz. Otomasyonda (pipe/CI)
+   * soru sorulamaz, o yüzden bölüm EKLENMEZ; `--claude-md` ile açıkça istenir.
+   */
+  const claudeMdBayrak =
+    args.flags['claude-md'] === true ? true : args.flags['no-claude-md'] === true ? false : undefined;
+  const interactive = process.stdin.isTTY === true;
+  const asker = interactive && claudeMdBayrak === undefined ? makeAsker() : null;
+  const res = await runInit(cwd, {
+    ...(claudeMdBayrak !== undefined ? { claudeMd: claudeMdBayrak } : {}),
+    ...(asker !== null ? { sor: asker.ask, yaz: out } : {}),
+  }).finally(() => asker?.close());
   out(`Topbeam bağlandı: ${res.projectName}`);
   for (const c of res.created) out(`  + ${c}`);
   for (const s of res.skipped) out(`  = ${s} (vardı, dokunulmadı)`);

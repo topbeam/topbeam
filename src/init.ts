@@ -90,7 +90,27 @@ async function exists(path: string): Promise<boolean> {
   }
 }
 
-export async function runInit(cwd: string, opts: { now?: Date } = {}): Promise<InitResult> {
+export interface InitOptions {
+  now?: Date;
+  /**
+   * CLAUDE.md'ye "## Topbeam" bölümü eklensin mi?
+   *   true  → ekle · false → hiç dokunma · undefined → SOR (soru yoksa EKLEME)
+   *
+   * ⚠️ Neden varsayılan "sorma-ekleme değil" (2026-07-29 sertleştirme bulgusu):
+   * init, kullanıcının CLAUDE.md'sine 15 satır TÜRKÇE kalıcı davranış talimatı
+   * ekliyordu — onay sormadan, geri alma yolu olmadan. Test deposunda o dosya
+   * "Always answer in English. Never edit files without asking." diyordu; araç
+   * ikisini de çiğnedi. Kullanıcının Claude'una talimat yazmak, kullanıcının
+   * kararıdır.
+   */
+  claudeMd?: boolean;
+  /** TTY'de onay sorusu — verilmezse soru sorulmaz (ve bölüm eklenmez). */
+  sor?: (soru: string) => Promise<string>;
+  /** Kullanıcıya gösterilecek metin (soru öncesi bloğu basmak için). */
+  yaz?: (satir: string) => void;
+}
+
+export async function runInit(cwd: string, opts: InitOptions = {}): Promise<InitResult> {
   const now = opts.now ?? new Date();
   const projectName = basename(cwd);
   const created: string[] = [];
@@ -181,10 +201,24 @@ export async function runInit(cwd: string, opts: { now?: Date } = {}): Promise<I
   if (claudeMd.includes(CLAUDE_MD_MARKER)) {
     skipped.push(`CLAUDE.md (${CLAUDE_MD_MARKER} bölümü zaten var)`);
   } else {
-    const sep = claudeMd === '' || claudeMd.endsWith('\n') ? '' : '\n';
-    await guvenliYazDisa(cwd, claudeMdPath, `${sep}${CLAUDE_MD_SECTION}`, 'ekle');
-    claudeMdUpdated = true;
-    created.push(`CLAUDE.md → "${CLAUDE_MD_MARKER}" bölümü eklendi`);
+    let ekle = opts.claudeMd;
+    if (ekle === undefined && opts.sor !== undefined) {
+      // Ne yazacağımızı ÖNCE göster — kör onay istemiyoruz.
+      opts.yaz?.('');
+      opts.yaz?.(`CLAUDE.md'ye şu bölüm eklenebilir (Claude'un bu projedeki alışkanlıkları):`);
+      for (const l of CLAUDE_MD_SECTION.trim().split('\n')) opts.yaz?.(`  │ ${l}`);
+      opts.yaz?.('');
+      const cevap = (await opts.sor('Eklensin mi? [e/H] ')).trim().toLocaleLowerCase('tr-TR');
+      ekle = cevap === 'e' || cevap === 'evet';
+    }
+    if (ekle === true) {
+      const sep = claudeMd === '' || claudeMd.endsWith('\n') ? '' : '\n';
+      await guvenliYazDisa(cwd, claudeMdPath, `${sep}${CLAUDE_MD_SECTION}`, 'ekle');
+      claudeMdUpdated = true;
+      created.push(`CLAUDE.md → "${CLAUDE_MD_MARKER}" bölümü eklendi`);
+    } else {
+      skipped.push('CLAUDE.md (dokunulmadı — istersen: topbeam init --claude-md)');
+    }
   }
 
   return { created, skipped, claudeMdUpdated, projectName };

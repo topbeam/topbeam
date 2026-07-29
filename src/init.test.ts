@@ -13,7 +13,7 @@ async function tmpProj(): Promise<string> {
 
 test('sıfırdan init: state + goal + notes + CLAUDE.md bölümü kurulur', async () => {
   const dir = await tmpProj();
-  const res = await runInit(dir, { now: new Date('2026-07-28T10:00:00Z') });
+  const res = await runInit(dir, { now: new Date('2026-07-28T10:00:00Z'), claudeMd: true });
 
   assert.ok(res.created.includes('.ocean/state.json'));
   assert.ok(res.created.includes('.ocean/goal.md'));
@@ -56,12 +56,12 @@ test('goal.md şablonu HİÇ SÖZ İÇERMEZ (söz insanındır) + yönerge; hede
 
 test('idempotent: ikinci init hiçbir şeyi ezmez, bölümü çiftlemez', async () => {
   const dir = await tmpProj();
-  await runInit(dir);
+  await runInit(dir, { claudeMd: true });
 
   // kullanıcı verisi simülasyonu: goal düzenlendi
   await writeFile(join(dir, '.ocean', 'goal.md'), '# Hedef\n\nGerçek hedefim.\n', 'utf8');
 
-  const res2 = await runInit(dir);
+  const res2 = await runInit(dir, { claudeMd: true });
   assert.equal(res2.created.length, 0);
   assert.equal(res2.claudeMdUpdated, false);
   assert.ok(res2.skipped.some((s) => s.includes('state.json')));
@@ -79,7 +79,7 @@ test('mevcut CLAUDE.md korunur, bölüm SONUNA eklenir', async () => {
   const mevcut = '# Benim Projem\n\nÖnemli kurallarım var.\n';
   await writeFile(join(dir, 'CLAUDE.md'), mevcut, 'utf8');
 
-  await runInit(dir);
+  await runInit(dir, { claudeMd: true });
   const claudeMd = await readFile(join(dir, 'CLAUDE.md'), 'utf8');
   assert.ok(claudeMd.startsWith('# Benim Projem'));
   assert.ok(claudeMd.includes('Önemli kurallarım var.'));
@@ -111,4 +111,29 @@ test('.gitignore yoksa oluşturulur', async () => {
   await runInit(dir);
   const gi = await readFile(join(dir, '.gitignore'), 'utf8');
   assert.ok(gi.includes('.ocean/'));
+});
+
+
+test('ONAY KAPISI: varsayılan olarak CLAUDE.md\'ye DOKUNULMAZ (soru yoksa ekleme yok)', async () => {
+  // Ölçülen kusur: init, kullanıcının CLAUDE.md'sine 15 satır kalıcı davranış
+  // talimatı ekliyordu — onay sormadan. Test deposunda o dosya
+  // "Never edit files without asking" diyordu; araç ikisini de çiğnedi.
+  const dir = await tmpProj();
+  const mevcut = '# Benim Projem\n\nNever edit files without asking.\n';
+  await writeFile(join(dir, 'CLAUDE.md'), mevcut, 'utf8');
+
+  const res = await runInit(dir); // soru fonksiyonu YOK → otomasyon davranışı
+  assert.equal(res.claudeMdUpdated, false, 'sormadan eklenmemeli');
+  assert.equal(await readFile(join(dir, 'CLAUDE.md'), 'utf8'), mevcut, 'dosya AYNEN kalmalı');
+  assert.ok(res.skipped.some((x) => x.includes('CLAUDE.md')), 'ne yapılmadığı söylenmeli');
+});
+
+test('ONAY KAPISI: "e" cevabı verilirse eklenir, "H" cevabı verilirse eklenmez', async () => {
+  const evet = await tmpProj();
+  const r1 = await runInit(evet, { sor: () => Promise.resolve('e'), yaz: () => {} });
+  assert.equal(r1.claudeMdUpdated, true);
+
+  const hayir = await tmpProj();
+  const r2 = await runInit(hayir, { sor: () => Promise.resolve(''), yaz: () => {} });
+  assert.equal(r2.claudeMdUpdated, false, 'boş cevap = Hayır (dürüst taraf)');
 });

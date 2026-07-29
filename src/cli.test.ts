@@ -83,7 +83,7 @@ test('open pano yokken dürüstçe reddeder, exit 1', async () => {
 test('tam akış: init → sync → open (izole dizin, transcript yok senaryosu)', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'topbeam-akis-'));
 
-  const init = run(['init'], { cwd: dir });
+  const init = run(['init', '--claude-md'], { cwd: dir });
   assert.equal(init.code, 0, init.stderr);
   assert.ok(init.stdout.includes('Topbeam bağlandı'));
   assert.ok(init.stdout.includes('.ocean/state.json'));
@@ -93,7 +93,7 @@ test('tam akış: init → sync → open (izole dizin, transcript yok senaryosu)
   assert.ok(claudeMd.includes('## Topbeam'));
 
   // ikinci init: idempotent
-  const init2 = run(['init'], { cwd: dir });
+  const init2 = run(['init', '--claude-md'], { cwd: dir });
   assert.equal(init2.code, 0);
   assert.ok(init2.stdout.includes('dokunulmadı'));
 
@@ -121,7 +121,7 @@ test('tam akış: init → sync → open (izole dizin, transcript yok senaryosu)
 
 test('verify: olmayan id ile exit 1 + dürüst mesaj (subprocess)', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'topbeam-verify-'));
-  run(['init'], { cwd: dir });
+  run(['init', '--claude-md'], { cwd: dir });
   const r = run(['verify', 'gorev-3'], { cwd: dir, input: 'h\n' });
   assert.equal(r.code, 1);
   assert.match(r.stderr, /Kayıt bulunamadı: gorev-3/);
@@ -132,7 +132,7 @@ test('verify: olmayan id ile exit 1 + dürüst mesaj (subprocess)', async () => 
  * `topbeam verify <id> <<< "e"` koşturup passport.jsonl'e "insan onayı" yazdırdı.
  * Subprocess'in stdin'i bir PIPE'tır (isTTY yok) → tam o senaryo.
  */
-test('verify subprocess: piped "e" onay VERMEZ — bot insan onayı yazamaz', async () => {
+test('verify subprocess: piped "e" onay VERMEZ (kazayla onay oluşamaz)', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'topbeam-verify-e-'));
   const { newOceanState } = await import('./types.ts');
   const { writeState, readState } = await import('./state.ts');
@@ -160,7 +160,7 @@ test('verify subprocess: piped "e" onay VERMEZ — bot insan onayı yazamaz', as
 
 test('verify: --by bayrağı reddedilir (imza uydurma kapısı kapalı)', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'topbeam-verify-by-'));
-  run(['init'], { cwd: dir });
+  run(['init', '--claude-md'], { cwd: dir });
   const r = run(['verify', 'dosya-git-s9', '--by', 'dogfood-ajan'], { cwd: dir, input: 'e\n' });
   assert.equal(r.code, 1);
   assert.match(r.stderr, /--by/);
@@ -173,7 +173,7 @@ test('verify: --by bayrağı reddedilir (imza uydurma kapısı kapalı)', async 
  */
 test('makbuz: init sonrası dosyayı yazar, yolu söyler, otomatik AÇMAZ', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'topbeam-makbuz-cli-'));
-  run(['init'], { cwd: dir });
+  run(['init', '--claude-md'], { cwd: dir });
   const r = run(['makbuz'], { cwd: dir });
   assert.equal(r.code, 0, r.stderr);
   assert.ok(r.stdout.includes('makbuz.md'));
@@ -190,7 +190,7 @@ test('makbuz: init sonrası dosyayı yazar, yolu söyler, otomatik AÇMAZ', asyn
 
 test('makbuz --html: ikinci dosya da üretilir; onaysız madde ONAYLI görünmez', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'topbeam-makbuz-html-'));
-  run(['init'], { cwd: dir });
+  run(['init', '--claude-md'], { cwd: dir });
   // İnsan KENDİ sözlerini yazar — barın tek meşru kaynağı (şablon söz yazmaz).
   const goalPath = join(dir, '.ocean', 'goal.md');
   await writeFile(goalPath, `${await readFile(goalPath, 'utf8')}\n- [ ] Kurulum tek komutla çalışıyor\n- [ ] test: testler yeşil\n`, 'utf8');
