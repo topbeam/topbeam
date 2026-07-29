@@ -127,3 +127,24 @@ test('Claim ve LogEntry şekilleri — beyan kanıt değildir', () => {
   };
   assert.equal(entry.source, 'claude-beyan');
 });
+
+/**
+ * SÜRÜM NÖBETÇİSİ (2026-07-29) — araç sürümü package.json ile ayrışamaz.
+ *
+ * Yaşanan: TOOL_VERSION elle yazılıydı; `npm version patch` onu güncellemedi ve
+ * yayınlanan 0.1.1 kendini "v0.1.0" diye tanıttı — CLI'da, panoda ve dışarıya
+ * gösterilen MAKBUZ'da. Makbuzun üstünde yanlış sürüm yazması bu üründe
+ * kabul edilemez bir yanlış beyandır; bu test o kaymayı imkânsız kılar.
+ */
+test('TOOL_VERSION, package.json.version ile BİREBİR aynı olmalı', async () => {
+  const { readFileSync } = await import('node:fs');
+  const { fileURLToPath } = await import('node:url');
+  const { dirname, join } = await import('node:path');
+  const kok = join(dirname(fileURLToPath(import.meta.url)), '..');
+  const pkg = JSON.parse(readFileSync(join(kok, 'package.json'), 'utf8')) as { version: string };
+  assert.equal(
+    TOOL_VERSION,
+    pkg.version,
+    'sürüm kaydı: makbuz/pano/CLI yanlış sürüm gösterir — `npm version` sonrası types.ts da güncellenmeli',
+  );
+});

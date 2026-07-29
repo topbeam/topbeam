@@ -22,8 +22,16 @@
  */
 export const SCHEMA_VERSION = 2;
 
-/** Araç sürümü — TEK kaynak. UI/altbilgi/CLI buradan okur. */
-export const TOOL_VERSION = '0.1.0';
+/**
+ * Araç sürümü. `package.json.version` ile BİREBİR aynı olmak ZORUNDA —
+ * bir nöbetçi test bunu kilitler (types.test.ts).
+ *
+ * Neden kilit var (2026-07-29'da yaşandı): burası elle yazıldığı için
+ * `npm version patch` sonrası kaydı: paket 0.1.1 yayınlandı ama CLI, pano ve
+ * MAKBUZ kendini `v0.1.0` diye tanıttı. Makbuz dışarıya gösterilen belgedir;
+ * üstünde yanlış sürüm yazması, bu üründe kabul edilemez bir yanlış beyandır.
+ */
+export const TOOL_VERSION = '0.1.1';
 
 /**
  * Proje kökünde Topbeam veri dizini ve durum dosyası.
