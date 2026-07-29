@@ -65,16 +65,52 @@ const PATTERNS: Pattern[] = [
     re: /\b(Bearer|Basic)\s+[A-Za-z0-9._~+/=-]{12,}/g,
     mask: (m) => `${m.split(/\s+/)[0]} ***[MASKED]`,
   },
-  // KEY=value / KEY: value çiftleri — isim secret'ı ima ediyorsa değer maskelenir
+  /**
+   * KEY=value / KEY: value çiftleri — isim secret'ı ima ediyorsa değer maskelenir.
+   *
+   * ⚠️ 2026-07-29 sertleştirme saldırısı: ad sınıfı `[A-Za-z0-9_]` idi, TİRE YOKTU
+   * ve ad listesi dardı. Ölçülen sızıntılar (state.json + pano.html + MAKBUZ'a
+   * düz metin girdiler):
+   *     X-Api-Key: 9f8e…      x-api-key: sekret_…      --api-key=9f8e…
+   *     MYSQL_PWD=SuperGizli  DB_PASS=SuperGizli       OPENAI_KEY=abcd…
+   * Ad sınıfına tire eklendi, ad listesi genişletildi (PWD|PW|PASS|CRED|
+   * SIGNATURE|SESSION|COOKIE|BEARER…). Değer sınıfında `*` ve `[` yok →
+   * maske çıktısı tekrar eşleşmez (idempotentlik korunur).
+   */
   {
     name: 'secretish-assignment',
-    // Değer sınıfında `*` ve `[` yok → maske çıktısı tekrar eşleşmez (idempotentlik).
-    // BP'den fark: önek OPSİYONEL (bare `API_KEY=` / `TOKEN=` de yakalanır) + case-insensitive.
-    re: /\b((?:[A-Za-z_][A-Za-z0-9_]*?)?(?:PASSWORD|PASSWD|SECRET|TOKEN|API_?KEY|APIKEY|PRIVATE_?KEY|CREDENTIALS?|AUTH)[A-Za-z0-9_]*)\s*[:=]\s*("[^"\n]{4,}"|'[^'\n]{4,}'|[^\s"';,*[\]]{4,})/gi,
+    re: /\b((?:[A-Za-z_][A-Za-z0-9_-]*?)?(?:PASSWORD|PASSWD|PASS|PWD|SECRET|TOKEN|API[-_]?KEY|APIKEY|KEY|PRIVATE[-_]?KEY|CREDENTIALS?|CRED|AUTH|SIGNATURE|SESSION|COOKIE|BEARER)[A-Za-z0-9_-]*)\s*[:=]\s*("[^"\n]{4,}"|'[^'\n]{4,}'|[^\s"';,*[\]]{4,})/gi,
     mask: (m) => {
       const sep = m.search(/[:=]/);
       return `${m.slice(0, sep + 1)}***[MASKED]`;
     },
+  },
+
+  /**
+   * CLI parola bayrakları — `mysql -pGizli`, `docker login -p Gizli`.
+   * `-p<değer>` (boşluksuz) neredeyse her zaman paroladır. Boşluklu `-p değer`
+   * ise `mkdir -p dizin` ile karışabilir; bu yüzden yalnız PAROLA GİBİ görünen
+   * değerlerde (harf+rakam karışık, ≥8, `/` içermeyen) maskelenir.
+   * Ürünün kuralı: kaçan sır, fazla maskeden kötüdür.
+   */
+  {
+    name: 'cli-password-flag',
+    re: /(^|\s)(-p)(?=[^\s/-])([^\s]{4,})/g,
+    mask: (m) => `${m.slice(0, m.indexOf('-p') + 2)}***[MASKED]`,
+  },
+  {
+    name: 'cli-password-flag-spaced',
+    re: /(^|\s)(-p|--password|--pass)\s+(?![-/])(?=[^\s]*[A-Za-z])(?=[^\s]*[0-9])[^\s/]{8,}/g,
+    mask: (m) => {
+      const i = m.search(/\s(?=[^\s]*$)/);
+      return `${m.slice(0, i + 1)}***[MASKED]`;
+    },
+  },
+  /** `-u kullanici:parola` — iki nokta sonrası gider. */
+  {
+    name: 'cli-user-colon-pass',
+    re: /(^|\s)-u\s+[^\s:]{1,64}:[^\s]{4,}/g,
+    mask: (m) => `${m.slice(0, m.lastIndexOf(':') + 1)}***[MASKED]`,
   },
 ];
 
@@ -92,7 +128,23 @@ export function redact(input: string): RedactResult {
   let hits = 0;
   const patternNames: string[] = [];
   for (const p of PATTERNS) {
-    text = text.replace(p.re, (m) => {
+    text = text.replace(p.re, (m: string, ...rest: unknown[]) => {
+      /**
+       * ÇİFT MASKELEME KORUMASI (2026-07-29): iki desen aynı bölgeye vurunca
+       * çıktı `***[MASKED]***[MASKED]` oluyor ve sayaç şişiyordu ("7 parça
+       * maskelendi" derken gerçekte 4 sır vardı). Zaten maskelenmiş bir bölge
+       * yeniden maskelenmez ve SAYILMAZ — sayı da bir iddiadır, doğru olmalı.
+       */
+      if (m.includes('[MASKED]')) return m;
+      // Eşleşmenin HEMEN ARDINDA maske varsa, bu bölge zaten kapatılmıştır
+      // (ör. sk-token deseni değeri maskeledi, sonra atama deseni kalan
+      // `KEY=sk-a` parçasını yakalıyor). İkinci maske hem çirkin hem SAYIYI
+      // ŞİŞİRİYOR — sayı da bir iddiadır.
+      const offset = rest[rest.length - 2];
+      const full = rest[rest.length - 1];
+      if (typeof offset === 'number' && typeof full === 'string') {
+        if (full.slice(offset + m.length).startsWith('***[MASKED]')) return m;
+      }
       hits++;
       if (!patternNames.includes(p.name)) patternNames.push(p.name);
       return (p.mask ?? defaultMask)(m);
