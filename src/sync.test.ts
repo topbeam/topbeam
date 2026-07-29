@@ -299,20 +299,35 @@ test('goal.md\'de teslim sözü YOKSA: pasaport boş + dürüst yönerge (bar yo
   assert.ok(html.includes('MVP dikey dilimini bitir.'));
 });
 
-test('init şablonu tek başına çalışır: 7 evrensel teslim kapısı + test: eşleşmesi', async () => {
+test('init şablonu SÖZ YAZMAZ: bar çizilmez, dürüst yönerge çıkar', async () => {
   const { proj, claudeDir } = await makeProject();
   await runInit(proj, { now: NOW }); // goal.md ŞABLONU ile kurulur, elle yazılmaz
   const res = await withClaudeDir(claudeDir, () => runSync(proj, { now: NOW }));
 
-  assert.equal(res.sozToplam, 7, 'şablon 7 teslim kapısı kurmalı');
-  const eslesen = res.state?.passport.filter((p) => p.claimIds.length > 0) ?? [];
-  assert.equal(eslesen.length, 1, 'yalnız `test:` satırı bu projede kayıt bulmalı');
-  assert.ok(eslesen[0]?.title.startsWith('test:'));
-  assert.equal(res.sozOnayli, 0, 'kanıt insan onayı değildir — bar boş kalır');
+  // DÜRÜSTLÜK: araç insanın adına söz vermez → şablonda sıfır madde.
+  assert.equal(res.sozToplam, 0, 'şablon hiç söz kurmaz — söz kullanıcınındır');
+  assert.equal(res.sozOnayli, 0);
+  assert.equal(res.state?.passport.length ?? 0, 0, 'söz yoksa bar bölmesi de yok');
 
   // şablonun yönerge satırları hedef cümlesi sanılmaz
   const html = await readFile(join(proj, '.ocean', 'pano.html'), 'utf8');
   assert.equal(html.includes('Her `- [ ]` satırı'), false);
+});
+
+test('kullanıcı KENDİ sözünü yazınca bar kurulur ve `test:` eşleşmesi çalışır', async () => {
+  const { proj, claudeDir } = await makeProject();
+  await runInit(proj, { now: NOW });
+  // İnsan kendi sözlerini yazar — barın tek meşru kaynağı budur.
+  const goalPath = join(proj, '.ocean', 'goal.md');
+  const goal = await readFile(goalPath, 'utf8');
+  await writeFile(goalPath, `${goal}\n- [ ] test: testler yeşil\n- [ ] Kurulum tek komutla çalışıyor\n`, 'utf8');
+
+  const res = await withClaudeDir(claudeDir, () => runSync(proj, { now: NOW }));
+  assert.equal(res.sozToplam, 2, 'bar bölmesi = insanın yazdığı söz sayısı');
+  const eslesen = res.state?.passport.filter((p) => p.claimIds.length > 0) ?? [];
+  assert.equal(eslesen.length, 1, 'yalnız `test:` satırı bu projede kayıt bulmalı');
+  assert.ok(eslesen[0]?.title.startsWith('test:'));
+  assert.equal(res.sozOnayli, 0, 'kanıt insan onayı değildir — bar boş kalır');
 });
 
 test('git deposu OLMAYAN proje: kart "git status" ÖNERMEZ', async () => {

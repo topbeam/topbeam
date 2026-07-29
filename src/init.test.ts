@@ -35,7 +35,7 @@ test('sıfırdan init: state + goal + notes + CLAUDE.md bölümü kurulur', asyn
   assert.ok(claudeMd.includes('teslim\n   sözleri kullanıcınındır'));
 });
 
-test('goal.md şablonu: 7 evrensel teslim kapısı + yönerge; hedef satırı sızmaz', async () => {
+test('goal.md şablonu HİÇ SÖZ İÇERMEZ (söz insanındır) + yönerge; hedef satırı sızmaz', async () => {
   const { parseGoalItems } = await import('./goal.ts');
   const { readGoal } = await import('./state.ts');
   const dir = await tmpProj();
@@ -43,11 +43,12 @@ test('goal.md şablonu: 7 evrensel teslim kapısı + yönerge; hedef satırı s�
 
   const goal = await readFile(join(dir, '.ocean', 'goal.md'), 'utf8');
   const items = parseGoalItems(goal);
-  assert.equal(items.length, 7, 'şablon 5-7 evrensel teslim kapısı kurmalı');
-  assert.ok(items.every((i) => !i.checked), 'şablon hiçbir sözü onaylı göstermez');
-  assert.ok(items.some((i) => i.hints.testOnly), '`test:` öneki örneği olmalı');
-  assert.ok(items.some((i) => i.hints.paths.length > 0), 'yol ipucu örneği olmalı');
-  assert.ok(goal.includes('kendi sözlerini yaz'), 'kullanıcıya sözün ONUN olduğu söylenir');
+  // DÜRÜSTLÜK: "birim = İNSANIN yazdığı söz" yasası — araç kendi cümlesini
+  // insanın sözüymüş gibi bara koyamaz. Şablon sıfır madde kurar.
+  assert.equal(items.length, 0, 'şablon hiçbir söz yazmaz — söz kullanıcınındır');
+  assert.ok(/kendi sözlerini yaz/i.test(goal), 'kullanıcıya sözün ONUN olduğu söylenir');
+  assert.ok(goal.includes('araç senin adına söz veremez'), 'gerekçe açıkça yazılı');
+  assert.ok(goal.includes('Eşleme ipuçları'), 'ipucu yönergesi korunur');
 
   // Yönerge satırları panonun HEDEF cümlesi yerine geçmez (alıntı ile yazılı).
   assert.equal(await readGoal(dir), null);

@@ -6,7 +6,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtemp, readFile, access } from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile, access } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -102,7 +102,9 @@ test('tam akış: init → sync → open (izole dizin, transcript yok senaryosu)
   assert.ok(sync.stdout.includes('Topbeam senkron tamam'));
   assert.ok(sync.stdout.includes('Pano'));
   // İlerleme dili YALNIZ teslim sözlerinde; defter nötr sayılır.
-  assert.ok(sync.stdout.includes('Teslim sözü: 0 / 7 madde onaylandı'));
+  // Şablon HİÇ söz yazmaz (söz insanındır) → dürüst yönerge çıkar, bar çizilmez.
+  assert.ok(sync.stdout.includes('Teslim sözü: yok'));
+  assert.ok(sync.stdout.includes('goal.md'), 'kullanıcıya nereye yazacağı söylenir');
   assert.ok(sync.stdout.includes('Defter     : 0 oturum kaydı (ilerleme ölçüsü değil)'));
   assert.equal(/\d+\/\d+ doğrulandı/.test(sync.stdout), false, 'eski ilerleme dili kalkmalı');
   await access(join(dir, '.ocean', 'pano.html'));
@@ -182,21 +184,23 @@ test('makbuz: init sonrası dosyayı yazar, yolu söyler, otomatik AÇMAZ', asyn
   assert.ok(md.startsWith('# Teslim Makbuzu'));
   assert.ok(md.includes('## Kendin doğrula (üçüncü kişi için)'));
   assert.ok(md.includes('## Bu makbuz ne demek DEĞİL'));
-  // sync koşmadı: goal.md'de söz var ama state'te yok — dürüst ayrım
-  assert.ok(md.includes('teslim sözü yazılı'));
-  assert.ok(md.includes('topbeam sync'));
+  // Şablon söz yazmaz → makbuz yine üretilir ama durumu DÜRÜSTÇE söyler.
+  assert.ok(/teslim sözü.*yok|söz.*yazılmadı|goal\.md/i.test(md), 'söz yoksa dürüstçe yazar');
 });
 
 test('makbuz --html: ikinci dosya da üretilir; onaysız madde ONAYLI görünmez', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'topbeam-makbuz-html-'));
   run(['init'], { cwd: dir });
+  // İnsan KENDİ sözlerini yazar — barın tek meşru kaynağı (şablon söz yazmaz).
+  const goalPath = join(dir, '.ocean', 'goal.md');
+  await writeFile(goalPath, `${await readFile(goalPath, 'utf8')}\n- [ ] Kurulum tek komutla çalışıyor\n- [ ] test: testler yeşil\n`, 'utf8');
   const sync = run(['sync'], { cwd: dir });
   assert.equal(sync.code, 0, sync.stderr);
 
   const r = run(['makbuz', '--html'], { cwd: dir });
   assert.equal(r.code, 0, r.stderr);
   assert.ok(r.stdout.includes('makbuz.html'));
-  assert.ok(r.stdout.includes('0 / 7 madde insan onaylı'));
+  assert.ok(r.stdout.includes('0 / 2 madde insan onaylı'), 'onaysız madde onaylı görünmez');
 
   const md = await readFile(join(dir, '.ocean', 'makbuz.md'), 'utf8');
   assert.equal(md.includes('- [x]'), false, 'passport.jsonl yokken tik olamaz');

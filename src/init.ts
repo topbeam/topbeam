@@ -52,15 +52,12 @@ const GOAL_TEMPLATE = `# Proje Hedefi
 > Bar sonludur: kaç satır yazarsan o kadar bölme olur, oturum sayısı barı BÜYÜTMEZ.
 > Bölme yalnız kendi terminalinden verdiğin insan onayıyla dolar: \`topbeam verify <söz-id>\`.
 >
-> Aşağıdakiler ÖRNEKTİR. Sil, kendi sözlerini yaz — kısa, tek cümle, teslim edilebilir.
-
-- [ ] Kurulum tek komutla çalışıyor
-- [ ] Ana akış baştan sona hatasız gidiyor
-- [ ] test: testler yeşil
-- [ ] Hata durumları insan diliyle anlatılıyor
-- [ ] README okununca ne olduğu anlaşılıyor \`README.md\`
-- [ ] Gizli anahtar ve sırlar depoda değil
-- [ ] Teslim paketi hazır: kim sahibi, nerede duruyor
+> Buraya HİÇBİR söz yazılmadı — bilerek. Söz senindir; araç senin adına söz veremez.
+> Kendi sözlerini yaz: kısa, tek cümle, teslim edilebilir. Örnek biçim (kopyalama, kendin yaz):
+>   \`- [ ] Kurulum tek komutla çalışıyor\`
+>   \`- [ ] test: testler yeşil\`
+>
+> Sen yazana kadar bar çizilmez — dolduracak bir söz yoktur.
 
 > Eşleme ipuçları (isteğe bağlı — kayıtları bir söze bağlamak için):
 >   yol      \`src/auth\` ya da \`src/cli.ts\` → o yola dokunan kayıtlar
