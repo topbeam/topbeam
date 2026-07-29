@@ -866,7 +866,16 @@ export function buildTruth(
   let atlananOturum = 0;
 
   for (const session of claude.sessions) {
-    if (session.cwdMismatch && session.cwd !== null && session.lastCwd !== null && session.cwd === session.lastCwd) {
+    // Ata oturum (üst dizinde açılmış Claude) BİLİNÇLİ olarak atlanmaz: cwd'si
+    // farklıdır ama işin bir kısmı bu projeye aittir; kapsam filtresi zaten
+    // proje kökü dışındaki yolları eler.
+    if (
+      !session.fromAncestor &&
+      session.cwdMismatch &&
+      session.cwd !== null &&
+      session.lastCwd !== null &&
+      session.cwd === session.lastCwd
+    ) {
       // Baştan sona başka cwd — büyük olasılıkla başka projenin işi.
       atlananOturum++;
       notes.push(

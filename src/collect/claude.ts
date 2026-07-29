@@ -19,7 +19,7 @@ import { createReadStream } from 'node:fs';
 import { readdir } from 'node:fs/promises';
 import { createInterface } from 'node:readline';
 import { homedir } from 'node:os';
-import { basename, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 
 // ── sınırlar (dev transcript'lere karşı bellek disiplini) ────────────────────
 
@@ -183,6 +183,21 @@ export interface SessionSummary {
   subagentFiles: number;
   /** Oturumun cwd'si istenen proje cwd'sinden farklı (dürüst bayrak). */
   cwdMismatch: boolean;
+  /**
+   * Oturum, projenin ÜST dizininde açılmış bir Claude oturumundan geldi.
+   *
+   * Neden var (2026-07-29, gerçek kurulumda ölçüldü): Claude Code çoğu zaman bir
+   * çalışma klasörünün kökünde açılır, depo ise onun ALTINDA durur. Transcript
+   * dizini oturumun cwd'sine göre adlandırıldığı için, deponun içinde `topbeam
+   * sync` koşturmak "0 oturum" veriyordu — yani araç, kendi yazıldığı işi bile
+   * göremiyordu. Üst dizin oturumları artık taranıyor.
+   *
+   * Güvenlik: bu oturumlar başka kardeş projelerin işini de içerebilir. Kapsam
+   * filtresi (truth.ts → projectRelative) proje kökü dışındaki her yolu zaten
+   * eler; bu bayrak yalnız "atlama" kuralının bunları atmaması için var ve
+   * kullanıcıya nereden okunduğu NOT olarak söylenir.
+   */
+  fromAncestor: boolean;
 }
 
 export interface ClaudeCollectResult {
@@ -794,6 +809,7 @@ export async function summarizeTranscript(
     readErrors: acc.readErrors,
     subagentFiles: acc.subagentFiles,
     cwdMismatch: false,
+    fromAncestor: false,
   };
 }
 
@@ -830,11 +846,52 @@ export async function collectClaude(
   for (const e of entries) {
     if (e.isDirectory() && normalizeName(e.name) === slug) matchedDirs.push(e.name);
   }
+
+  /**
+   * ÜST DİZİN OTURUMLARI (2026-07-29). Claude Code çoğu zaman bir çalışma
+   * klasörünün kökünde açılır, depo onun ALTINDA durur:
+   *     ~/Desktop/Calisma        ← Claude burada açık, transcript slug'ı bu
+   *     ~/Desktop/Calisma/depo   ← `topbeam sync` burada koşuyor
+   * Birebir slug eşlemesi bu durumda "0 oturum" verir; araç kendi yazıldığı işi
+   * bile göremez (bunu Topbeam'in kendi deposunda ölçtük).
+   *
+   * Bu yüzden birebir eşleşme YOKSA üst dizinlere yürünür ve İLK bulunan
+   * ata-oturum dizini kullanılır (en yakın ata; daha yukarısı daha çok yabancı iş
+   * içerir). Ata oturumlar `fromAncestor` ile işaretlenir ve kapsam filtresi
+   * (truth.ts) proje kökü dışındaki her yolu zaten eler — yani kardeş projelerin
+   * işi bu panoya SIZMAZ, yalnız sayısı kapsam notuna düşer.
+   *
+   * Birebir eşleşme VARSA yukarı bakılmaz: kendi kaydı olan proje başkasının
+   * kaydına ihtiyaç duymaz.
+   */
+  let ancestorCwd: string | null = null;
+  if (matchedDirs.length === 0) {
+    let dizin = resolve(projectCwd);
+    for (;;) {
+      const ust = dirname(dizin);
+      if (ust === dizin) break; // kök
+      dizin = ust;
+      const ustSlug = slugifyCwd(dizin);
+      const bulunan = entries.filter((e) => e.isDirectory() && normalizeName(e.name) === ustSlug);
+      if (bulunan.length > 0) {
+        matchedDirs.push(...bulunan.map((e) => e.name));
+        ancestorCwd = dizin;
+        break;
+      }
+    }
+  }
+
   if (matchedDirs.length === 0) {
     notes.push(
       'Bu proje için transcript dizini yok — Claude Code bu cwd ile hiç kayıt üretmemiş ya da kayıtlar temizlenmiş (doğrulanamadı).',
     );
     return { projectCwd, claudeProjectsDir: projectsDir, slug, matchedDirs, transcriptsFound: 0, sessions: [], notes };
+  }
+  if (ancestorCwd !== null) {
+    notes.push(
+      `Bu dizinin kendi transcript kaydı yok; kayıtlar ÜST dizin oturumundan okundu (${ancestorCwd}). ` +
+        'Yalnız bu projenin altındaki dosyalar sayıldı — üst oturumdaki başka işler kapsam dışı bırakıldı.',
+    );
   }
 
   const sessions: SessionSummary[] = [];
@@ -871,6 +928,7 @@ export async function collectClaude(
 
       const summary = await summarizeTranscript(transcriptPath, subPaths);
       if (summary.cwd !== null && resolve(summary.cwd) !== resolvedCwd) summary.cwdMismatch = true;
+      if (ancestorCwd !== null) summary.fromAncestor = true;
       sessions.push(summary);
     }
   }

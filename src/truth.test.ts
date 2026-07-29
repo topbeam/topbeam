@@ -83,6 +83,7 @@ function session(id: string, over: Partial<SessionSummary> = {}): SessionSummary
     readErrors: 0,
     subagentFiles: 0,
     cwdMismatch: false,
+    fromAncestor: false,
     ...over,
   };
 }
