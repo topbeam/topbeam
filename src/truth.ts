@@ -583,12 +583,44 @@ function kontrolKomutu(command: string): boolean {
   return isCheckLikeCommand(command) && !isTestLikeCommand(command);
 }
 
+/**
+ * ⚠️ KAPSAM KAPISI (2026-07-29, sertleştirme saldırısının 2. kritiği).
+ *
+ * Dosya claim'leri her zaman projectRelative()'ten geçiyordu; TEST claim'leri
+ * HİÇBİR kapsam kontrolünden geçmiyordu. Ata-dizin okuması eklenince
+ * (aynı gün) sonuç ölçüldü: ~/Desktop altında SIFIR iş yapılmış boş bir depoda
+ * "Claim: 93 (61 test kanıtı)" — başka projenin `npm test` çıktısı, bu projenin
+ * "test-kanıtı" manşeti oluyordu. Üstelik pano aynı ekranda
+ * "yalnız bu projenin altındaki dosyalar sayıldı" diye YAZIYORDU.
+ *
+ * Bu bir yanlış-pozitif değil, ÜRETİLMİŞ SAHTE KANITTI — ürünün tek iddiasının
+ * tam karşısı.
+ *
+ * Kural: bir test sinyali ancak oturumun cwd'si PROJE KÖKÜNÜN ALTINDAYSA claim
+ * üretir. Ata-dizin oturumlarında (fromAncestor) testin hangi alt projede
+ * koşulduğu ÖLÇÜLEMEZ → test claim'i hiç üretilmez. Kaçırmak, yanlış
+ * suçlamaktan iyidir; elenen sayı kapsam notuna yazılır (sessiz eleme yok).
+ */
+function testSinyaliBuProjeyeAtfedilebilirMi(session: SessionSummary, projectCwd: string): boolean {
+  if (session.fromAncestor) return false; // hangi alt projede koştuğu bilinmiyor
+  const cwd = session.cwd;
+  if (cwd === null) return false; // cwd okunamadı → atfetme
+  const kok = resolve(projectCwd);
+  const oturum = resolve(cwd);
+  return oturum === kok || oturum.startsWith(kok + sep);
+}
+
 function testClaims(
   session: SessionSummary,
   fallbackTs: string,
   yaz: Yazim,
-): { claims: Claim[]; skipped: number } {
+  projectCwd: string,
+): { claims: Claim[]; skipped: number; kapsamDisi: number } {
   const claims: Claim[] = [];
+  if (!testSinyaliBuProjeyeAtfedilebilirMi(session, projectCwd)) {
+    const n = lastSignalPerCommand(session.testSignals).filter((x) => !kontrolKomutu(x.command)).length;
+    return { claims, skipped: 0, kapsamDisi: n };
+  }
   const tumu = lastSignalPerCommand(session.testSignals);
   // Sınıflandırma HAM komut üzerinde yapılır (maskeleme yalnız METNE dokunur).
   const signals = tumu.filter((s) => !kontrolKomutu(s.command));
@@ -665,7 +697,7 @@ function testClaims(
       });
     }
   });
-  return { claims, skipped };
+  return { claims, skipped, kapsamDisi: 0 };
 }
 
 // ── log üretimi ──────────────────────────────────────────────────────────────
@@ -862,6 +894,8 @@ export function buildTruth(
   let hamBeyan = 0;
   let disKapsam = 0;
   let kontrolAtlanan = 0;
+  /** Bu projeye ATFEDİLEMEYEN test koşumu (ata oturum / proje dışı cwd). */
+  let testKapsamDisi = 0;
   let beyanDusen = 0;
   let atlananOturum = 0;
 
@@ -886,9 +920,10 @@ export function buildTruth(
     const buckets = bucketFiles(session, gitIdx, claude.projectCwd);
     disKapsam += buckets.outsideCount;
     claims.push(...fileClaims(session, buckets, git, claude.projectCwd, nowIso));
-    const t = testClaims(session, nowIso, yaz);
+    const t = testClaims(session, nowIso, yaz, claude.projectCwd);
     claims.push(...t.claims);
     kontrolAtlanan += t.skipped;
+    testKapsamDisi += t.kapsamDisi;
     if (opts.includeBeyan === true) {
       const b = beyanLog(session, claude.projectCwd, nowIso, yaz);
       log.push(...b.entries);
@@ -907,6 +942,14 @@ export function buildTruth(
   if (disKapsam > 0) {
     notes.push(
       `${disKapsam} düzenleme proje kökü dışındaki dosyalarda — claim ve log dışında tutuldu (bu pano yalnız bu projeyi anlatır).`,
+    );
+  }
+  if (testKapsamDisi > 0) {
+    // Sessiz eleme YOK: kaçırdığımızı da sayıyla söyleriz.
+    notes.push(
+      `${testKapsamDisi} test koşumu bu projeye atfedilemedi ve kanıt SAYILMADI — ` +
+        'koşum bu projenin dizininde yapılmamış (ya da üst dizin oturumundan geliyor, ' +
+        'hangi alt projede koştuğu ölçülemiyor). Kaçırmak, yanlış suçlamaktan iyidir.',
     );
   }
   if (kontrolAtlanan > 0) {

@@ -373,3 +373,54 @@ test('collectClaude: claudeDir tümden yoksa zarif boş sonuç', async () => {
   assert.equal(res.sessions.length, 0);
   assert.ok(res.notes.length >= 1);
 });
+
+// ── ATA-OTURUM SINIRLARI (2026-07-29 sertleştirme saldırısı) ────────────────
+//
+// İlk hâli kök dizine kadar yürüyor ve `/` slug'ıyla eşleşiyordu: boş bir
+// klasörde sync koşunca makinedeki 5 yabancı oturum taranıyordu — sessiz
+// kapsam genişlemesi. Sınırlar: ≤2 seviye · $HOME üstü kapalı · konak dizinler
+// deny-list · .git sınırında dur.
+
+test('ATA SINIRI: $HOME üstüne çıkılmaz, konak dizin oturumu okunmaz', async () => {
+  const { mkdtemp, mkdir: mk, writeFile: wf } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os');
+  const { join: j } = await import('node:path');
+
+  const sahteEv = await mkdtemp(j(tmpdir(), 'topbeam-ev-'));
+  const claudeDir = j(sahteEv, '.claude');
+  const projects = j(claudeDir, 'projects');
+  await mk(projects, { recursive: true });
+
+  // Ev dizininin KENDİSİ için bir oturum kaydı bırak — bu OKUNMAMALI.
+  const evSlug = slugifyCwd(sahteEv);
+  await mk(j(projects, evSlug), { recursive: true });
+  await wf(j(projects, evSlug, 'yabanci.jsonl'), '{"type":"user","cwd":"/x"}\n', 'utf8');
+
+  const proj = j(sahteEv, 'a', 'b', 'proje');
+  await mk(proj, { recursive: true });
+
+  const res = await collectClaude(proj, { claudeDir });
+  assert.equal(res.transcriptsFound, 0, '$HOME oturumu ata olarak okunmamalı');
+});
+
+test('ATA SINIRI: 2 seviyeden fazla yukarı çıkılmaz', async () => {
+  const { mkdtemp, mkdir: mk, writeFile: wf } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os');
+  const { join: j } = await import('node:path');
+
+  const ev = await mkdtemp(j(tmpdir(), 'topbeam-derin-'));
+  const claudeDir = j(ev, '.claude');
+  const projects = j(claudeDir, 'projects');
+  await mk(projects, { recursive: true });
+
+  const calisma = j(ev, 'calisma');           // 3 seviye yukarıda
+  const proj = j(calisma, 'x', 'y', 'proje');
+  await mk(proj, { recursive: true });
+
+  const slug = slugifyCwd(calisma);
+  await mk(j(projects, slug), { recursive: true });
+  await wf(j(projects, slug, 's.jsonl'), '{"type":"user","cwd":"/x"}\n', 'utf8');
+
+  const res = await collectClaude(proj, { claudeDir });
+  assert.equal(res.transcriptsFound, 0, '3 seviye yukarıdaki oturum okunmamalı');
+});

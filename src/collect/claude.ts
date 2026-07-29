@@ -85,6 +85,38 @@ const SHELL_SPLIT_RE = /(?:\|\||&&|;|\||\n)+/;
 const RUNNER_PREFIX_RE =
   /^(?:(?:[A-Za-z_][A-Za-z0-9_]*=\S*|sudo|time|npx|bunx|pnpm (?:exec|dlx)|yarn (?:exec|dlx)|npm exec|poetry run|uv run|pipenv run|python3? -m)\s+)+/;
 
+/** Ata-dizin yürüyüşünde en fazla kaç seviye yukarı çıkılır. */
+const ANCESTOR_MAX_UP = 2;
+
+/** Asla ata-oturum kaynağı sayılmayacak konak dizinler. */
+const KONAK_DIZINLER: ReadonlySet<string> = new Set([
+  '/', '/Users', '/home', '/tmp', '/var', '/private', '/private/tmp', '/opt', '/mnt',
+]);
+
+/** Yol var mı (dizin/dosya fark etmez). */
+async function varMi(yol: string): Promise<boolean> {
+  try {
+    await readdir(yol);
+    return true;
+  } catch (e) {
+    // ENOTDIR = var ama dizin değil (`.git` dosya olabilir: worktree linki)
+    return (e as NodeJS.ErrnoException).code === 'ENOTDIR';
+  }
+}
+
+/** Verilen slug dizinlerinde EN AZ BİR .jsonl var mı (boş dizin sayılmaz). */
+async function dizinlerdeTranscriptVarMi(projectsDir: string, dirNames: readonly string[]): Promise<boolean> {
+  for (const d of dirNames) {
+    try {
+      const files = await readdir(join(projectsDir, d), { withFileTypes: true });
+      if (files.some((f) => f.isFile() && f.name.endsWith('.jsonl'))) return true;
+    } catch {
+      // okunamadı — yok say
+    }
+  }
+  return false;
+}
+
 // ── dış tipler ───────────────────────────────────────────────────────────────
 
 export interface ClaudeCollectOptions {
@@ -864,13 +896,42 @@ export async function collectClaude(
    * Birebir eşleşme VARSA yukarı bakılmaz: kendi kaydı olan proje başkasının
    * kaydına ihtiyaç duymaz.
    */
+  /**
+   * ⚠️ SINIRLAR (2026-07-29 sertleştirme saldırısı — ilk hâli sınırsızdı).
+   *
+   * İlk sürüm kök dizine kadar yürüyordu ve `/` için üretilen `-` slug'ıyla
+   * eşleşiyordu. ÖLÇÜLDÜ: boş bir klasörde `sync` koşunca makinedeki `/`
+   * oturumlarından 5 yabancı oturum taranıyordu. Bu, sessiz bir kapsam
+   * genişlemesidir — kullanıcının hiç ilgisi olmayan işleri okur.
+   *
+   * Sınırlar:
+   *  - en fazla ANCESTOR_MAX_UP seviye yukarı,
+   *  - $HOME'un ÜSTÜNE asla çıkma,
+   *  - konak dizinlere (/, /Users, /tmp, /var …) asla eşleşme,
+   *  - bir `.git` sınırına gelince dur (o zaten başka bir deponun köküdür).
+   */
   let ancestorCwd: string | null = null;
-  if (matchedDirs.length === 0) {
+  const kendiKaydiVar = await dizinlerdeTranscriptVarMi(projectsDir, matchedDirs);
+  if (!kendiKaydiVar) {
+    // Boş bir birebir-eşleşme dizini "kendi kaydı var" demek DEĞİLDİR
+    // (ölçüldü: ajan koşumları boş slug dizinleri bırakabiliyor).
+    // Ama dizinin VAR olup BOŞ olması ayrı bir gerçektir: retention silmiş
+    // olabilir. Bu bilgi ata-oturuma düşerken kaybolmamalı.
+    if (matchedDirs.length > 0) {
+      notes.push(
+        'Bu projenin transcript dizini var ama içinde .jsonl yok — Claude Code retention ' +
+          '(varsayılan 30 gün) temizlemiş olabilir (doğrulanamadı).',
+      );
+    }
+    matchedDirs.length = 0;
     let dizin = resolve(projectCwd);
-    for (;;) {
+    const ev = resolve(homedir());
+    for (let seviye = 0; seviye < ANCESTOR_MAX_UP; seviye++) {
       const ust = dirname(dizin);
-      if (ust === dizin) break; // kök
+      if (ust === dizin) break; // dosya sistemi kökü
       dizin = ust;
+      if (KONAK_DIZINLER.has(dizin)) break;
+      if (dizin === ev || !dizin.startsWith(ev)) break; // $HOME ve üstü kapalı
       const ustSlug = slugifyCwd(dizin);
       const bulunan = entries.filter((e) => e.isDirectory() && normalizeName(e.name) === ustSlug);
       if (bulunan.length > 0) {
@@ -878,6 +939,8 @@ export async function collectClaude(
         ancestorCwd = dizin;
         break;
       }
+      // Başka bir deponun kökündeysek daha yukarı çıkma.
+      if (await varMi(join(dizin, '.git'))) break;
     }
   }
 
