@@ -111,7 +111,7 @@ function gitFacts(over: Partial<GitFacts> = {}): GitFacts {
     headSubject: 'ilk commit',
     dirtyFiles: [],
     recentCommits: [
-      { hash: 'abc1234', full: 'a'.repeat(40), date: '2026-07-28T08:00:00.000Z', subject: 'ilk commit' },
+      { hash: 'abc1234', full: 'a'.repeat(40), date: '2026-07-28T08:00:00.000Z', subject: 'ilk commit', files: [] },
     ],
     diffStat: null,
     notes: [],
@@ -523,6 +523,7 @@ test('log sınırı KANIT ÖNCELİKLİ: beyanlar düşer, kanıt satırları kal
     full: String(i).padStart(40, '0'),
     date: `2026-07-28T${String(i % 24).padStart(2, '0')}:00:00.000Z`,
     subject: `commit ${i}`,
+    files: [],
   }));
   const bashRuns = Array.from({ length: 200 }, (_, i) =>
     bash(`npm run build -- ${i}`, `Build ${i}`, { ts: '2026-07-28T23:59:00.000Z' }),
@@ -755,4 +756,91 @@ test('CI kapalıysa (--no-ci) claim üretilmez, kapsam notu yine yazılır', () 
   const { claims, notes } = buildTruth(claude, gitFacts(), { now: NOW, ci });
   assert.equal(claims.filter((c) => c.id.startsWith('ci-')).length, 0);
   assert.ok(notes.some((n) => n.includes('CI okuması kapalı')));
+});
+
+// ── COMMIT KANITI: "işini commit'lemek barını boşaltıyordu" kusuru ───────────
+//
+// 2026-07-29 lansman konseyi ölçtü: dosya commit'lenip ağaç temizlenince
+// diff HEAD ∪ status kümesinde kaybolduğu için aynı düzenleme "git'te izi yok —
+// doğrulanmadı" diye YENİ bir iddia doğuruyor, o iddia aynı teslim sözüne
+// eşleşiyor ve söz completed → partial düşüyordu. Canlı sonuç: bar 2/2 → 1/2.
+// Ürünün vaadinin tam tersi. Aşağıdaki üç test o davranışı kilitler.
+
+test('COMMIT KANITI: ağaç temiz ama iş commit\'lenmiş → dosya-kanıtı KORUNUR (bar gerilemez)', () => {
+  const claude = collect([
+    session('s1', {
+      changedFiles: [file(`${CWD}/src/a.ts`, { lastTs: '2026-07-28T10:00:00.000Z' })],
+    }),
+  ]);
+  // Ağaç TERTEMİZ: ne diff ne status kaydı var — eskiden burada kanıt ölüyordu.
+  const git = gitFacts({
+    dirtyFiles: [],
+    diffStat: null,
+    recentCommits: [
+      {
+        hash: 'def5678',
+        full: 'd'.repeat(40),
+        date: '2026-07-28T10:05:00.000Z', // düzenlemeden SONRA
+        subject: 'a.ts düzeltmesi',
+        files: ['src/a.ts'],
+      },
+    ],
+  });
+  const { claims } = buildTruth(claude, git, { now: NOW });
+
+  const dosya = claims.find((c) => c.id === 'dosya-git-s1');
+  assert.ok(dosya, 'commit kanıtı dosya-kanıtı claim\'i üretmeli');
+  assert.equal(dosya?.level, 'dosya-kaniti');
+  assert.equal(
+    claims.some((c) => c.id === 'dosya-transcript-s1'),
+    false,
+    'commit\'lenmiş iş için "git\'te izi yok" iddiası ÜRETİLMEMELİ — barı geriletir',
+  );
+  // Kanıt satırı SHA'yı taşımalı: üçüncü kişi `git show` ile bakabilsin.
+  const gitKanit = dosya?.evidence.find((e) => e.kind === 'git-diff');
+  assert.match(String(gitKanit?.summary), /commit'lenmiş/);
+  assert.equal(gitKanit?.ref, 'def5678');
+});
+
+test('COMMIT KANITI ZAMAN DİSİPLİNİ: düzenlemeden ÖNCEKİ commit kanıt SAYILMAZ', () => {
+  const claude = collect([
+    session('s1', {
+      changedFiles: [file(`${CWD}/src/a.ts`, { lastTs: '2026-07-28T10:00:00.000Z' })],
+    }),
+  ]);
+  const git = gitFacts({
+    dirtyFiles: [],
+    diffStat: null,
+    recentCommits: [
+      {
+        hash: 'old1111',
+        full: 'o'.repeat(40),
+        date: '2026-07-28T09:00:00.000Z', // düzenlemeden ÖNCE — bu düzenlemeyi kaydedemez
+        subject: 'eski commit',
+        files: ['src/a.ts'],
+      },
+    ],
+  });
+  const { claims } = buildTruth(claude, git, { now: NOW });
+  assert.equal(
+    claims.some((c) => c.id === 'dosya-git-s1'),
+    false,
+    'geçmişteki bir commit, sonraki bir düzenlemenin kanıtı olamaz',
+  );
+  assert.ok(claims.find((c) => c.id === 'dosya-transcript-s1'), 'dürüst hâli: doğrulanmadı');
+});
+
+test('COMMIT KANITI: zaman okunamıyorsa kanıt kurulmaz (kaçırmak > yanlış suçlamak)', () => {
+  const claude = collect([
+    session('s1', { changedFiles: [file(`${CWD}/src/a.ts`, { lastTs: null })] }),
+  ]);
+  const git = gitFacts({
+    dirtyFiles: [],
+    diffStat: null,
+    recentCommits: [
+      { hash: 'def5678', full: 'd'.repeat(40), date: '2026-07-28T10:05:00.000Z', subject: 'x', files: ['src/a.ts'] },
+    ],
+  });
+  const { claims } = buildTruth(claude, git, { now: NOW });
+  assert.equal(claims.some((c) => c.id === 'dosya-git-s1'), false);
 });

@@ -289,6 +289,22 @@ notuna yazılır.
 - **Kanıtsız iddia gösterilmez.** Kanıt seviyeleri: `dosya-kanıtı` (transcript ∩ git),
   `test-kanıtı` (çıktıdan okunan geçti/kaldı sayısı), `insan-onayı` (sen doğruladın),
   `doğrulanmadı` ("uygulandı görünüyor, doğrulanmadı").
+- **`transcript ∩ git` iki yoldan kurulur** — *commit atmak kanıtı yok etmez:*
+  1. **çalışma ağacı** — `diff --numstat HEAD` ∪ `status --porcelain`
+  2. **commit** — o yola dokunan ve **düzenlemeden sonra** atılmış bir commit
+     (kanıt satırı SHA'yı yazar; üçüncü kişi `git show <sha> --stat` ile bakabilir)
+
+  > **Neden 2. madde var:** commit'lenip ağacı temizlenen dosya 1. kümede
+  > görünmez. Yalnız 1'e bakıldığında aynı iş *"git'te izi yok — doğrulanmadı"*
+  > diye yeni bir iddia doğuruyor, o iddia aynı teslim sözüne eşleşiyor ve söz
+  > `completed`→`partial` düşüyordu. Ölçülen sonuç: **bar 2/2 → 1/2 geriliyordu**
+  > — yani *işini commit'lemek barını boşaltıyordu.* (2026-07-29'da düzeltildi;
+  > regresyon testleri `src/truth.test.ts` içinde.)
+  >
+  > **Zaman disiplini:** commit yalnız düzenlemeden **sonra** atıldıysa sayılır.
+  > Aksi hâlde "bu dosya geçmişte bir kez commit'lenmiş" gibi zayıf bir gerçek,
+  > güncel bir düzenlemenin kanıtı gibi görünürdü. Zaman okunamıyorsa commit
+  > kanıtı **kurulmaz** — kaçırmak, yanlış suçlamaktan iyidir.
 - **"Çalışıyor" asla otomatik söylenmez** — yalnız test kanıtı veya insan onayıyla.
 - Sayı uydurulmaz: test çıktısından sayı okunamadıysa iddia `doğrulanmadı` kalır.
 - Yüzde-ilerleme, motivasyon sözü, kırmızı alarm yok. Sakin, dürüst Türkçe.

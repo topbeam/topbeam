@@ -67,7 +67,7 @@ import {
   type SessionSummary,
   type TestSignal,
 } from './collect/claude.ts';
-import type { GitFacts } from './collect/git.ts';
+import type { GitCommit, GitFacts } from './collect/git.ts';
 import { buildCiClaims, type CiFacts } from './collect/ci.ts';
 
 // ── sınırlar ─────────────────────────────────────────────────────────────────
@@ -279,19 +279,71 @@ function shortCmd(command: string): string {
 }
 
 /**
- * Git'in kayıt gördüğü dosyaların mutlak yol kümesi:
- * diff --numstat HEAD (izlenen değişiklik) ∪ status --porcelain (kirli+yeni).
- * DİKKAT: commit'lenip ağacı temizlenen dosyalar burada GÖRÜNMEZ — bu bilinen
- * bir kapsam sınırı, claim metni bunu dürüstçe söyler.
+ * Git kanıt dizini — bir düzenlemenin git tarafında karşılığı İKİ yoldan kurulabilir:
+ *
+ *  1. ÇALIŞMA AĞACI: diff --numstat HEAD ∪ status --porcelain (kirli+yeni).
+ *  2. COMMIT: recentCommits içinde o yola dokunan ve düzenlemeden SONRA atılmış
+ *     bir commit.
+ *
+ * 2. madde neden var (2026-07-29 kusur düzeltmesi): commit'lenip ağacı temizlenen
+ * dosya 1. kümede GÖRÜNMEZ. Yalnız 1'e bakıldığında aynı düzenleme "git'te izi yok
+ * — doğrulanmadı" diye YENİ bir iddia doğuruyor, o iddia aynı teslim sözüne
+ * eşleşiyor ve söz `completed` → `partial` düşüyordu. Ölçülen sonuç: bar 2/2 → 1/2
+ * GERİLİYORDU. Yani **işini commit'lemek barını boşaltıyordu** — ürünün vaadinin
+ * tam tersi.
+ *
+ * ZAMAN DİSİPLİNİ: commit yalnız düzenlemeden SONRA atıldıysa kanıt sayılır
+ * (`commit.date >= file.lastTs`). Aksi hâlde "bu dosya geçmişte bir kez
+ * commit'lenmiş" gibi zayıf bir gerçek, güncel bir düzenlemenin kanıtı gibi
+ * görünürdü — bu, kanıtı sulandırmak olurdu. Zaman okunamıyorsa (lastTs yok ya da
+ * tarih ayrıştırılamıyor) commit kanıtı KURULMAZ: kaçırmak, yanlış suçlamaktan iyidir.
  */
-function gitKnownPaths(git: GitFacts, projectCwd: string): Set<string> {
+interface GitEvidenceIndex {
+  /** Çalışma ağacında kaydı olan mutlak yollar. */
+  worktree: Set<string>;
+  /** Mutlak yol → o yola dokunan commit'ler (git log sırası: yeniden eskiye). */
+  commits: Map<string, GitCommit[]>;
+}
+
+function gitEvidenceIndex(git: GitFacts, projectCwd: string): GitEvidenceIndex {
   const base = git.root ?? resolve(projectCwd);
-  const known = new Set<string>();
+  const worktree = new Set<string>();
   if (git.diffStat) {
-    for (const f of git.diffStat.files) known.add(absPath(f.path, base));
+    for (const f of git.diffStat.files) worktree.add(absPath(f.path, base));
   }
-  for (const d of git.dirtyFiles) known.add(absPath(d.path, base));
-  return known;
+  for (const d of git.dirtyFiles) worktree.add(absPath(d.path, base));
+
+  const commits = new Map<string, GitCommit[]>();
+  for (const c of git.recentCommits) {
+    for (const yol of c.files) {
+      const abs = absPath(yol, base);
+      const liste = commits.get(abs);
+      if (liste) liste.push(c);
+      else commits.set(abs, [c]);
+    }
+  }
+  return { worktree, commits };
+}
+
+/**
+ * Bu düzenlemeyi KAYDA GEÇİREN commit (varsa): yola dokunan ve düzenlemeden
+ * sonra atılmış olanların EN ESKİSİ — yani değişikliği ilk kayda geçiren.
+ * Tarihler farklı zaman dilimi ofsetleriyle gelebildiği için metin karşılaştırması
+ * YAPILMAZ; epoch'a çevrilir.
+ */
+function kaydedenCommit(idx: GitEvidenceIndex, abs: string, lastTs: string | null): GitCommit | null {
+  if (lastTs === null) return null;
+  const duzenleme = Date.parse(lastTs);
+  if (!Number.isFinite(duzenleme)) return null;
+  const adaylar = idx.commits.get(abs);
+  if (adaylar === undefined) return null;
+  let en: { c: GitCommit; t: number } | null = null;
+  for (const c of adaylar) {
+    const t = Date.parse(c.date);
+    if (!Number.isFinite(t) || t < duzenleme) continue;
+    if (en === null || t < en.t) en = { c, t };
+  }
+  return en?.c ?? null;
 }
 
 /** Oturum için deterministik kısa etiket (log/claim metinlerinde). */
@@ -310,6 +362,12 @@ interface FileBuckets {
   unknownOnly: ChangedFile[];
   /** Proje kökü DIŞINDA kalan düzenlemeler — sayılır, claim'e girmez. */
   outsideCount: number;
+  /**
+   * Çalışma ağacında değil, COMMIT'te doğrulanan dosyalar → onu kayda geçiren
+   * commit. Kanıt satırı SHA'yı yazsın diye tutulur: üçüncü kişi
+   * `git show <sha> --stat` ile kendi makinesinde bakabilir.
+   */
+  commitRefs: Map<string, GitCommit>;
 }
 
 /**
@@ -318,10 +376,16 @@ interface FileBuckets {
  */
 function bucketFiles(
   session: SessionSummary,
-  gitKnown: ReadonlySet<string>,
+  gitIdx: GitEvidenceIndex,
   projectCwd: string,
 ): FileBuckets {
-  const b: FileBuckets = { verified: [], transcriptOnly: [], unknownOnly: [], outsideCount: 0 };
+  const b: FileBuckets = {
+    verified: [],
+    transcriptOnly: [],
+    unknownOnly: [],
+    outsideCount: 0,
+    commitRefs: new Map(),
+  };
   for (const f of session.changedFiles) {
     if (f.edits === 0 && f.unknownEdits === 0) continue; // yalnız failedEdits: iddia yok
     const abs = absPath(f.path, projectCwd);
@@ -330,13 +394,52 @@ function bucketFiles(
       continue;
     }
     if (f.edits > 0) {
-      if (gitKnown.has(abs)) b.verified.push(f);
-      else b.transcriptOnly.push(f);
+      if (gitIdx.worktree.has(abs)) {
+        b.verified.push(f);
+      } else {
+        // Ağaç temiz olabilir çünkü iş COMMIT'LENMİŞ olabilir — kanıt kaybolmaz.
+        const c = kaydedenCommit(gitIdx, abs, f.lastTs);
+        if (c !== null) {
+          b.verified.push(f);
+          b.commitRefs.set(f.path, c);
+        } else {
+          b.transcriptOnly.push(f);
+        }
+      }
     } else {
       b.unknownOnly.push(f);
     }
   }
   return b;
+}
+
+/**
+ * git kanıt satırının metni. İki kaynak ayrı ayrı sayılır — "kaydı var" demek
+ * yetmez, NEREDE kaydı olduğu söylenir: çalışma ağacı mı, commit mi.
+ * Commit'te olan iş DAHA GÜÇLÜ kanıttır (üçüncü kişi `git show` ile bakabilir),
+ * ama seviye YÜKSELTİLMEZ — seviye yalnız verify ile yükselir.
+ */
+function gitOzet(n: number, b: FileBuckets): string {
+  const commitli = b.verified.filter((f) => b.commitRefs.has(f.path)).length;
+  const agacta = n - commitli;
+  if (commitli === 0) {
+    return `git: ${n} dosyanın çalışma ağacında kaydı var (diff --numstat / status).`;
+  }
+  if (agacta === 0) {
+    const shalar = [...new Set([...b.commitRefs.values()].map((c) => c.hash))];
+    return (
+      `git: ${n} dosya commit'lenmiş — düzenlemeden sonra atılan commit kayda geçirdi ` +
+      `(${shalar.slice(0, 3).join(', ')}${shalar.length > 3 ? `, +${shalar.length - 3}` : ''}).`
+    );
+  }
+  return `git: ${agacta} dosyanın çalışma ağacında kaydı var, ${commitli} dosya commit'lenmiş.`;
+}
+
+/** Kanıt referansı: commit kanıtı varsa onu kayda geçiren commit, yoksa HEAD. */
+function gitRef(b: FileBuckets, git: GitFacts): string | null {
+  const ilk = [...b.commitRefs.values()][0];
+  if (ilk !== undefined) return ilk.hash;
+  return git.headShort;
 }
 
 function fileClaims(
@@ -387,8 +490,8 @@ function fileClaims(
       },
       {
         kind: 'git-diff',
-        summary: `git: ${n} dosyanın çalışma ağacında kaydı var (diff --numstat / status).`,
-        ...(git.headShort !== null ? { ref: git.headShort } : {}),
+        summary: gitOzet(n, buckets),
+        ...(gitRef(buckets, git) !== null ? { ref: gitRef(buckets, git) as string } : {}),
       },
     ];
     claims.push({
@@ -751,7 +854,7 @@ export function buildTruth(
   const home = opts.homeDir ?? homedir();
   const yaz = makeYazim(claude.projectCwd, home);
   const notes: string[] = [...claude.notes, ...git.notes, ...(opts.ci?.notes ?? [])];
-  const gitKnown = gitKnownPaths(git, claude.projectCwd);
+  const gitIdx = gitEvidenceIndex(git, claude.projectCwd);
 
   const claims: Claim[] = [];
   const log: LogEntry[] = gitLog(git, nowIso);
@@ -771,7 +874,7 @@ export function buildTruth(
       );
       continue;
     }
-    const buckets = bucketFiles(session, gitKnown, claude.projectCwd);
+    const buckets = bucketFiles(session, gitIdx, claude.projectCwd);
     disKapsam += buckets.outsideCount;
     claims.push(...fileClaims(session, buckets, git, claude.projectCwd, nowIso));
     const t = testClaims(session, nowIso, yaz);

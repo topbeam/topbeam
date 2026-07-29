@@ -34,8 +34,8 @@ function gitFacts(over: Partial<GitFacts> = {}): GitFacts {
     headSubject: 'son commit',
     dirtyFiles: [],
     recentCommits: [
-      { hash: SHA_HEAD.slice(0, 7), full: SHA_HEAD, date: '2026-07-29T10:00:00.000Z', subject: 'son commit' },
-      { hash: SHA_ONCEKI.slice(0, 7), full: SHA_ONCEKI, date: '2026-07-28T10:00:00.000Z', subject: 'önceki' },
+      { hash: SHA_HEAD.slice(0, 7), full: SHA_HEAD, date: '2026-07-29T10:00:00.000Z', subject: 'son commit', files: [] },
+      { hash: SHA_ONCEKI.slice(0, 7), full: SHA_ONCEKI, date: '2026-07-28T10:00:00.000Z', subject: 'önceki', files: [] },
     ],
     diffStat: null,
     notes: [],

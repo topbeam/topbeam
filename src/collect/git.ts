@@ -13,6 +13,8 @@ import { execFile } from 'node:child_process';
 const DEFAULT_TIMEOUT_MS = 15_000;
 const MAX_DIRTY_FILES = 500;
 const MAX_NUMSTAT_FILES = 1000;
+/** Commit başına saklanan yol sayısı — dev commit'ler belleği şişirmesin. */
+const MAX_COMMIT_FILES = 500;
 const MAX_BUFFER = 8 * 1024 * 1024;
 
 export interface GitDirtyFile {
@@ -30,6 +32,13 @@ export interface GitCommit {
   full: string;
   date: string; // ISO-8601 (committer date)
   subject: string;
+  /**
+   * Bu commit'in dokunduğu yollar (repo köküne göre, `git log --name-only`).
+   * Boş olabilir: merge commit'leri varsayılan olarak dosya listelemez ve
+   * liste MAX_COMMIT_FILES ile sınırlıdır. Boşluk "dosya yok" demek DEĞİLDİR —
+   * bu yüzden boş liste hiçbir iddiayı çürütmek için kullanılmaz.
+   */
+  files: string[];
 }
 
 export interface GitDiffFileStat {
@@ -199,21 +208,47 @@ export async function collectGit(cwd: string, opts: GitCollectOptions = {}): Pro
     facts.notes.push('git status okunamadı.');
   }
 
+  /**
+   * `--name-only` ile her commit'in dokunduğu yollar da okunur. Bunlar kanıt
+   * için ŞART: commit'lenip ağacı temizlenen bir dosya `diff HEAD`/`status`
+   * kümelerinde görünmez; commit yolları olmadan "işini commit'lemek kanıtını
+   * siler" davranışı çıkar (barın gerilemesinin kök sebebiydi).
+   *
+   * Commit'ler \x1e (record separator) ile ayrılır: konu satırında \n olamaz
+   * ama \t olabilir, bu yüzden satır değil KAYIT sınırı kullanılır.
+   */
   const log = await runGit(
     bin,
-    ['log', '-n', String(maxCommits), '--format=%H%x09%h%x09%cI%x09%s'],
+    ['log', '-n', String(maxCommits), '--name-only', '--format=%x1e%H%x09%h%x09%cI%x09%s'],
     cwd,
     timeoutMs,
   );
   if (log.ok) {
-    for (const l of log.stdout.split('\n')) {
-      if (!l) continue;
-      const parts = l.split('\t');
+    let kirpilanCommit = 0;
+    for (const kayit of log.stdout.split('\x1e')) {
+      if (!kayit.trim()) continue;
+      const satirlar = kayit.split('\n');
+      const parts = (satirlar[0] ?? '').split('\t');
       const full = parts[0];
       const hash = parts[1];
       const date = parts[2];
       if (!full || !hash || !date) continue;
-      facts.recentCommits.push({ hash, full, date, subject: parts.slice(3).join('\t') });
+      const files: string[] = [];
+      let toplam = 0;
+      for (const s of satirlar.slice(1)) {
+        const yol = s.trim();
+        if (!yol) continue;
+        toplam++;
+        if (files.length < MAX_COMMIT_FILES) files.push(yol);
+      }
+      if (toplam > MAX_COMMIT_FILES) kirpilanCommit++;
+      facts.recentCommits.push({ hash, full, date, subject: parts.slice(3).join('\t'), files });
+    }
+    if (kirpilanCommit > 0) {
+      facts.notes.push(
+        `${kirpilanCommit} commit'in dosya listesi ${MAX_COMMIT_FILES} ile sınırlandı — ` +
+          'kırpılan yollar için commit kanıtı kurulamaz (kaçırmak, yanlış suçlamaktan iyidir).',
+      );
     }
   } else if (facts.headHash !== null) {
     facts.notes.push('git log okunamadı.');
