@@ -22,6 +22,13 @@ export const GOAL_FILE = 'goal.md';
 export const NOTES_FILE = 'notes.md';
 export const PANO_FILE = 'pano.html';
 export const PASSPORT_LOG_FILE = 'passport.jsonl';
+/**
+ * Makbuz — pano'dan farkı: pano İÇERİ bakar (kendi ekranın), makbuz DIŞARI
+ * gider (müşteri/ekip/işveren). Ad burada durur ki makbuz.ts saf tarafı
+ * state.ts'e bağlanmadan da okunabilsin (tek yönlü bağımlılık: makbuz → state).
+ */
+export const MAKBUZ_FILE = 'makbuz.md';
+export const MAKBUZ_HTML_FILE = 'makbuz.html';
 
 export function oceanDir(cwd: string): string {
   return join(cwd, OCEAN_DIR);
@@ -43,6 +50,12 @@ export function passportLogPath(cwd: string): string {
 }
 export function muhurPath(cwd: string): string {
   return join(oceanDir(cwd), MUHUR_FILE);
+}
+export function makbuzPath(cwd: string): string {
+  return join(oceanDir(cwd), MAKBUZ_FILE);
+}
+export function makbuzHtmlPath(cwd: string): string {
+  return join(oceanDir(cwd), MAKBUZ_HTML_FILE);
 }
 
 /** .ocean/state.json oku. Yoksa ya da parse edilemiyorsa null (dürüst). */
@@ -183,6 +196,24 @@ export async function writeMuhur(cwd: string, text: string): Promise<void> {
   await mkdir(oceanDir(cwd), { recursive: true });
   const { value } = redactDeep(text);
   await writeFile(muhurPath(cwd), value, 'utf8');
+}
+
+/**
+ * Makbuzu yaz — redactDeep zorunlu geçit. Bu dosya DIŞARIYA gösterilmek için
+ * üretilir; maskeleme burada başka her yerden daha kritiktir (bir sır sızarsa
+ * müşteriye/işverene giden sayfada sızar).
+ */
+export async function writeMakbuz(cwd: string, text: string): Promise<void> {
+  await mkdir(oceanDir(cwd), { recursive: true });
+  const { value } = redactDeep(text);
+  await writeFile(makbuzPath(cwd), value, 'utf8');
+}
+
+/** Makbuzun tek dosya HTML hâli — aynı maskeleme kapısı. */
+export async function writeMakbuzHtml(cwd: string, html: string): Promise<void> {
+  await mkdir(oceanDir(cwd), { recursive: true });
+  const { value } = redactDeep(html);
+  await writeFile(makbuzHtmlPath(cwd), value, 'utf8');
 }
 
 export interface ParsedNote {

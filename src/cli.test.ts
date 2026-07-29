@@ -48,7 +48,7 @@ test('--version sürümü yazdırır, exit 0', () => {
 test('help komutları ve dürüstlük ilkesini listeler, exit 0', () => {
   const r = run(['help']);
   assert.equal(r.code, 0);
-  for (const cmd of ['init', 'sync', 'verify', 'open']) {
+  for (const cmd of ['init', 'sync', 'verify', 'open', 'makbuz']) {
     assert.ok(r.stdout.includes(cmd), `help '${cmd}' içermeli`);
   }
   assert.ok(r.stdout.includes('kanıtsız hiçbir iddia'), 'ilke help içinde olmalı');
@@ -162,6 +162,55 @@ test('verify: --by bayrağı reddedilir (imza uydurma kapısı kapalı)', async 
   const r = run(['verify', 'dosya-git-s9', '--by', 'dogfood-ajan'], { cwd: dir, input: 'e\n' });
   assert.equal(r.code, 1);
   assert.match(r.stderr, /--by/);
+});
+
+/**
+ * MAKBUZ — ürünün DIŞARIYA giden çıktısı. Duman testi iki şeyi kilitler:
+ * dosya gerçekten yazılır (yol söylenir, tarayıcı açılmaz) ve onaysız bir
+ * madde makbuzda ONAYLI görünmez.
+ */
+test('makbuz: init sonrası dosyayı yazar, yolu söyler, otomatik AÇMAZ', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'topbeam-makbuz-cli-'));
+  run(['init'], { cwd: dir });
+  const r = run(['makbuz'], { cwd: dir });
+  assert.equal(r.code, 0, r.stderr);
+  assert.ok(r.stdout.includes('makbuz.md'));
+  assert.ok(r.stdout.includes('Makbuz yazıldı'));
+  assert.equal(r.stdout.includes('makbuz.html'), false, '--html verilmedi');
+
+  const md = await readFile(join(dir, '.ocean', 'makbuz.md'), 'utf8');
+  assert.ok(md.startsWith('# Teslim Makbuzu'));
+  assert.ok(md.includes('## Kendin doğrula (üçüncü kişi için)'));
+  assert.ok(md.includes('## Bu makbuz ne demek DEĞİL'));
+  // sync koşmadı: goal.md'de söz var ama state'te yok — dürüst ayrım
+  assert.ok(md.includes('teslim sözü yazılı'));
+  assert.ok(md.includes('topbeam sync'));
+});
+
+test('makbuz --html: ikinci dosya da üretilir; onaysız madde ONAYLI görünmez', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'topbeam-makbuz-html-'));
+  run(['init'], { cwd: dir });
+  const sync = run(['sync'], { cwd: dir });
+  assert.equal(sync.code, 0, sync.stderr);
+
+  const r = run(['makbuz', '--html'], { cwd: dir });
+  assert.equal(r.code, 0, r.stderr);
+  assert.ok(r.stdout.includes('makbuz.html'));
+  assert.ok(r.stdout.includes('0 / 7 madde insan onaylı'));
+
+  const md = await readFile(join(dir, '.ocean', 'makbuz.md'), 'utf8');
+  assert.equal(md.includes('- [x]'), false, 'passport.jsonl yokken tik olamaz');
+  assert.ok(md.includes('Hiçbir madde henüz insan onaylı değil'));
+  const html = await readFile(join(dir, '.ocean', 'makbuz.html'), 'utf8');
+  assert.ok(html.startsWith('<!doctype html>'));
+  assert.equal(html.includes('<script'), false, 'makbuz HTML JS içermez');
+});
+
+test('makbuz: init olmadan dürüstçe reddeder, exit 1', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'topbeam-makbuz-init-'));
+  const r = run(['makbuz'], { cwd: dir });
+  assert.equal(r.code, 1);
+  assert.match(r.stderr, /topbeam init/);
 });
 
 test('verify subprocess: girdi kapalıysa (cevapsız) onay YOK — dürüst varsayılan', async () => {

@@ -12,6 +12,7 @@ import { TOOL_VERSION, EVIDENCE_LEVEL_LABELS_TR, type EvidenceLevel } from './ty
 import { runInit } from './init.ts';
 import { runSync } from './sync.ts';
 import { runVerify } from './verify.ts';
+import { runMakbuz } from './makbuz.ts';
 import { panoPath } from './state.ts';
 
 function out(s: string): void {
@@ -37,8 +38,14 @@ Komutlar:
                   YALNIZ terminalden: cevap pipe/otomasyondan gelirse onay
                   kaydedilmez (insan onayı = gerçek insan)
   open            Pano yolunu göster (tarayıcıyı otomatik AÇMAZ)
+  makbuz          Dışarıya gösterilebilir tek sayfalık teslim makbuzu üret
+                  (.ocean/makbuz.md · --html ile .ocean/makbuz.html)
+                  Üçüncü kişi kendi makinesinde yeniden doğrulayabilsin diye
+                  commit SHA'ları + test komutu + defter dosyası kopyalanabilir
+                  yazılır. Onaysız madde ONAYLI görünmez.
 
 Seçenekler:
+  --html          makbuz: tek dosya HTML de üret (dış istek yok)
   --no-ci         sync: opsiyonel CI okumasını tamamen kapat (TOPBEAM_NO_CI=1
                   ile aynı) — Topbeam tümüyle lokal kalır, tek dış çağrı yapılmaz
   --version       Sürümü yazdır
@@ -180,6 +187,27 @@ async function cmdVerify(args: Args): Promise<void> {
   }
 }
 
+/**
+ * makbuz — DIŞARIYA gösterilebilir tek sayfa. Pano içeri bakar, makbuz dışarı:
+ * müşteriye/ekibe yapıştırılır. Dosyayı yazar, yolu söyler, AÇMAZ (ağa da
+ * çıkmaz — hiçbir şey gönderilmez, yayınlanmaz).
+ */
+async function cmdMakbuz(args: Args): Promise<void> {
+  const cwd = process.cwd();
+  const res = await runMakbuz(cwd, { html: args.flags.html === true });
+  if (!res.ok) fail(res.error ?? 'Makbuz üretilemedi.');
+  out('Makbuz yazıldı (dışarıya gösterilebilir — Topbeam açmaz, göndermez):');
+  out(`  ${res.mdPath ?? ''}`);
+  if (res.htmlPath !== undefined) out(`  ${res.htmlPath}`);
+  const toplam = res.sozToplam ?? 0;
+  out(
+    toplam > 0
+      ? `  Teslim sözü: ${res.sozOnayli ?? 0} / ${toplam} madde insan onaylı`
+      : "  Teslim sözü: yok — sözlerini .ocean/goal.md'ye yaz (makbuz yine üretildi, kanıt dökümü olarak)",
+  );
+  out('Makbuz kendi sınırlarını yazar; onaysız madde onaylı görünmez.');
+}
+
 async function cmdOpen(_args: Args): Promise<void> {
   const cwd = process.cwd();
   const p = panoPath(cwd);
@@ -218,6 +246,9 @@ async function main(): Promise<void> {
       break;
     case 'open':
       await cmdOpen(args);
+      break;
+    case 'makbuz':
+      await cmdMakbuz(args);
       break;
     default:
       fail(`Bilinmeyen komut: ${args.cmd}\n\n${HELP}`);
