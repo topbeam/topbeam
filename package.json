@@ -39,5 +39,13 @@
     "@types/node": "^24.0.0",
     "esbuild": "^0.25.0",
     "typescript": "^5.6.0"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/topbeam/topbeam.git"
+  },
+  "bugs": {
+    "url": "https://github.com/topbeam/topbeam/issues"
+  },
+  "homepage": "https://github.com/topbeam/topbeam#readme"
 }
