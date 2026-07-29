@@ -349,23 +349,15 @@ footer a:hover{border-bottom-color:var(--acc)}
 
     <div class="install">
       <span class="eyebrow">Kurulum</span>
-      <!-- YAYIN GÜNÜ: npm publish yapıldıktan SONRA — (1) .cmd'den "soon" sınıfını kaldır,
-           (2) <span class="soonTag"> yerine <button class="copy" type="button"
-               data-copy="npx topbeam init">Kopyala</button> koy,
-           (3) aşağıdaki .prelaunch bloğunun BİRİNCİ paragrafını (yayın durumu) sil;
-               İKİNCİ paragraf (ad geçişi / .ocean klasörü) kalsın — o hâlâ doğru.
-           Öncesinde hiçbirini yapma. -->
-      <div class="cmd soon">
+      <div class="cmd">
         <code>npx topbeam init</code>
-        <span class="soonTag">yayından sonra</span>
+        <button class="copy" type="button" data-copy="npx topbeam init">Kopyala</button>
       </div>
 
       <div class="tiny prelaunch">
         <p>
-          <b>Yayın durumu:</b> Topbeam henüz npm'e yayınlanmadı — yukarıdaki komut bugün
-          çalışmıyor. Bu yüzden kopyala düğmesi de yok: çalışmayan komutu kopyalatmak
-          Topbeam'in kendi kuralına aykırı olurdu.
-          Paket adı <code>topbeam</code> — npm'de bugün boş (kontrol edildi).
+          <b>Yayında:</b> <code>topbeam@0.1.0</code> — npm'de, MIT, sıfır bağımlılık
+          (<a href="https://www.npmjs.com/package/topbeam">npmjs.com/package/topbeam</a>).
           Kısaltması yok: <code>beam</code> diye bir komut olmayacak.
         </p>
         <p>
@@ -533,8 +525,8 @@ footer a:hover{border-bottom-color:var(--acc)}
     </p>
 
     <p class="tiny" style="margin-top:.7rem">
-      Yukarıdaki dört başlıktaki <code>npx</code> biçimi yayın sonrasını gösterir —
-      paket npm'e çıkana kadar bu komutlar çalışmaz (yukarıdaki yayın durumu notu).
+      Yukarıdaki dört başlıktaki <code>npx</code> komutları bugün çalışır —
+      paket npm'de yayında (<code>topbeam@0.1.0</code>).
       Paket adı ve komut adı aynı: <code>topbeam</code>. Global kurarsan
       (<code>npm i -g topbeam</code>) komutlar kısaca <code>topbeam sync</code> olur —
       yayın sürümünde panonun kendi çıktısında göreceğin ad budur.
