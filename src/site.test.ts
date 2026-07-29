@@ -23,6 +23,7 @@ const html = readFileSync(SITE, 'utf8');
 const pkgJson = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')) as {
   name: string;
   version: string;
+  repository?: { url?: string };
 };
 const PKG_NAME = pkgJson.name;
 const PKG_VERSION = pkgJson.version;
@@ -116,11 +117,31 @@ test('landing: dış istek yok — yalnız data: URI, mailto ve dış BAĞLANTI 
   if (icon) assert.ok((icon[1] ?? '').startsWith('data:'), 'favicon dış istek üretiyor');
 });
 
-test('landing: kaynak linki yokken "açık kaynak" imasi yapılmaz, MIT olgusu korunur', () => {
-  assert.ok(!/Açık çekirdek · MIT|açık çekirdek · MIT/.test(html), '"açık çekirdek" rozeti kaynağı okuyabilirmiş gibi ima ediyor');
+test('landing: "kaynak açık" iddiası GERÇEK depoya bağlı (tıklanabilir link + package.json ile aynı depo)', () => {
+  // 2026-07-29 open-core kararından ÖNCE bu kural "depo kapalı olduğunu açıkça yaz"
+  // idi. Depo public olduğu için kural yön değiştirdi ama GEVŞEMEDİ: açık-kaynak
+  // iddiası ancak okunabilir bir depoya işaret ediyorsa dürüsttür.
   assert.match(html, /MIT lisanslı çekirdek/, 'MIT olgusu (doğru) kayboldu');
-  assert.match(html, /depo herkese açık değil/, 'deponun kapalı olduğu açıkça yazmıyor');
-  // Söz vermeme kuralı: "yakında açılacak / yayınlanacak" taahhüdü landing'de olmayacak.
+  assert.ok(!/depo herkese açık değil/.test(live), 'depo public iken "kapalı" yazıyor');
+
+  // Sayfa kaynağın açık olduğunu söylüyorsa, tıklanabilir depo linki ŞART.
+  if (/[Kk]aynak açık|açık kaynak/.test(live)) {
+    const repo = hrefs(live).find((h) => /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/?$/.test(h));
+    assert.ok(repo !== undefined, '"kaynak açık" deniyor ama tıklanabilir depo linki yok');
+    // Link, paketin beyan ettiği depoyla AYNI olmalı — başka bir depoyu
+    // "bizim kaynağımız" diye göstermek yabancı-paket riskinin ikizidir.
+    const beyan = (pkgJson.repository?.url ?? '')
+      .replace(/^git\+/, '')
+      .replace(/\.git$/, '')
+      .replace(/\/$/, '');
+    assert.equal(
+      repo.replace(/\/$/, ''),
+      beyan,
+      `landing'deki depo package.json'daki depoyla aynı değil (beyan: ${beyan})`,
+    );
+  }
+
+  // Söz vermeme kuralı: sayfa gelecek için taahhüt etmez (karar Ekin'in).
   assert.ok(
     !/(yakında|erken erişim sonrası|ilerleyen günlerde)[^.]{0,40}(açılacak|yayınlanacak)/i.test(html),
     'landing kaynak açma sözü veriyor — bu Ekin\'in kararı, sayfa taahhüt etmez',
