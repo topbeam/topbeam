@@ -604,3 +604,39 @@ test('sentetik kartta gerçek TEK adaya bağlanamıyorsa rozet YOK (belirsizlikt
   assert.equal(hero.includes('>insan-onayı<'), false, 'belirsiz kimlikte rozet verilmez');
   assert.ok(hero.includes('kanal kaydı yok'));
 });
+
+test('DÜRÜSTLÜK: kırpma varken pano "elenen kayıt yok" DEMEZ (kendini yalanlamaz)', () => {
+  // Ölçülen kusur: pano aynı ekranda hem "elenen kayıt yok" hem
+  // "821 satır sınırda kırpıldı" yazıyordu. Bir kanıt ürününde bu, okurun
+  // "başka nerede yalan söylüyor?" diye sormasına yeter.
+  //
+  // ⚠️ Bu testin İLK hâli SAHTEYDİ: state.counts'a yazıyordu ama pano
+  // state.SCOPE.log'u okuyor → blok hiç render edilmiyor, iddia boşta geçiyordu.
+  // Mutasyonla yakalandı (eski hatalı koşul geri kondu, test yine yeşil dedi).
+  const st = newOceanState('proje', new Date('2026-07-29T10:00:00Z'));
+  st.scope = {
+    disKapsamDuzenleme: 0,
+    atlananOturum: 0,
+    kontrolKomutu: 0,
+    kisaltilanYol: 0,
+    gitYok: false,
+    notlar: [],
+    log: {
+      hamToplam: 1000,
+      hamKanit: 700,
+      hamBeyan: 300,
+      ilgisizBeyan: 0,
+      tekillestirilen: 0,
+      kirpilan: 500,
+      tutulan: 500,
+    },
+  };
+  const html = renderPano(st, {});
+  assert.ok(html.includes('Log satır zinciri'), 'kapsam bloğu gerçekten render edilmeli (test boşta çalışmasın)');
+  assert.equal(
+    html.includes('elenen kayıt yok'),
+    false,
+    'kırpma varken "elenen kayıt yok" cümlesi kurulamaz',
+  );
+  assert.ok(html.includes('500'), 'kaybın sayısı gösterilmeli');
+});

@@ -392,9 +392,27 @@ function renderScope(scope: ScopeNotes | undefined): string {
     `${c.kirpilan} satır sınırda kırpıldı → panoda ${c.tutulan} satır.`;
   rows.push(satir('Log satır zinciri', zincir));
 
-  const temiz =
-    rows.length === 1
-      ? '<p class="scopelead">Bu senkronda elenen kayıt yok — ham kayıtların tamamı panoda.</p>'
+  /**
+   * ⚠️ PANONUN KENDİ DÜRÜSTLÜK BEYANI (2026-07-29 sertleştirme bulgusu).
+   *
+   * Koşul yalnız `rows.length === 1` idi ve "Log satır zinciri" satırı HER ZAMAN
+   * ekleniyordu → 46. oturumdan itibaren pano şunu yazıyordu:
+   *     "Bu senkronda elenen kayıt yok — ham kayıtların tamamı panoda."
+   * hemen altında ise:
+   *     "821 satır sınırda kırpıldı … 221 kanıt satırı listeden düştü."
+   * Panonun dürüstlük cümlesi kendini AYNI EKRANDA yalanlıyordu. Bir kanıt
+   * ürününde bu, kusurların en pahalısı: okur haklı olarak "başka nerede
+   * yalan söylüyor?" diye sorar.
+   *
+   * Artık "temiz" iddiası ancak GERÇEKTEN hiçbir şey elenmediyse kurulur; aksi
+   * hâlde kaybın SAYISI söylenir ve tam kaydın nerede olduğu gösterilir.
+   */
+  const elenenVar =
+    rows.length > 1 || c.kirpilan > 0 || c.ilgisizBeyan > 0 || c.tekillestirilen > 0;
+  const temiz = !elenenVar
+    ? '<p class="scopelead">Bu senkronda elenen kayıt yok — ham kayıtların tamamı panoda.</p>'
+    : c.kirpilan > 0 && rows.length === 1
+      ? `<p class="scopelead">Bu panoda ham kayıtların ${esc(String(c.tutulan))}/${esc(String(c.hamToplam))} satırı görünüyor — ${esc(String(c.kirpilan))} satır listeye sığmadı. Tam kayıt <code>.ocean/state.json</code> içinde.</p>`
       : '<p class="scopelead">Gürültü kesildi, ama iz bırakılarak: aşağıdakiler bilerek kapsam dışında tutuldu.</p>';
 
   const notlar =
