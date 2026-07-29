@@ -325,7 +325,11 @@ test('insanKapisi: kimlik okunamıyorsa onay YOK ("bilinmiyor" imzayla onay olma
   assert.equal(ok.ok === true && ok.by, 'ekin');
 });
 
-test('BOT ONAYI ENGELLENDİ: etkileşimsiz "e" cevabı seviyeyi YÜKSELTMEZ, log YAZMAZ', async () => {
+// NOT (2026-07-29): bu testin adı eskiden "BOT ONAYI ENGELLENDİ" idi — YANLIŞTI.
+// Kapı düz pipe/yönlendirmeyi keser; sahte terminal (pty, `script(1)`) kuran bir
+// ajanı kesmez (ölçüm verify.ts başlığında). Test aynı davranışı kilitliyor, ama
+// artık doğru adla: kesilen şey KAZAYLA/otomatik onaydır, "bot"un kendisi değil.
+test('ETKİLEŞİMSİZ KANAL: pipe/otomasyon "e" cevabı seviyeyi YÜKSELTMEZ, log YAZMAZ', async () => {
   const dir = await makeStateDir();
   const deps = fakeDeps('e');
   let soruldu = false;
@@ -354,7 +358,72 @@ test('BOT ONAYI ENGELLENDİ: etkileşimsiz "e" cevabı seviyeyi YÜKSELTMEZ, log
   await assert.rejects(() => readFile(passportLogPath(dir), 'utf8'));
 
   // kullanıcıya neden söylenir (sessiz yutma yok)
-  assert.ok(bot.lines.some((l) => l.includes('GERÇEK insan') || l.includes('gerçek insan')));
+  assert.ok(bot.lines.some((l) => l.includes('terminalden gelmedi')));
+  // ...ve kapının SINIRI da söylenir: bu bir duvar değil, kasis.
+  assert.ok(
+    bot.lines.some((l) => l.includes('duvar değil')),
+    'kapının aşılabilir olduğu kullanıcıdan gizlenmemeli',
+  );
+});
+
+/**
+ * DÜRÜSTLÜK NÖBETÇİSİ (2026-07-29) — mutlakçı kapı iddiaları geri gelemez.
+ *
+ * Ölçülen gerçek: `printf 'e\n' | script -q /dev/null node -e "…isTTY"` → `true`.
+ * macOS'ta hazır gelen `script(1)` sahte pty açar, kapı geçilir. Bu yüzden
+ * "bot onay veremez / ajan taklit edemez / yapısal olarak imkânsız" cümlelerinin
+ * hiçbiri bu üründe kullanılamaz. Kaynak dosyalarda yeniden belirirlerse burada kırılır.
+ */
+test('DÜRÜSTLÜK: kaynak metinlerde mutlakçı kapı iddiası bulunmaz', async () => {
+  const { readdir } = await import('node:fs/promises');
+  const { fileURLToPath } = await import('node:url');
+  const { dirname, join: pjoin } = await import('node:path');
+  const srcDir = dirname(fileURLToPath(import.meta.url));
+  const kok = pjoin(srcDir, '..');
+
+  /** Kullanıcıya/geliştiriciye gösterilen metinler — testler hariç. */
+  const hedefler: string[] = [];
+  async function tara(d: string): Promise<void> {
+    for (const e of await readdir(d, { withFileTypes: true })) {
+      if (e.name === 'node_modules' || e.name === 'dist' || e.name.startsWith('.')) continue;
+      const p = pjoin(d, e.name);
+      if (e.isDirectory()) await tara(p);
+      else if (/\.(ts|md|html)$/.test(e.name) && !e.name.includes('.test.')) hedefler.push(p);
+    }
+  }
+  await tara(pjoin(kok, 'src'));
+  hedefler.push(pjoin(kok, 'README.md'), pjoin(kok, 'site', 'index.html'));
+
+  // DİKKAT — bu nöbetçinin bir kez düştüğü tuzak (2026-07-29): `re.exec()` yalnız
+  // İLK eşleşmeyi döndürür. İlk eşleşme çoğu zaman yasağı ANLATAN kendi belge
+  // satırımızdır ve muaf sayılır; gerçek ihlal daha aşağıdadır ve hiç bakılmadan
+  // geçer. Bu yüzden TÜM eşleşmeler gezilir (global bayrak + döngü) ve muafiyet
+  // eşleşme BAŞINA değerlendirilir. Nöbetçinin kendisi de mutasyonla sınanmalıdır.
+  const yasak: Array<[string, string]> = [
+    ['bot(?:lar)?\\s+onay\\s+veremez', '"bot onay veremez" — script(1) ile geçilebiliyor'],
+    ['ajan\\s+(?:onay\\s+veremez|taklit\\s+edemez)', '"ajan taklit edemez" — pty ile taklit edilebiliyor'],
+    ["TTY'?yi\\s+taklit\\s+edemez", 'TTY taklit edilebiliyor (script/expect/node-pty)'],
+    ['halüsinasyon\\s+yapısal\\s+olarak\\s+imkânsız', 'eşleme sezgisel — "imkânsız" fazla söz'],
+  ];
+  /** Yasağı ANLATAN bağlam (belge/uyarı) ihlal sayılmaz. */
+  const MUAF = /YANLIŞ|yanlış|kullanılamaz|kullanılmaz|eskiden|geçilebil|aşılabil|taklit edilebil/;
+
+  const ihlaller: string[] = [];
+  for (const dosya of hedefler) {
+    let metin: string;
+    try { metin = await readFile(dosya, 'utf8'); } catch { continue; }
+    for (const [kalip, neden] of yasak) {
+      const re = new RegExp(kalip, 'gi'); // ← global: her eşleşme tek tek bakılır
+      let m: RegExpExecArray | null;
+      while ((m = re.exec(metin)) !== null) {
+        const yakin = metin.slice(Math.max(0, m.index - 200), m.index + 200);
+        if (MUAF.test(yakin)) continue;
+        const satir = metin.slice(0, m.index).split('\n').length;
+        ihlaller.push(`${dosya.replace(kok, '')}:${satir} — ${neden}`);
+      }
+    }
+  }
+  assert.deepEqual(ihlaller, [], `mutlakçı iddia geri gelmiş:\n${ihlaller.join('\n')}`);
 });
 
 test('kimliksiz onay: kapı kapalı, hiçbir kayıt yazılmaz', async () => {

@@ -11,9 +11,15 @@
  * KURAL (yapısal, gevşetilemez): insan rozeti YALNIZ .ocean/passport.jsonl'deki
  * GEÇERLİ bir doğrulama kaydına dayanır. Geçerli olmanın üç şartı:
  *   1. imza  — `by` okunabilir bir kimlik ("bilinmiyor" imzayla onay olmaz),
- *   2. kanal — `source === 'terminal'` (gerçek TTY; ajan taklit edemez),
+ *   2. kanal — `source === 'terminal'` (kayıt bir TTY'den geldiğini taşır),
  *   3. karar — `decision === 'approved'` ve `levelAfter === 'insan-onayi'`.
  * Bu üçünden biri eksikse rozet YOK. Kaydın kendi metni ne derse desin.
+ *
+ * ⚠️ KAPININ SINIRI (ölçüldü 2026-07-29, gizlenmiyor): 2. şart bir ajanın
+ * taklit EDEMEYECEĞİ şart DEĞİLDİR — `script(1)`/`expect`/pty ile sahte bir
+ * terminal açılır ve kayıt `source:'terminal'` olarak yazılır (bkz. verify.ts
+ * başlığındaki ölçüm). Bu kural KAZAYLA/otomatik oluşan onayı keser; bile isteye
+ * kurulmuş bir baypası kesmez. Rozetin anlamı budur, fazlası değil.
  *
  * FAIL-CLOSED: defter okunamadıysa/verilmediyse rozet verilmez. Onay vermek
  * için kanıt gerekir; "bilinmiyor" insan sayılmaz (verify.ts insanKapisi ile
@@ -79,7 +85,8 @@ export function kayitGecerliMi(raw: unknown): LedgerCheck {
     return { ok: false, claimId, neden: 'imza okunamıyor — imzası bilinmeyen onay, onay değildir' };
   }
   if (r.source !== 'terminal') {
-    // En ağır şart: kanal. Ajan bir metin alanını yazabilir, TTY'yi taklit edemez.
+    // En ağır şart: kanal. Kazara/otomatik onayı keser — ama pty ile bile isteye
+    // kurulmuş bir baypası kesmez (sınır verify.ts başlığında ölçümüyle yazılı).
     return {
       ok: false,
       claimId,

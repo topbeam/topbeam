@@ -14,10 +14,23 @@
  *  3. Kayıt kanalı taşır: Verification.source='terminal'.
  *
  * NEDEN BAYPAS BAYRAĞI YOK: `--etkilesimsiz-onay` gibi bir kaçış kapısını bir
- * bot da geçebilir — o zaman kapı kapı olmaktan çıkar, süse döner. Bir ajanın
- * taklit EDEMEYECEĞİ tek sinyal, onay kanalının işletim sistemi düzeyinde bir
- * terminale bağlı olmasıdır. Bu yüzden tek ölçüt odur.
- * Bedeli bilinçli: `topbeam verify` betikten koşturulamaz. Doğru bedel — bu komut
+ * bot da geçebilir — o zaman kapı kapı olmaktan çıkar, süse döner.
+ *
+ * ⚠️ BU KAPININ SINIRI — ÖLÇÜLDÜ, GİZLENMİYOR (2026-07-29):
+ * `process.stdin.isTTY` bir ajanın taklit EDEMEYECEĞİ sinyal DEĞİLDİR.
+ * macOS'ta hazır gelen `script(1)` sahte bir pty açar ve isTTY'yi `true` yapar:
+ *     printf 'e\n' | script -q /dev/null node dist/cli.js verify <id>
+ * → onay YAZILIR. Aynısını `expect`, python `pty`, node-pty de yapar.
+ * Ölçüm: `printf 'e\n' | script -q /dev/null node -e "…isTTY"` → `true`.
+ *
+ * Yani bu bir DUVAR DEĞİL, KASİS. Kurulabilecek en güçlü DOĞRU cümle şudur:
+ *   "Düz pipe/yönlendirme ile onay geçmez; onay vermek için kasıtlı olarak
+ *    sahte terminal kurmak gerekir — yani kaza ile değil, ancak bile isteye."
+ * "Yapısal olarak imkânsız", "ajan taklit edemez", "bot onay veremez" cümleleri
+ * YANLIŞTIR ve bu üründe kullanılamaz. Yanlış etiketli bir dürüstlük rozeti,
+ * hiç rozet olmamasından kötüdür — ürünün tek sermayesi bu.
+ *
+ * Bedeli bilinçli: `topbeam verify` düz betikten koşturulamaz. Doğru bedel — bu komut
  * zaten "bir insan kendi gözüyle gördü" demek için var.
  *
  * <id> ya tek bir CLAIM ya da bir TESLİM SÖZÜ (goal.md maddesi, `soz-…`)
@@ -154,7 +167,8 @@ export function insanKapisi(deps: {
       gate: 'etkilesimsiz',
       message:
         'Onay kaydedilmedi: cevap bir terminalden gelmedi (pipe/otomasyon girdisi).\n' +
-        'İnsan onayı bu üründe GERÇEK insan demektir — bir betik ya da ajan onay veremez.\n' +
+        'Bu kapı düz pipe/yönlendirmeyi durdurur — yani onay KAZAYLA verilemez.\n' +
+        'Ama bir duvar değil: sahte terminal (pty) kuran biri bunu bile isteye geçebilir.\n' +
         'Bu komutu kendi terminalinde, elinle çalıştır: topbeam verify <id>',
     };
   }

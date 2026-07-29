@@ -67,7 +67,11 @@ export function muhurMetni(g: MuhurGirdi): string {
   satirlar.push(`Kilitlendi: ${fmtTs(g.at)}  (${g.at})`);
   satirlar.push(`Kapsam    : ${g.items.length} teslim sözü — hepsi insan onaylı.`);
   satirlar.push(`Son imza  : ${g.by} (terminal onayı, .ocean/passport.jsonl)`);
-  satirlar.push(`Araç      : topbeam v${g.toolVersion} — deterministik, LLM yok, ağ yok.`);
+  // "ağ yok" KOŞULSUZ yazılamaz: sync varsayılanda `gh run list` çağırabilir.
+  // Koşulu söylemek, koşulu yutmaktan iyidir (2026-07-29 düzeltmesi).
+  satirlar.push(
+    `Araç      : topbeam v${g.toolVersion} — deterministik, LLM yok; tek dış çağrı opsiyonel CI okuması (--no-ci ile kapalı).`,
+  );
   satirlar.push('');
   satirlar.push('## Sözler ve dayanakları');
   satirlar.push('');

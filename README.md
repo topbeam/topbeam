@@ -4,9 +4,15 @@ Vibe coder için dürüst proje panosu. Topbeam sana projenin hikâyesini anlatm
 **mevcut gerçeği ve ilerlemek için gereken tek hareketi söyler.**
 
 Local-first: **LLM çağrısı yok.** Özet **deterministiktir** —
-Claude Code transcript'lerindeki tool-use kayıtlarından + git gerçeklerinden üretilir;
-halüsinasyon yapısal olarak imkânsızdır (assistant'ın "bitti, çalışıyor!" cümlesi
-özete hiçbir yoldan giremez).
+Claude Code transcript'lerindeki tool-use kayıtlarından + git gerçeklerinden üretilir.
+**Modelin CÜMLESİ özete giremez** (assistant'ın "bitti, çalışıyor!" metni hiçbir yoldan
+okunmaz; yalnız `tool_use`/`tool_result` yapısal alanları okunur) ve ekranda gördüğün her
+sayı bir ölçümden gelir.
+
+> **Ama "deterministik" ≠ "her zaman doğru".** İddiaları kayıtlara bağlayan eşleme
+> sezgisel kurallarla (yol/uzantı/etiket) çalışır; yanlış eşleşme ve kaçırma mümkündür
+> ve kod bunu açıkça tercih eder: *kaçırmak, yanlış suçlamaktan iyidir.*
+> "Halüsinasyon imkânsız" cümlesi bu üründe kullanılmaz — fazla söz vermek de bir yalandır.
 
 **Tek dış kaynak: opsiyonel CI okuması.** `gh` kurulu ve girişliyse Topbeam
 "bu commit CI'da yeşil mi?" sorusunu sorar — lokalde öğrenemeyeceğin tek gerçek.
@@ -22,15 +28,18 @@ bitiş töreni. BuildPassport barının dolması budur.
 Komut adı **`topbeam`**, npm paket adı da **`topbeam`** — tek ad, tek token.
 (Kısaltma yok: `beam` takma adı verilmez.)
 
-> **Durum: Topbeam henüz npm'e YAYINLANMADI.** Bugün çalışan tek yol aşağıdaki
-> yerel kurulumdur. `npx` / `npm i -g` yolu yayından sonra çalışacak; bugün
-> çalıştığını söylemek yalan olur, o yüzden ayrı başlıkta ve açıkça işaretli.
+```bash
+npx topbeam init          # kurmadan dene
+npm i -g topbeam          # ya da kalıcı kur
+```
 
-### Bugün çalışan yol — yerelden kurulum
+`topbeam@0.1.0` npm'de yayında (MIT, çalışma zamanı bağımlılığı yok).
+
+### Kaynaktan kurulum
 
 ```bash
-git clone <depo>    # GitHub org (topbeam) henüz açılmadı — açılınca URL buraya
-cd ocean-cli        # bu deponun klasörü (klasör adı henüz taşınmadı)
+git clone https://github.com/topbeam/topbeam.git
+cd topbeam
 npm install
 npm run build
 npm link            # `topbeam` komutu PATH'e girer
@@ -50,22 +59,13 @@ Geri almak: `npm unlink -g topbeam`.
 node /tam/yol/ocean-cli/dist/cli.js sync
 ```
 
-### Yayından sonra (henüz ÇALIŞMAZ)
-
-Paket npm'e `topbeam` adıyla yayınlandığında şu komutlar çalışacak:
-
-```bash
-npx topbeam init    # yayın öncesi çalışmaz
-npm i -g topbeam    # `topbeam` komutunu global kurar
-```
-
 Gereksinim: Node >= 20. Çalışma zamanı bağımlılığı yok (tek dosya bundle).
 
 ### Depo ve bağlantılar
 
-GitHub organizasyonu (`topbeam`) henüz açılmadı; bu yüzden `package.json` içindeki
-`repository` / `bugs` / `homepage` alanları **boş** — uydurma URL yazılmadı.
-Org açılınca üç alan da buraya ve `package.json`'a eklenecek.
+- Kaynak (MIT çekirdek): <https://github.com/topbeam/topbeam>
+- npm: <https://www.npmjs.com/package/topbeam>
+- Landing: <https://topbeam.surge.sh>
 
 ## Veri dizini: neden hâlâ `.ocean/`
 
@@ -105,6 +105,21 @@ Bir iddiayı gösterir, kanıtlarını listeler, onayını sorar (e/H). Onaylars
 söze eşleşen tüm kayıtlar ekrana dökülür ve tek soruyla onaylanır. Kaydı olmayan
 söz onaylanamaz ve 10'dan çok kaydı kapsayan söz için soru sorulmadan önce
 uyarılırsın — Topbeam lastik damga vurdurmaz.
+
+> #### ⚠️ Bu kapının sınırı — ölçüldü, gizlenmiyor
+> Onay yalnız `process.stdin.isTTY` doğruysa yazılır. Bu, **düz pipe/yönlendirmeyi**
+> keser: `echo e | topbeam verify …` onay YAZMAZ, soru bile sorulmaz. Yani onay
+> **kazayla ya da bir betiğin yan etkisiyle** oluşamaz.
+>
+> **Ama bu bir duvar değil, kasis.** macOS'ta hazır gelen `script(1)` sahte bir pty
+> açar ve `isTTY`'yi `true` yapar; `expect`, python `pty`, `node-pty` de aynısını
+> yapar. Yani onay vermeyi **bile isteye** otomatikleştirmek isteyen biri bunu geçer.
+>
+> Kurulabilecek en güçlü **doğru** cümle budur. *"Bot onay veremez"*,
+> *"ajan taklit edemez"*, *"yapısal olarak imkânsız"* cümlelerinin hiçbiri doğru
+> değildir ve bu üründe kullanılmaz — yanlış etiketli bir dürüstlük rozeti, hiç
+> rozet olmamasından kötüdür. (Bir test bu cümlelerin geri gelmesini engelliyor:
+> `src/verify.test.ts` → *"kaynak metinlerde mutlakçı kapı iddiası bulunmaz"*.)
 
 ### `topbeam open`
 Pano yolunu yazdırır. Tarayıcıyı **otomatik açmaz** — sen açarsın.
