@@ -24,9 +24,22 @@ const pkgJson = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')) as 
   name: string;
   version: string;
   repository?: { url?: string };
+  topbeam?: { publishedVersion?: string };
 };
 const PKG_NAME = pkgJson.name;
-const PKG_VERSION = pkgJson.version;
+
+/**
+ * ⚠️ 2026-07-29'da yakalanan tuzak: landing'i `package.json.version`'a karşı
+ * sınıyordum. O alan **bir sonraki** sürümü tutar — yayındakini değil. Sürümü
+ * 0.1.1'e yükseltip landing'i deploy ettim, ama `npm publish` 2FA'da takıldı:
+ * landing "yayında: 0.1.1" derken npm hâlâ 0.1.0 sunuyordu. Yani nöbetçi
+ * "geçti" derken sayfa YALAN söylüyordu.
+ *
+ * Doğru hakem: **gerçekten yayınlanmış** sürüm. `topbeam.publishedVersion`
+ * yalnız başarılı bir publish'ten SONRA elle yükseltilir; landing onu yazar.
+ * (Test ağa çıkmaz — ürünün "ağ çağrısı yok" kuralı testlerde de geçerli.)
+ */
+const PUBLISHED_VERSION = pkgJson.topbeam?.publishedVersion ?? null;
 
 /**
  * Yorumlar kullanıcıya render EDİLMEZ; yayın-günü talimatı da bir yorumda duruyor.
@@ -76,11 +89,20 @@ test('landing: yayın durumu GERÇEĞİ söyler (yayındayken "yayınlanmadı" y
   for (const eski of [/class="cmd soon"/, /yayından sonra/, /henüz npm'e yayınlanmadı/]) {
     assert.ok(!eski.test(live), `paket yayındayken yayın-öncesi ifadesi duruyor: ${eski}`);
   }
-  // Ve yayın iddiası package.json'daki GERÇEK sürümle birebir eşleşmeli.
+  // Ve yayın iddiası GERÇEKTEN YAYINLANMIŞ sürümle birebir eşleşmeli.
   assert.match(live, /Yayında:/, 'yayın durumu notu yok');
+  assert.ok(PUBLISHED_VERSION !== null, 'package.json → topbeam.publishedVersion tanımlı olmalı');
   assert.ok(
-    live.includes(`${PKG_NAME}@${PKG_VERSION}`),
-    `landing sürümü package.json ile uyuşmuyor (beklenen ${PKG_NAME}@${PKG_VERSION})`,
+    live.includes(`${PKG_NAME}@${PUBLISHED_VERSION}`),
+    `landing YAYINDA OLMAYAN sürümü gösteriyor (npm'deki: ${PKG_NAME}@${PUBLISHED_VERSION})`,
+  );
+  // Sayfada yayınlanmamış bir sürüm numarası HİÇ geçmemeli — "0.1.1 yayında"
+  // demeden de olsa, yalnızca yazılı olması bile okuru yanıltır.
+  const yayinlanmamis = new RegExp(`${PKG_NAME}@(?!${String(PUBLISHED_VERSION).replace(/\./g, '\\.')})[0-9]`, 'g');
+  assert.equal(
+    yayinlanmamis.exec(live),
+    null,
+    `landing'de yayınlanmamış sürüm numarası geçiyor (yayında olan: ${PUBLISHED_VERSION})`,
   );
 });
 
