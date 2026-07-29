@@ -512,7 +512,7 @@ interface Kosum {
 
 /**
  * Zincirdeki SON `cd/pushd` hedefi — komutun gerçekten koştuğu dizin.
- * Hedef parça parça tırnaklı olabilir (`cd ~/Desktop/"Ekin Nasip"/proje`);
+ * Hedef parça parça tırnaklı olabilir (`cd ~/Desktop/"Benim Proje"/proje`);
  * tırnaklar hedefin İÇİNDEN de düşer, yoksa aynı dizinin iki yazımı iki ayrı
  * kapsam sanılırdı.
  */

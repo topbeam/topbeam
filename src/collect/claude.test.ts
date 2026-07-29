@@ -162,7 +162,7 @@ await mkdir(join(claudeDir, 'projects', slugifyCwd(EMPTY_PROJ)), { recursive: tr
 
 test('slugifyCwd: / ve boşluk - olur (keşif kuralı)', () => {
   assert.equal(slugifyCwd('/Users/test/Fixture Proj'), '-Users-test-Fixture-Proj');
-  assert.equal(slugifyCwd('/Users/ekinkilickaya/Desktop/Ekin Nasip'), '-Users-ekinkilickaya-Desktop-Ekin-Nasip');
+  assert.equal(slugifyCwd('/Users/dev/Desktop/Benim Proje'), '-Users-dev-Desktop-Benim-Proje');
 });
 
 test('isTestLikeCommand: test komutlarını tanır, sıradan komutu tanımaz', () => {

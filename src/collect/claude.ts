@@ -219,7 +219,7 @@ function str(v: unknown): string | null {
 
 /**
  * cwd → Claude Code proje dizin slug'ı.
- * Gözlenen kural: '/' ve boşluk '-' olur ("/…/Ekin Nasip" → "-…-Ekin-Nasip").
+ * Gözlenen kural: '/' ve boşluk '-' olur ("/…/Benim Proje" → "-…-Benim-Proje").
  * Diğer özel karakterler için de '-' varsayılır (est.); eşleme bu yüzden
  * normalize-karşılaştırma ile yapılır ve oturumun içindeki cwd ile doğrulanır.
  */

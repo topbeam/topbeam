@@ -396,8 +396,8 @@ test('yeşillenme eşleşmesi boşluk/yol/yazım farklarına dayanıklı (normal
   assert.equal(normalizeCommand('  npm   run   test '), 'npm test');
   assert.equal(normalizeCommand('npm t'), 'npm test');
   assert.equal(
-    normalizeCommand('cd "/Users/ekin/Desktop/Ekin Nasip/ocean-cli" && node --test src/card.test.ts'),
-    normalizeCommand('node --test /Users/ekin/proje/src/card.test.ts'),
+    normalizeCommand('cd "/Users/dev/Desktop/Benim Proje/ocean-cli" && node --test src/card.test.ts'),
+    normalizeCommand('node --test /Users/dev/proje/src/card.test.ts'),
   );
   assert.equal(normalizeCommand('pnpm run test'), 'pnpm test');
   // Farklı koşum farklı anahtar kalır (yanlış eşleşme yok).
@@ -413,7 +413,7 @@ test('yeşillenme eşleşmesi boşluk/yol/yazım farklarına dayanıklı (normal
   });
   const yesil = yesilClaim('test-s1-1', {
     evidence: [
-      { kind: 'test-output', summary: 'ℹ pass 19', ref: 'cd /Users/ekin/proje && node --test "src/card.test.ts"' },
+      { kind: 'test-output', summary: 'ℹ pass 19', ref: 'cd /Users/dev/proje && node --test "src/card.test.ts"' },
     ],
   });
   assert.notEqual(buildCard([kirik, yesil], { now: NOW }).rule, 'kirik-test');
@@ -423,15 +423,15 @@ test('koşum kimliği: çıktı filtresi koşumu değiştirmez, dizin ve satır 
   // Aynı test, başka grep/head süzgeci → AYNI koşum (kimliğe filtre girmez).
   assert.ok(
     sameTestRun(
-      'cd "/Users/ekin/Desktop/Ekin Nasip/proje" && npm test 2>&1 | grep -A20 "✖" | head -40',
+      'cd "/Users/dev/Desktop/Benim Proje/proje" && npm test 2>&1 | grep -A20 "✖" | head -40',
       'perl -0pi -e "s/a/b/" x.test.ts && npm test 2>&1 | grep -E "tests |pass |fail"',
     ),
   );
   // Aynı dizin, iki ayrı yazım (tırnak parça parça) → yine aynı koşum.
   assert.ok(
     sameTestRun(
-      'cd ~/Desktop/"Ekin Nasip"/proje && npm test',
-      'cd "/Users/ekin/Desktop/Ekin Nasip/proje" && npm test 2>&1 | tail -3',
+      'cd ~/Desktop/"Benim Proje"/proje && npm test',
+      'cd "/Users/dev/Desktop/Benim Proje/proje" && npm test 2>&1 | tail -3',
     ),
   );
   // AÇIKÇA farklı alt-projede koşulan aynı komut → ayrı koşum (yanlış temizleme yok).
@@ -583,7 +583,7 @@ test('test sayısı ATIFLI: gerekçe hangi komutun sonucu olduğunu söyler', ()
   // Mutlak yol taşıyan komut atıf olarak VERİLMEZ (kapsam sızıntısı yok).
   const yolsuz = testClaim('test-s1-1', {
     evidence: [
-      { kind: 'test-output', summary: 'ℹ fail 2', ref: 'node --test /Users/ekin/Desktop/proje/src/a.test.ts' },
+      { kind: 'test-output', summary: 'ℹ fail 2', ref: 'node --test /Users/dev/Desktop/proje/src/a.test.ts' },
     ],
   });
   const why2 = buildCard([yolsuz], { now: NOW }).why;

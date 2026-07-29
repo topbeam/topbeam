@@ -157,8 +157,8 @@ test('kimlikGecerliMi: "bilinmiyor" imzayla onay olmaz (yazan kapıyla aynı lis
   for (const yok of ['', '   ', 'unknown', 'BİLİNMİYOR'.toLocaleLowerCase('tr-TR'), 'none', 'null']) {
     assert.equal(kimlikGecerliMi(yok), false, `'${yok}' kimlik sayılmamalı`);
   }
-  assert.equal(kimlikGecerliMi('ekin'), true);
-  assert.equal(kimlikGecerliMi(' ekinkilickaya '), true);
+  assert.equal(kimlikGecerliMi('dev'), true);
+  assert.equal(kimlikGecerliMi(' ada.lovelace '), true);
 });
 
 // ── defter davranışı: sessiz silme yok, gölgeleme yok ───────────────────────
