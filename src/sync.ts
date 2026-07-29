@@ -1,8 +1,9 @@
 /**
  * topbeam sync — motor: collect → truth → card → state → pano.
  *
- * Deterministik boru hattı (LLM yok, network yok):
- *   collectClaude(cwd) + collectGit(cwd)
+ * Deterministik boru hattı (LLM yok; ağ YALNIZ opsiyonel CI kaynağında):
+ *   collectClaude(cwd) + collectGit(cwd) + collectCi(cwd, git)  ← CI opsiyonel,
+ *     `--no-ci` / TOPBEAM_NO_CI=1 ile tamamen kapanır (local-first vaadi)
  *     → buildTruth (kanıt-kurallı claim + log)
  *     → notes.md satırları (Claude'un 1-satır beyan notları — "beyan" rozeti)
  *     → eski state ile birleşme (insan onayları ASLA kaybolmaz)
@@ -24,6 +25,7 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { collectClaude } from './collect/claude.ts';
 import { collectGit } from './collect/git.ts';
+import { collectCi } from './collect/ci.ts';
 import { buildTruth, collapseRepeats } from './truth.ts';
 import { buildCard, scriptsFromPackageJson } from './card.ts';
 import { buildTeslim } from './goal.ts';
@@ -108,7 +110,16 @@ function dedupeSortLog(entries: readonly LogEntry[]): LogEntry[] {
   return collapseRepeats(out);
 }
 
-export async function runSync(cwd: string, opts: { now?: Date } = {}): Promise<SyncResult> {
+export interface SyncOptions {
+  now?: Date;
+  /**
+   * `--no-ci`: opsiyonel CI kaynağı hiç sorulmaz (tek dış çağrı bile yapılmaz).
+   * TOPBEAM_NO_CI ortam değişkeni de aynı işi görür (collect/ci.ts okur).
+   */
+  noCi?: boolean;
+}
+
+export async function runSync(cwd: string, opts: SyncOptions = {}): Promise<SyncResult> {
   const now = opts.now ?? new Date();
   const nowIso = now.toISOString();
 
@@ -124,9 +135,15 @@ export async function runSync(cwd: string, opts: { now?: Date } = {}): Promise<S
   // 1) Topla (salt-okunur gerçekler).
   const claude = await collectClaude(cwd);
   const git = await collectGit(cwd);
+  /**
+   * CI = TEK dış kaynak ve OPSİYONEL. gh yoksa/giriş yoksa/ağ yoksa zarif boş
+   * döner; --no-ci ya da TOPBEAM_NO_CI=1 ile hiç sorulmaz. Neden okunamadığı
+   * kapsam notuna düşer — Topbeam kurulum/token İSTEMEZ.
+   */
+  const ci = await collectCi(cwd, git, { ...(opts.noCi === true ? { noCi: true } : {}) });
 
   // 2) Gerçek motoru — beyanlar log'a "Beyan:" önekiyle girer (rozet: beyan).
-  const truth = buildTruth(claude, git, { includeBeyan: true, now });
+  const truth = buildTruth(claude, git, { includeBeyan: true, now, ci });
   const notes = [...truth.notes];
 
   // 3) notes.md — Claude'un 1-satır notları (beyan; kanıt değil).

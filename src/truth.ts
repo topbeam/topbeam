@@ -13,6 +13,9 @@
  * - Hiçbir kanıt yoksa 'dogrulanmadi' + "uygulandı görünüyor, doğrulanmadı".
  * - "çalışıyor" ifadesi bu motordan ASLA çıkmaz; yalnız verify akışının
  *   çağırdığı buildCalisiyorClaim (insan-onayı) üretebilir.
+ * - OPSİYONEL CI (opts.ci): GitHub koşumu ancak head_sha bu deponun bilinen
+ *   bir commit'iyle BİREBİR eşleşirse claim üretir ('test-kaniti'). Eşleşme
+ *   yoksa hiçbir şey üretilmez — kaynak kapalıysa motor lokal kalır.
  * - TestSignal.exitCode===0 varsayım olabilir (exitAssumed transcript'te) —
  *   bu yüzden claim metinlerinde "exit 0 başarı" iddiası YOK; yalnız çıktıdan
  *   okunan sayılar ve gerçek (string'den gelen) sıfır-dışı exit kodları anılır.
@@ -65,6 +68,7 @@ import {
   type TestSignal,
 } from './collect/claude.ts';
 import type { GitFacts } from './collect/git.ts';
+import { buildCiClaims, type CiFacts } from './collect/ci.ts';
 
 // ── sınırlar ─────────────────────────────────────────────────────────────────
 
@@ -109,6 +113,11 @@ export interface TruthOptions {
   now?: Date;
   /** Ev dizini (yol kısaltma) — verilmezse os.homedir(). Test determinizmi. */
   homeDir?: string;
+  /**
+   * OPSİYONEL CI gerçekleri (collect/ci.ts). Verilmezse motor yalnız lokal
+   * kaynaklardan çalışır — local-first vaadi burada da bozulmaz.
+   */
+  ci?: CiFacts;
 }
 
 /** Motorun ürettiği HAM log sayıları — sync bunları LogCounts'a tamamlar. */
@@ -741,7 +750,7 @@ export function buildTruth(
   const nowIso = (opts.now ?? new Date()).toISOString();
   const home = opts.homeDir ?? homedir();
   const yaz = makeYazim(claude.projectCwd, home);
-  const notes: string[] = [...claude.notes, ...git.notes];
+  const notes: string[] = [...claude.notes, ...git.notes, ...(opts.ci?.notes ?? [])];
   const gitKnown = gitKnownPaths(git, claude.projectCwd);
 
   const claims: Claim[] = [];
@@ -775,6 +784,12 @@ export function buildTruth(
       hamBeyan += b.ham;
     }
   }
+
+  /**
+   * CI claim'leri (varsa) — oturumlardan bağımsız, commit'e bağlı gerçekler.
+   * SHA birebir eşleşmediyse buradan hiçbir şey çıkmaz (collect/ci.ts).
+   */
+  if (opts.ci !== undefined) claims.push(...buildCiClaims(opts.ci, git));
 
   // Kapsam daralması SESSİZ kalmaz — neyin dışarıda tutulduğu sayıyla söylenir.
   if (disKapsam > 0) {

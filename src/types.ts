@@ -122,6 +122,15 @@ export interface ClaimSignals {
   passedTests?: number;
   /** GERÇEK (varsayılmamış) sıfır-dışı exit kodu — komut hata ile bitti. */
   nonZeroExit?: number;
+  /**
+   * CI koşumu 'failure' ile bitti (GitHub Actions'tan OKUNDU, collect/ci.ts).
+   *
+   * Neden ayrı alan: CI sonucunda ne exit kodu ne de geçti/kaldı sayısı vardır.
+   * Onu `nonZeroExit: 1` ya da `failedTests: 1` diye yazmak ölçülmemiş bir sayı
+   * uydurmak olurdu — bu üründe kırmızı çizgi. Yalnız true yazılır; false ya da
+   * "CI yeşil" diye bir sinyal YOKTUR (yeşil CI, lokal kırık koşumu temizlemez).
+   */
+  ciFailed?: boolean;
 }
 
 /** Bir iddiayı destekleyen tekil kanıt parçası. */

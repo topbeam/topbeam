@@ -39,6 +39,8 @@ Komutlar:
   open            Pano yolunu göster (tarayıcıyı otomatik AÇMAZ)
 
 Seçenekler:
+  --no-ci         sync: opsiyonel CI okumasını tamamen kapat (TOPBEAM_NO_CI=1
+                  ile aynı) — Topbeam tümüyle lokal kalır, tek dış çağrı yapılmaz
   --version       Sürümü yazdır
   --help          Bu yardımı göster
 
@@ -60,9 +62,10 @@ async function cmdInit(_args: Args): Promise<void> {
 
 const LEVEL_ORDER: EvidenceLevel[] = ['dosya-kaniti', 'test-kaniti', 'insan-onayi', 'dogrulanmadi'];
 
-async function cmdSync(_args: Args): Promise<void> {
+async function cmdSync(args: Args): Promise<void> {
   const cwd = process.cwd();
-  const res = await runSync(cwd);
+  // --no-ci: opsiyonel CI kaynağı hiç sorulmaz (TOPBEAM_NO_CI=1 de aynı işi görür).
+  const res = await runSync(cwd, { noCi: args.flags['no-ci'] === true });
   if (!res.ok || res.state === undefined) fail(res.error ?? 'Senkron başarısız.');
 
   const st = res.state;

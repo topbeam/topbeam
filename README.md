@@ -3,10 +3,16 @@
 Vibe coder için dürüst proje panosu. Topbeam sana projenin hikâyesini anlatmaz;
 **mevcut gerçeği ve ilerlemek için gereken tek hareketi söyler.**
 
-Local-first: LLM çağrısı yok, network çağrısı yok. Özet **deterministiktir** —
+Local-first: **LLM çağrısı yok.** Özet **deterministiktir** —
 Claude Code transcript'lerindeki tool-use kayıtlarından + git gerçeklerinden üretilir;
 halüsinasyon yapısal olarak imkânsızdır (assistant'ın "bitti, çalışıyor!" cümlesi
 özete hiçbir yoldan giremez).
+
+**Tek dış kaynak: opsiyonel CI okuması.** `gh` kurulu ve girişliyse Topbeam
+"bu commit CI'da yeşil mi?" sorusunu sorar — lokalde öğrenemeyeceğin tek gerçek.
+`gh` yoksa, giriş yoksa ya da ağ yoksa zarif geçer; `--no-ci` / `TOPBEAM_NO_CI=1`
+ile tümden kapanır ve Topbeam **tek dış çağrı bile yapmaz**
+(bkz. [CI (opsiyonel)](#ci-opsiyonel)).
 
 **Topbeam by REVERI** — *"topping out"*: inşaatta son kirişin en tepeye çakılması,
 bitiş töreni. BuildPassport barının dolması budur.
@@ -68,7 +74,7 @@ adları (`state.json`, `pano.html`, `passport.jsonl`, `goal.md`, `notes.md`)
 **değişmedi** — bilinçli karar: mevcut kurulumlarda veri göçü riski almıyoruz.
 Aynı gerekçeyle ortam değişkenleri de `OCEAN_*` önekini koruyor.
 
-## 4 Komut
+## 5 Komut
 
 ### `topbeam init`
 Projeyi Topbeam'e bağlar — kullanıcı elle iş yapmaz:
@@ -83,6 +89,8 @@ Projeyi Topbeam'e bağlar — kullanıcı elle iş yapmaz:
 Claude Code transcript'leri (`~/.claude/projects/...`) + git gerçeklerini okur →
 kanıt-kurallı iddialar (claim), LOG HISTORY ve **sıradaki-tek-hareket kartını**
 üretir → `.ocean/pano.html` yazar. İnsan onayları asla geri alınmaz.
+
+Bayrak: `topbeam sync --no-ci` → opsiyonel CI okuması hiç yapılmaz (aşağı bak).
 
 ### `topbeam verify <id>`
 Bir iddiayı gösterir, kanıtlarını listeler, onayını sorar (e/H). Onaylarsan:
@@ -100,6 +108,12 @@ uyarılırsın — Topbeam lastik damga vurdurmaz.
 
 ### `topbeam open`
 Pano yolunu yazdırır. Tarayıcıyı **otomatik açmaz** — sen açarsın.
+
+### `topbeam makbuz`
+**Dışarıya** gösterilebilir tek sayfalık teslim makbuzu üretir:
+`.ocean/makbuz.md` (`--html` eklersen ayrıca `.ocean/makbuz.html`). Pano *içeri*
+bakar (senin ekranın), makbuz *dışarı* gider — müşteriye, ekibe, işverene
+yapıştırılır. Dosyayı yazar, yolu söyler; **açmaz, göndermez, yayınlamaz**.
 
 ## Pano (`.ocean/pano.html`)
 
@@ -159,6 +173,42 @@ yazılır. Kapsamı dürüstçe söyler: kaç söz, ne zaman kilitlendi, hangi k
 ve hangi imzalara dayanıyor; ve **ne demek olmadığını** ("ürün hatasız" demek
 değildir). Mühür yalnız son **onay** anında yazılır — söz silerek mühür alınamaz.
 
+## Makbuz (`.ocean/makbuz.md`) — dışarıya gösterilen tek sayfa
+
+Pano özeldir; **makbuz paylaşılır.** `topbeam makbuz` tek sayfalık, Markdown
+(yapıştırılabilir) bir teslim kaydı üretir — istersen `--html` ile tek dosya
+HTML de (gömülü stil, **sıfır dış istek**, JS yok).
+
+İçinde ne var:
+- proje adı · tarih · araç sürümü · hedef cümlesi (beyan olduğu yazılı),
+- **teslim sözleri**, her birinin kanıt seviyesi ve durumu,
+- **kanıt özeti**: kaç dosya-kanıtı / test-kanıtı / insan onayı, son test ölçümü,
+  ve state'ten okunan **commit SHA'ları**,
+- **"bilmedikleri"**: neyin elendiği (proje dışı düzenleme, ilişkisiz beyan,
+  kontrol komutu, log satır zinciri), git deposu değilse o not,
+- **"ne demek DEĞİL"**: makbuzun kendi sınırları.
+
+**Üçüncü kişi yeniden doğrulayabilsin diye** makbuzun ortasında kopyalanabilir
+bir blok durur — "bana güven" yok, "kendin bak" var:
+
+```sh
+git show <sha> --stat     # SHA'lar bu depodan okundu (yoksa "kayıt yok" yazar)
+npm test                  # test komutu package.json'dan; yoksa uydurulmaz
+cat .ocean/passport.jsonl # insan onaylarının değişmez kaydı
+topbeam sync && topbeam makbuz   # makbuzu sıfırdan yeniden üret
+```
+
+Dürüstlük kapıları (testlerle kilitli):
+- Bir madde ancak `passport.jsonl` defterindeki **terminal imzalı** onaya
+  bağlanıyorsa `- [x]` görünür. `completed` yazan ama defterde karşılığı olmayan
+  madde **onaysız** gösterilir ve nedeni yazılır (silinmez, gizlenmez).
+- SHA / komut / sayı **uydurulmaz**: kayıt yoksa "kayıt yok" der.
+- Hiçbir şey onaylı değilken makbuz **yine üretilir**, ama başında
+  "hiçbir madde henüz insan onaylı değil — bu bir teslim onayı DEĞİLDİR" yazar.
+  Sahte mühür/rozet yoktur.
+- Diske giden her metin gibi makbuz da sır maskelemesinden (`redact`) geçer —
+  dışarı gidecek dosyada bu en kritik kapıdır.
+
 ## Kart neyi seçer? (kural merdiveni)
 
 Kart, doğrulanmamış işler arasından **riski en yükseğini** seçer ve "Neden bu?"
@@ -184,6 +234,40 @@ Sınırlar açıkça çizilidir:
   o bir kesintidir.
 - Hiçbir kural kanıt seviyesini değiştirmez: `doğrulanmadı` → `doğrulanmadı` kalır.
   Kurallar yalnız **sırayı ve gerekçeyi** belirler.
+
+## CI (opsiyonel)
+
+Topbeam'in geri kalanı tümüyle lokaldir. CI, **tek dış kaynaktır** ve tek bir soruyu
+sorar: *"bu commit CI'da yeşil mi?"* — terminalde 5 saniyede öğrenemeyeceğin tek gerçek.
+
+**Nasıl çalışır**
+
+| Durum | Topbeam ne yapar |
+|---|---|
+| `gh` kurulu + girişli + depo GitHub'da | `gh run list --json …` (salt-okunur, tek komut) |
+| `gh` kurulu değil | Zarif geçer. **Kurulum İSTEMEZ.** Kapsam notu: "CI kaydı okunamadı: `gh` komutu kurulu değil" |
+| Giriş yok / yetki yok / ağ yok / uzak depo yok | Zarif geçer + sebebi kapsam notuna tek satır yazar |
+| `--no-ci` ya da `TOPBEAM_NO_CI=1` | **Tek dış çağrı bile yapılmaz** |
+
+**Eşleşme kuralı — uydurma yok.** Bir CI koşumu ancak `head_sha` değeri bu deponun
+bilinen bir commit'iyle **birebir** (40 hane, tam string) eşleşirse hesaba katılır.
+Kısa hash **öneki yetmez**. Eşleşmeyen koşumlar atılır ve kaç tane atıldığı kapsam
+notuna yazılır.
+
+**Sonuç nasıl okunur**
+
+- `success` → `test-kanıtı` seviyesinde claim: *"CI yeşil: 2 workflow `abc1234`
+  commit'inde başarılı"*. Commit HEAD değilse **kaç commit geride olduğu** yazılır.
+  Çalışma ağacın kirliyse *"CI bu değişiklikleri görmedi"* diye eklenir.
+- `failure` → kırık sinyali: kart bunu `kirik-test` kuralıyla **her şeyin önüne**
+  alır. "Bitti" koşulu lokal test değildir: *aynı commit'te CI yeşile dönmelidir* —
+  lokalde `npm test` geçmesi CI'ı yeşil yapmaz, kart bunu açıkça yazar.
+- Diğer sonuçlar (süren, iptal, atlanan) **claim üretmez**; kapsam notunda durur.
+  Sonuç uydurulmaz.
+- CI'da geçti/kaldı sayısı ve exit kodu **yoktur** → Topbeam de yazmaz.
+  Ölçülen tek şey `failure` sonucudur.
+- Yeşil CI, lokalde kayıtlı kırık bir koşumu **temizlemez** (farklı ölçüm, farklı
+  ağaç); tersi de geçerlidir — lokal yeşil, kırmızı CI'ı manşetten düşürmez.
 
 ## Dürüstlük İlkesi (ürünün anayasası)
 
@@ -230,6 +314,7 @@ bu README · `site/index.html` fiyat bölümü · `TEK-PAKET/OCEAN-LANSMAN-KITI.
 | `OCEAN_CLAUDE_DIR` | `~/.claude` yerine kullanılacak kök (test/izolasyon) |
 | `OCEAN_NO_NOTIFY=1` | macOS bildirimini tümden kapatır |
 | `OCEAN_NOTIFY_BIN` | `osascript` yerine binary (test) |
+| `TOPBEAM_NO_CI=1` | Opsiyonel CI okumasını tümden kapatır (`--no-ci` ile aynı) — tek dış çağrı yapılmaz |
 
 ## Geliştirme
 

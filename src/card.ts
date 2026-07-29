@@ -7,7 +7,8 @@
  * kullanıcı zekâyı orada hisseder.
  *
  * ÖNCELİK SIRASI (RULE_ORDER, ilk eşleşen kazanır):
- *  1. kirik-test   — test çıktısında başarısız/hata kaydı. Kırık test dururken
+ *  1. kirik-test   — test çıktısında başarısız/hata kaydı ya da 'failure' ile
+ *                    biten CI koşumu (collect/ci.ts). Kırık test dururken
  *                    üstüne konan her iş şüphelidir → her şeyin önünde. AMA
  *                    AYNI DİZİNDE sonradan yeşil bir koşum varsa manşete çıkmaz
  *                    (aşağı bak); bayat kayıt ise TARİHİYLE birlikte yazılır.
@@ -418,11 +419,12 @@ interface Ctx extends Cevre {
 }
 
 /**
- * Kırık test sinyali: OKUNMUŞ başarısız sayısı ya da GERÇEK hata çıkışı.
+ * Kırık test sinyali: OKUNMUŞ başarısız sayısı, GERÇEK hata çıkışı ya da
+ * 'failure' ile biten CI koşumu.
  * Sinyalle ölen süreç (exit ≥ 128: zaman aşımı, Ctrl-C, kill) kırık SAYILMAZ —
  * o bir kesintidir; kesintiyi "test kırık" diye manşete çıkarmak yanlış alarmdır.
  */
-function kirikTestSinyali(claim: Claim): { failed?: number; exit?: number } | null {
+function kirikTestSinyali(claim: Claim): { failed?: number; exit?: number; ci?: boolean } | null {
   const s = sig(claim);
   if (s.failedTests !== undefined && s.failedTests > 0) {
     return s.nonZeroExit !== undefined ? { failed: s.failedTests, exit: s.nonZeroExit } : { failed: s.failedTests };
@@ -430,6 +432,8 @@ function kirikTestSinyali(claim: Claim): { failed?: number; exit?: number } | nu
   if (s.nonZeroExit !== undefined && s.nonZeroExit > 0 && s.nonZeroExit < HEURISTIC.sinyalExitTabani) {
     return { exit: s.nonZeroExit };
   }
+  // CI'da sayı da exit kodu da yoktur; ölçülen tek şey 'failure' sonucudur.
+  if (s.ciFailed === true) return { ci: true };
   return null;
 }
 
@@ -703,23 +707,41 @@ function kuralKirikTest(ctx: Ctx): Secim | null {
       }.`
     : null;
 
-  const bas =
-    failed !== undefined
+  /**
+   * CI DALI. CI sonucunda ne başarısız-test sayısı ne exit kodu vardır —
+   * ölçülen tek şey 'failure' sonucudur, cümle de yalnız onu söyler.
+   */
+  const ciKirik = s?.ci === true;
+
+  const bas = ciKirik
+    ? 'CI koşumu kırmızı bitti (GitHub kaydı)'
+    : failed !== undefined
       ? `Kayıtlarda kırık test var (${atifOn}${failed} başarısız)`
       : `Test komutu sıfır-dışı çıkışla bitti (${atifOn}exit ${s?.exit})`;
-  const tazeKuyruk =
-    failed !== undefined
+  const tazeKuyruk = ciKirik
+    ? ' — CI kırmızıyken üstüne konan iş de şüpheli, o yüzden bu her şeyin önünde.'
+    : failed !== undefined
       ? ' — kırık test dururken üstüne konan iş de şüpheli, o yüzden bu her şeyin önünde.'
       : ' — kırık koşum sinyali, doğrulanmamış işlerin önüne geçer.';
   const why = `${bas}${bayatKuyruk ?? tazeKuyruk}`;
 
   const bayatNot = bayat ? ` — bu sonuç ${tarih} tarihli koşumdan, ${yas} gün önce` : '';
-  const unknown =
-    failed !== undefined
+  const unknown = ciKirik
+    ? `CI’ın şu an hâlâ kırmızı olup olmadığı bilinmiyor — bu sonuç o commit’in son kayıtlı koşumundan${bayatNot}.`
+    : failed !== undefined
       ? bayat
         ? `Testin şu an hâlâ kırık olup olmadığı bilinmiyor${bayatNot}.`
         : 'Testin şu an hâlâ kırık olup olmadığı bilinmiyor — bu sonuç son kayıtlı koşumdan.'
       : `Komutun neden hata koduyla bittiği ve şu an hâlâ hata verip vermediği bilinmiyor${bayatNot}.`;
+
+  /**
+   * CI'da "bitti" koşulu LOKAL yeşil değildir: aynı commit'te CI'ın yeşile
+   * dönmesi gerekir. Bunu yazmazsak kullanıcı lokalde `npm test` geçince
+   * sorunun kapandığını sanır — sessiz bir yalan.
+   */
+  const doneWhen = ciKirik
+    ? `Aynı commit’te CI yeşil sonuç verdiğinde (test-kanıtı) ya da '${verifyCommand(claim.id)}' ile sen onayladığında (insan-onayı) bitti sayılır — lokal testin geçmesi CI’ı yeşile çevirmez.`
+    : `Aynı test komutu başarısız test kalmadan geçtiğinde (test-kanıtı) ya da '${verifyCommand(claim.id)}' ile sen onayladığında (insan-onayı) bitti sayılır.`;
 
   return {
     claim,
@@ -727,7 +749,7 @@ function kuralKirikTest(ctx: Ctx): Secim | null {
     why,
     unknown,
     action: testTekrarAksiyonu(claim, ctx.scripts),
-    doneWhen: `Aynı test komutu başarısız test kalmadan geçtiğinde (test-kanıtı) ya da '${verifyCommand(claim.id)}' ile sen onayladığında (insan-onayı) bitti sayılır.`,
+    doneWhen,
   };
 }
 

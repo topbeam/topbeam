@@ -23,6 +23,11 @@ export interface GitDirtyFile {
 
 export interface GitCommit {
   hash: string; // kısa hash
+  /**
+   * Tam (40 hane) commit SHA'sı. CI eşleştirmesi BUNUN üzerinden yapılır:
+   * kısa hash bir ÖNEKTİR, önek eşleşmesi "birebir" değildir (collect/ci.ts).
+   */
+  full: string;
   date: string; // ISO-8601 (committer date)
   subject: string;
 }
@@ -194,15 +199,21 @@ export async function collectGit(cwd: string, opts: GitCollectOptions = {}): Pro
     facts.notes.push('git status okunamadı.');
   }
 
-  const log = await runGit(bin, ['log', '-n', String(maxCommits), '--format=%h%x09%cI%x09%s'], cwd, timeoutMs);
+  const log = await runGit(
+    bin,
+    ['log', '-n', String(maxCommits), '--format=%H%x09%h%x09%cI%x09%s'],
+    cwd,
+    timeoutMs,
+  );
   if (log.ok) {
     for (const l of log.stdout.split('\n')) {
       if (!l) continue;
       const parts = l.split('\t');
-      const hash = parts[0];
-      const date = parts[1];
-      if (!hash || !date) continue;
-      facts.recentCommits.push({ hash, date, subject: parts.slice(2).join('\t') });
+      const full = parts[0];
+      const hash = parts[1];
+      const date = parts[2];
+      if (!full || !hash || !date) continue;
+      facts.recentCommits.push({ hash, full, date, subject: parts.slice(3).join('\t') });
     }
   } else if (facts.headHash !== null) {
     facts.notes.push('git log okunamadı.');

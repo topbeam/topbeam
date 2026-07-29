@@ -1,7 +1,7 @@
 {
   "name": "topbeam",
   "version": "0.1.0",
-  "description": "Topbeam — vibe coder için dürüst proje panosu: Claude Code / Codex transcript + git gerçeklerinden deterministik log, kanıt seviyeli durum ve sıradaki-tek-hareket kartı. LLM yok, network yok, local-first.",
+  "description": "Topbeam — vibe coder için dürüst proje panosu: Claude Code / Codex transcript + git gerçeklerinden deterministik log, kanıt seviyeli durum ve sıradaki-tek-hareket kartı. LLM yok, local-first; CI okuması opsiyonel ve --no-ci ile kapatılabilir.",
   "type": "module",
   "license": "MIT",
   "author": "Ekin Kılıçkaya",

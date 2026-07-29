@@ -49,6 +49,10 @@ test('collectGit: commit + kirli dosyalar + numstat diff', async () => {
 
   assert.equal(res.recentCommits.length, 1);
   assert.equal(res.recentCommits[0]?.subject, 'ilk commit');
+  // TAM SHA: CI eşleştirmesi (collect/ci.ts) birebir bunun üzerinden yapılır.
+  assert.match(res.recentCommits[0]?.full ?? '', /^[0-9a-f]{40}$/);
+  assert.equal(res.recentCommits[0]?.full, res.headHash);
+  assert.ok(res.recentCommits[0]?.full.startsWith(res.recentCommits[0]?.hash ?? ''));
 
   const modified = res.dirtyFiles.find((f) => f.path === 'a.txt');
   assert.ok(modified);

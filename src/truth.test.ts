@@ -6,6 +6,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { BashRun, ChangedFile, ClaudeCollectResult, SessionSummary, TestSignal } from './collect/claude.ts';
 import type { GitFacts } from './collect/git.ts';
+import type { CiFacts } from './collect/ci.ts';
 import type { LogEntry } from './types.ts';
 import { buildCalisiyorClaim, buildTruth, collapseRepeats, isInsideProject, kisaltYollar } from './truth.ts';
 
@@ -109,7 +110,9 @@ function gitFacts(over: Partial<GitFacts> = {}): GitFacts {
     headDate: '2026-07-28T08:00:00.000Z',
     headSubject: 'ilk commit',
     dirtyFiles: [],
-    recentCommits: [{ hash: 'abc1234', date: '2026-07-28T08:00:00.000Z', subject: 'ilk commit' }],
+    recentCommits: [
+      { hash: 'abc1234', full: 'a'.repeat(40), date: '2026-07-28T08:00:00.000Z', subject: 'ilk commit' },
+    ],
     diffStat: null,
     notes: [],
     ...over,
@@ -517,6 +520,7 @@ test('collapseRepeats: sayaç toplanır (idempotent), ayrık tekrarlar birleşme
 test('log sınırı KANIT ÖNCELİKLİ: beyanlar düşer, kanıt satırları kalır', () => {
   const commits = Array.from({ length: 520 }, (_, i) => ({
     hash: `h${i}`,
+    full: String(i).padStart(40, '0'),
     date: `2026-07-28T${String(i % 24).padStart(2, '0')}:00:00.000Z`,
     subject: `commit ${i}`,
   }));
@@ -697,4 +701,58 @@ test('kapsam ölçümü: proje dışı düzenleme, kontrol komutu, atlanan oturu
   assert.equal(scope.kontrolKomutu, 2);
   assert.equal(scope.atlananOturum, 1);
   assert.equal(scope.gitYok, true);
+});
+
+// ── opsiyonel CI kaynağı (collect/ci.ts) ─────────────────────────────────────
+
+/** Test için CiFacts kurucusu — gerçek gh/ağ YOK. */
+function ciFacts(over: Partial<CiFacts> = {}): CiFacts {
+  return { kapali: false, okundu: true, eslesme: [], eslesmeyen: 0, notes: [], ...over };
+}
+
+test('CI kaynağı verilmezse motor tümüyle lokal kalır (CI claim yok)', () => {
+  const claude = collect([session('s1', { testSignals: [signal('npm test', { passed: 5, failed: 0 })] })]);
+  const { claims } = buildTruth(claude, gitFacts(), { now: NOW });
+  assert.equal(claims.filter((c) => c.id.startsWith('ci-')).length, 0);
+});
+
+test('CI eşleşmesi claim + kanıtlı log satırı üretir; notu kapsama düşer', () => {
+  const claude = collect([session('s1')]);
+  const ci = ciFacts({
+    eslesme: [
+      {
+        sha: 'a'.repeat(40),
+        behind: 0,
+        runs: [
+          {
+            headSha: 'a'.repeat(40),
+            workflowName: 'CI',
+            conclusion: 'success',
+            status: 'completed',
+            createdAt: '2026-07-28T09:00:00.000Z',
+          },
+        ],
+      },
+    ],
+    notes: ['1 CI koşumu bu projenin bilinen commit’lerine bağlanamadı ve kapsam dışı bırakıldı (uydurma eşleşme yok).'],
+  });
+  const { claims, log, notes } = buildTruth(claude, gitFacts(), { now: NOW, ci });
+  const ciClaim = claims.find((c) => c.id.startsWith('ci-'));
+  assert.ok(ciClaim);
+  assert.equal(ciClaim.level, 'test-kaniti');
+  // test-kanıtı → log'a 'test' kaynağıyla girer (kanıtlı gerçek).
+  assert.ok(log.some((l) => l.source === 'test' && l.text.includes('CI yeşil')));
+  assert.ok(notes.some((n) => n.includes('kapsam dışı bırakıldı')));
+});
+
+test('CI kapalıysa (--no-ci) claim üretilmez, kapsam notu yine yazılır', () => {
+  const claude = collect([session('s1')]);
+  const ci = ciFacts({
+    kapali: true,
+    okundu: false,
+    notes: ['CI kaydı okunmadı: CI okuması kapalı (--no-ci / TOPBEAM_NO_CI) — bu pano yalnız lokal gerçekleri anlatıyor.'],
+  });
+  const { claims, notes } = buildTruth(claude, gitFacts(), { now: NOW, ci });
+  assert.equal(claims.filter((c) => c.id.startsWith('ci-')).length, 0);
+  assert.ok(notes.some((n) => n.includes('CI okuması kapalı')));
 });

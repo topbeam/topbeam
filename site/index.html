@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Topbeam — Claude ne yaptı? Şimdi ne yapmalısın?</title>
-<meta name="description" content="Topbeam, Claude Code transcript'ini ve git'i deterministik okur; hangi iddianın kanıtı olduğunu ve sıradaki tek hareketi söyler. LLM yok, ağ yok, senin makinende.">
+<meta name="description" content="Topbeam, Claude Code transcript'ini ve git'i deterministik okur; hangi iddianın kanıtı olduğunu ve sıradaki tek hareketi söyler. LLM yok, senin makinende; CI okuması opsiyonel ve kapatılabilir.">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#161b14">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23161b14'/%3E%3Cpath d='M5 16h22' stroke='%23edf1e8' stroke-opacity='.22' stroke-width='2' stroke-linecap='round'/%3E%3Ccircle cx='16' cy='16' r='4.5' fill='%234dd894'/%3E%3C/svg%3E">
@@ -337,8 +337,9 @@ footer a:hover{border-bottom-color:var(--acc)}
 
     <p class="lead">
       Topbeam, Claude Code transcript'ini ve git'in kendisini deterministik okur —
-      LLM çağrısı yok, ağ çağrısı yok, her şey senin makinende. Modelin
-      &ldquo;bitti, çalışıyor&rdquo; cümlesi özete giremez; yalnız kayıt girer.
+      LLM çağrısı yok, her şey senin makinende. Tek dış soru opsiyoneldir ve
+      kapatılabilir: &ldquo;bu commit CI'da yeşil mi?&rdquo; (<code>--no-ci</code>).
+      Modelin &ldquo;bitti, çalışıyor&rdquo; cümlesi özete giremez; yalnız kayıt girer.
     </p>
 
     <p class="promise">
@@ -381,7 +382,7 @@ footer a:hover{border-bottom-color:var(--acc)}
       </p>
 
       <div class="facts">
-        <span>Node ≥ 20</span><span>lokal-first</span><span>LLM yok</span><span>ağ çağrısı yok</span><span>MIT lisanslı çekirdek</span>
+        <span>Node ≥ 20</span><span>lokal-first</span><span>LLM yok</span><span>CI okuması opsiyonel (--no-ci)</span><span>MIT lisanslı çekirdek</span>
       </div>
     </div>
   </div>
@@ -520,6 +521,15 @@ footer a:hover{border-bottom-color:var(--acc)}
       Beşinci komut yalnız senin için: <code>npx topbeam verify &lt;id&gt;</code> — bir iddianın
       kanıtlarını gösterir, onayını sorar. İnsan onayı tek meşru yükseltme yoludur ve geri alınmaz.
       Teslim sözlerinin hepsi onaylandığında bir kez bildirim düşer + mühür yazılır.
+    </p>
+
+    <p class="tiny" style="margin-top:.7rem">
+      Altıncı komut dışarıya bakar: <code>npx topbeam makbuz</code> — müşteriye, ekibe ya da
+      işverene yapıştırabileceğin tek sayfalık teslim makbuzu yazar
+      (<code>.ocean/makbuz.md</code>; <code>--html</code> ile tek dosya HTML). İçinde teslim
+      sözleri ve kanıt seviyeleri, kanıt özeti, neyin kapsam dışı kaldığı ve karşı tarafın
+      <em>kendi makinesinde</em> çalıştırabileceği doğrulama komutları (commit SHA'ları, test
+      komutu, onay defteri) durur. Onaylanmamış bir madde makbuzda onaylı görünmez.
     </p>
 
     <p class="tiny" style="margin-top:.7rem">
