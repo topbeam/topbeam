@@ -13,6 +13,7 @@ import { runInit } from './init.ts';
 import { runSync } from './sync.ts';
 import { runVerify } from './verify.ts';
 import { runMakbuz } from './makbuz.ts';
+import { runUninstall } from './uninstall.ts';
 import { GuvenliYazmaHatasi, panoPath } from './state.ts';
 
 function out(s: string): void {
@@ -40,6 +41,10 @@ Komutlar:
                   YALNIZ terminalden: cevap pipe/otomasyondan gelirse onay
                   kaydedilmez (insan onayı = gerçek insan)
   open            Pano yolunu göster (tarayıcıyı otomatik AÇMAZ)
+  uninstall       Topbeam'in senin dosyalarına bıraktığı izleri geri al
+                  (CLAUDE.md bölümü + .gitignore satırı). .ocean/ BİLEREK KALIR:
+                  içindeki imzalı onay defterin yeniden üretilemez.
+                  --purge ile .ocean/ de silinir (ne kaybettiğin yazılır)
   makbuz          Dışarıya gösterilebilir tek sayfalık teslim makbuzu üret
                   (.ocean/makbuz.md · --html ile .ocean/makbuz.html)
                   Üçüncü kişi kendi makinesinde yeniden doğrulayabilsin diye
@@ -49,6 +54,7 @@ Komutlar:
 Seçenekler:
   --claude-md     init: CLAUDE.md'ye "## Topbeam" bölümünü SORMADAN ekle
   --no-claude-md  init: CLAUDE.md'ye hiç dokunma
+  --purge         uninstall: .ocean/ dizinini de sil (onay defteri dahil — GERİ DÖNÜŞ YOK)
   --html          makbuz: tek dosya HTML de üret (dış istek yok)
   --no-ci         sync: opsiyonel CI okumasını tamamen kapat (TOPBEAM_NO_CI=1
                   ile aynı) — Topbeam tümüyle lokal kalır, tek dış çağrı yapılmaz
@@ -238,6 +244,18 @@ async function cmdOpen(_args: Args): Promise<void> {
 
 // ── yönlendirici ─────────────────────────────────────────────────────────────
 
+async function cmdUninstall(args: Args): Promise<void> {
+  const cwd = process.cwd();
+  const res = await runUninstall(cwd, { purge: args.flags.purge === true });
+  out('Topbeam izleri geri alındı.');
+  for (const t of res.temizlenen) out(`  − ${t}`);
+  for (const d of res.dokunulmayan) out(`  = ${d}`);
+  if (res.uyarilar.length > 0) {
+    out('');
+    for (const u of res.uyarilar) out(`  ⚠ ${u}`);
+  }
+}
+
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
 
@@ -265,6 +283,9 @@ async function main(): Promise<void> {
       break;
     case 'makbuz':
       await cmdMakbuz(args);
+      break;
+    case 'uninstall':
+      await cmdUninstall(args);
       break;
     default:
       fail(`Bilinmeyen komut: ${args.cmd}\n\n${HELP}`);
