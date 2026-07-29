@@ -33,7 +33,7 @@ npx topbeam init          # kurmadan dene
 npm i -g topbeam          # ya da kalıcı kur
 ```
 
-`topbeam@0.1.0` npm'de yayında (MIT, çalışma zamanı bağımlılığı yok).
+`topbeam` npm'de yayında (MIT, çalışma zamanı bağımlılığı yok). Kurulu sürümü `topbeam --version` söyler.
 
 ### Kaynaktan kurulum
 
@@ -56,7 +56,7 @@ Geri almak: `npm unlink -g topbeam`.
 `npm link` istemiyorsan global kurulum yapmadan da çalıştırabilirsin:
 
 ```bash
-node /tam/yol/ocean-cli/dist/cli.js sync
+node /tam/yol/topbeam/dist/cli.js sync
 ```
 
 Gereksinim: Node >= 20. Çalışma zamanı bağımlılığı yok (tek dosya bundle).
@@ -79,8 +79,10 @@ Aynı gerekçeyle ortam değişkenleri de `OCEAN_*` önekini koruyor.
 ### `topbeam init`
 Projeyi Topbeam'e bağlar — kullanıcı elle iş yapmaz:
 - `.ocean/` kurulur: `state.json` (durum), `goal.md` (hedef **+ teslim sözleri**),
-  `notes.md` (kısa notlar). `goal.md` anlamlı bir şablonla gelir: 7 evrensel
-  teslim kapısı örneği — sil, kendi sözlerini yaz.
+  `notes.md` (kısa notlar). `goal.md` **hiçbir söz içermez** — bilerek: söz
+  senindir, araç senin adına söz veremez. Sen yazana kadar bar çizilmez.
+- Proje `.gitignore`'una `.ocean/` satırı eklenir (yoksa dosya oluşturulur):
+  `state.json` senin komut metinlerini taşır, `git add -A` ile depoya girmesin.
 - Projenin `CLAUDE.md`'sine **"## Topbeam"** bölümü eklenir (varsa dokunmaz):
   Claude'a talimat — hedefi güncel tut, önemli adımlarda 1 satır Türkçe not ekle,
   kanıtsız "çalışıyor" deme.
@@ -283,6 +285,73 @@ notuna yazılır.
   Ölçülen tek şey `failure` sonucudur.
 - Yeşil CI, lokalde kayıtlı kırık bir koşumu **temizlemez** (farklı ölçüm, farklı
   ağaç); tersi de geçerlidir — lokal yeşil, kırmızı CI'ı manşetten düşürmez.
+
+## Ne okur · ne yazar · ne ASLA yapmaz
+
+Bu araç senin Claude Code transcript'lerini okuyor. "Neden buna izin vereyim?"
+sorusunun cevabı kodda vardı ama burada yazmıyordu — artık yazıyor.
+
+**OKUR (salt-okunur):**
+- `~/.claude/projects/<proje-slug>/**/*.jsonl` — yalnız bu projeye ait oturumlar
+  (+ `subagents/` altı). Okunan alanlar YAPISALDIR: `tool_use` / `tool_result` /
+  `timestamp` / `cwd`. **Asistanın serbest metni okunmaz** — "bitti, çalışıyor!"
+  cümlesi hiçbir yoldan özete giremez.
+- `git` çıktıları: `rev-parse` · `status --porcelain` · `log` · `diff --numstat`.
+  Hepsi salt-okunur; depoya **tek byte yazılmaz**.
+- Opsiyonel: `gh run list` (CI durumu). `--no-ci` ya da `TOPBEAM_NO_CI=1` ile
+  kapanır ve **tek dış çağrı bile yapılmaz**.
+
+**YAZAR (yalnız proje kökündeki `.ocean/`):**
+`state.json` · `pano.html` · `goal.md` · `notes.md` · `passport.jsonl` ·
+`muhur.md` · `makbuz.md` (+ `--html`). Ayrıca `init` bir kez: proje
+`.gitignore`'una `.ocean/` satırı ve `CLAUDE.md`'ye bir bölüm.
+Yazma symlink takip **etmez** (`O_NOFOLLOW`) ve proje kökü dışına çıkmaz.
+
+**ASLA:**
+- Ağa veri **göndermez**. Telemetri yok, hesap yok, kayıt yok.
+- LLM çağırmaz. Özet şablondan üretilir.
+- Senin adına söz vermez, senin adına onay vermez.
+
+**⚠️ Ama paylaştığın MAKBUZ senin komut metinlerini ve dosya yollarını içerir.**
+Maskeleme filtresi (`src/redact.ts`) API anahtarı/token/parola desenlerini
+kapatır, ama **her şeyi bildiğini iddia etmez**. Makbuzu göndermeden önce oku.
+
+## ⚠️ Kanıt 30 günde buharlaşır
+
+Bu, aracın kusuru değil — Claude Code'un davranışı; ama Topbeam'i doğrudan
+etkilediği için burada yazıyor.
+
+Claude Code transcript'leri `cleanupPeriodDays` (varsayılan **30 gün**) sonunda
+siler. Silinince Topbeam'in dosya/test kanıtı **yeniden üretilemez**.
+
+**Ölçüm (2026-07-29, bu makine):**
+```
+diskteki transcript      : 1903
+en eski dosyanın yaşı    : 28 gün
+30 günden eski dosya     : 0
+```
+Hiçbiri 30 günü geçmiyor — temizlik gerçekten çalışıyor.
+
+**Bunun anlamı:** 30 günden eski işin kanıtı gitmiştir. `sync` koştuğunda o
+iddialar "yeniden üretilemedi" diye düşer. **`.ocean/passport.jsonl` defterindeki
+insan onayların kalır** (append-only, senin imzan) — ama dayandıkları kayıt
+gitmiş olur; makbuz bunu gizlemez, "kanıt yok" der.
+
+**Ne yapabilirsin:**
+- Saklama süresini uzat: `~/.claude/settings.json` → `"cleanupPeriodDays": 180`
+- Ya da işini bitince **onayla** — onay defteri kalıcıdır, transcript değildir.
+
+## ⚠️ Bu araç bir iç formata dayanıyor
+
+Topbeam, Claude Code'un transcript dosyalarının **iç yapısını** okur. Bu format
+Anthropic'in ürünüdür; **sürümler arasında değişebilir ve haber verilmez.**
+
+Topbeam bunu gizlemek yerine **söylemeye** çalışır: tanınmayan satırlar sayılır
+ve kapsam notuna düşer. Bir gün format değişirse pano "her şey yolunda"
+demez — okunamayan kayıt sayısını yazar.
+
+Bu, ürünün bilinen tek yapısal bağımlılık riskidir. Kabul edilmiş bir risktir,
+saklanan bir sürpriz değil.
 
 ## Dürüstlük İlkesi (ürünün anayasası)
 

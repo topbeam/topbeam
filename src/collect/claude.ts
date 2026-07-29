@@ -16,7 +16,7 @@
  * - Transcript yokluğu doğaldır (retention silmiş olabilir) → not ile raporlanır.
  */
 import { createReadStream } from 'node:fs';
-import { readdir } from 'node:fs/promises';
+import { readdir, stat } from 'node:fs/promises';
 import { createInterface } from 'node:readline';
 import { homedir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
@@ -87,6 +87,9 @@ const RUNNER_PREFIX_RE =
 
 /** Ata-dizin yürüyüşünde en fazla kaç seviye yukarı çıkılır. */
 const ANCESTOR_MAX_UP = 2;
+
+/** Kaç günlük transcript'ten sonra saklama uyarısı verilir (silinme 30 gün). */
+const RETENTION_UYARI_GUN = 25;
 
 /** Asla ata-oturum kaynağı sayılmayacak konak dizinler. */
 const KONAK_DIZINLER: ReadonlySet<string> = new Set([
@@ -959,6 +962,8 @@ export async function collectClaude(
 
   const sessions: SessionSummary[] = [];
   let transcriptsFound = 0;
+  /** En eski transcript dosyasının mtime'ı (ms) — saklama uyarısı için. */
+  let enEskiMs: number | null = null;
   const resolvedCwd = resolve(projectCwd);
 
   for (const dirName of matchedDirs) {
@@ -974,6 +979,13 @@ export async function collectClaude(
       if (!f.isFile() || !f.name.endsWith('.jsonl')) continue;
       transcriptsFound++;
       const transcriptPath = join(dir, f.name);
+      try {
+        const st = await stat(transcriptPath);
+        const ms = st.mtimeMs;
+        if (enEskiMs === null || ms < enEskiMs) enEskiMs = ms;
+      } catch {
+        // mtime okunamadı — uyarı verilmez (uydurma yok).
+      }
       const sessionId = f.name.slice(0, -'.jsonl'.length);
 
       let subPaths: string[] = [];
@@ -993,6 +1005,26 @@ export async function collectClaude(
       if (summary.cwd !== null && resolve(summary.cwd) !== resolvedCwd) summary.cwdMismatch = true;
       if (ancestorCwd !== null) summary.fromAncestor = true;
       sessions.push(summary);
+    }
+  }
+
+  /**
+   * SAKLAMA UYARISI (2026-07-29). Claude Code transcript'leri
+   * `cleanupPeriodDays` (varsayılan 30 gün) sonunda siler. Silinince Topbeam'in
+   * dosya/test kanıtı YENİDEN ÜRETİLEMEZ — iddialar sessizce düşer.
+   * ÖLÇÜM (bu makine): 1903 transcript, en eskisi 28 gün, 30 günden eski SIFIR.
+   * Kullanıcı kanıtını kaybetmeden önce haber alsın diye eşik 25 gün.
+   */
+  if (enEskiMs !== null) {
+    const gun = Math.floor((Date.now() - enEskiMs) / 86_400_000);
+    if (gun >= RETENTION_UYARI_GUN) {
+      notes.push(
+        `En eski transcript ${gun} günlük. Claude Code kayıtları varsayılan olarak ` +
+          '30 günde siler (cleanupPeriodDays); silinince bu iddiaların kanıtı ' +
+          'YENİDEN ÜRETİLEMEZ. Kalıcı olan tek şey .ocean/passport.jsonl defterindeki ' +
+          'insan onaylarındır — bitmiş işi onaylamayı geciktirme, ya da ' +
+          '~/.claude/settings.json içinde "cleanupPeriodDays" değerini yükselt.',
+      );
     }
   }
 
