@@ -4,3 +4,16 @@ dist/
 fixtures/generated/
 *.tgz
 .DS_Store
+
+# Ajan/deneme artıkları — depoya ASLA girmez (2026-07-29: sertleştirme ajanları
+# depo kökünde çalışma dizini açtı; `git add -A` bunları PUBLIC depoya sokacaktı).
+/dogrulama-*/
+/anthropic-gozu/
+/platform/
+/resepsiyon/
+/soguk-baslangic/
+/mahremiyet/
+/olcek/
+/kanit-sahteciligi/
+/tmp-*/
+/scratch/

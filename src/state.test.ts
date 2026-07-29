@@ -9,6 +9,9 @@ import { claimOnayli } from './ledger.ts';
 import {
   appendPassportLog,
   goalPath,
+  GuvenliYazmaHatasi,
+  panoPath,
+  writePano,
   oceanDir,
   parseNotes,
   passportLogPath,
@@ -185,4 +188,52 @@ test('readPassportLog: şekil VARSAYILMAZ — bozuk satır atlanır ve sayılır
   assert.equal(dosyaVar, true);
   assert.equal(atlanan, 1);
   assert.equal(records.length, 2); // nesne + dizi (şekil DOĞRULAMASI ledger'ın işi)
+});
+
+// ── SYMLINK KORUMASI (2026-07-29 sertleştirme saldırısı) ────────────────────
+//
+// Ölçülmüş sömürü: `.ocean/pano.html` symlink olduğunda sync hedefteki dosyayı
+// EZİYORDU (kurban.txt 33 → 14205 bayt). Symlink'ler git'te taşındığı için
+// "depoyu klonla + topbeam çalıştır" yetiyordu. O_NOFOLLOW ile kapatıldı.
+
+test('GÜVENLİK: symlink üzerinden YAZILMAZ — hedef dosya dokunulmaz', async () => {
+  const { symlink, writeFile: wf, readFile: rf, mkdir: mk } = await import('node:fs/promises');
+  const { mkdtemp } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os');
+  const { join: j } = await import('node:path');
+
+  const kok = await mkdtemp(j(tmpdir(), 'topbeam-symlink-'));
+  const proj = j(kok, 'proj');
+  await mk(j(proj, '.ocean'), { recursive: true });
+  const kurban = j(kok, 'kurban.txt');
+  await wf(kurban, 'DEĞERLİ VERİ', 'utf8');
+
+  await symlink(kurban, panoPath(proj));
+
+  await assert.rejects(
+    () => writePano(proj, '<html>ezmeye çalışıyorum</html>'),
+    (e: unknown) => e instanceof GuvenliYazmaHatasi && e.sebep === 'symlink',
+    'symlink üzerinden yazma REDDEDİLMELİ',
+  );
+  assert.equal(await rf(kurban, 'utf8'), 'DEĞERLİ VERİ', 'kurban dosyası bozulmamalı');
+});
+
+test('GÜVENLİK: .ocean DİZİNİ proje dışına symlink ise hiçbir şey yazılmaz', async () => {
+  const { symlink, mkdir: mk, readdir, mkdtemp } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os');
+  const { join: j } = await import('node:path');
+
+  const kok = await mkdtemp(j(tmpdir(), 'topbeam-dirlink-'));
+  const proj = j(kok, 'proj');
+  const disari = j(kok, 'disari');
+  await mk(proj, { recursive: true });
+  await mk(disari, { recursive: true });
+  await symlink(disari, j(proj, '.ocean'));
+
+  await assert.rejects(
+    () => writePano(proj, '<html>dışarı sızıyorum</html>'),
+    (e: unknown) => e instanceof GuvenliYazmaHatasi && e.sebep === 'disari-cikiyor',
+    'proje kökü dışına yazma REDDEDİLMELİ',
+  );
+  assert.deepEqual(await readdir(disari), [], 'dışarıya hiçbir dosya yazılmamalı');
 });

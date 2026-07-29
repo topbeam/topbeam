@@ -13,7 +13,7 @@ import { runInit } from './init.ts';
 import { runSync } from './sync.ts';
 import { runVerify } from './verify.ts';
 import { runMakbuz } from './makbuz.ts';
-import { panoPath } from './state.ts';
+import { GuvenliYazmaHatasi, panoPath } from './state.ts';
 
 function out(s: string): void {
   process.stdout.write(`${s}\n`);
@@ -255,4 +255,23 @@ async function main(): Promise<void> {
   }
 }
 
-await main();
+/**
+ * Üst düzey hata kapısı. Ham Node stack trace kullanıcıya GÖSTERİLMEZ —
+ * ürünün dili sakin ve açıklayıcıdır. Özellikle güvenlik reddi (symlink
+ * koruması) bir çökme değil, KASITLI bir karardır ve öyle anlatılır.
+ */
+await main().catch((e: unknown) => {
+  if (e instanceof GuvenliYazmaHatasi) {
+    process.stderr.write(`✖ ${e.message}\n`);
+    process.exit(2); // 2 = güvenlik reddi (1 = normal hata) — betikler ayırt edebilsin
+  }
+  const mesaj = e instanceof Error ? e.message : String(e);
+  process.stderr.write(`✖ Beklenmeyen hata: ${mesaj}\n`);
+  // Ayrıntı isteyen için: TOPBEAM_DEBUG=1 ile tam iz.
+  if (process.env.TOPBEAM_DEBUG === '1' && e instanceof Error && e.stack !== undefined) {
+    process.stderr.write(`${e.stack}\n`);
+  } else {
+    process.stderr.write('  (tam iz için: TOPBEAM_DEBUG=1 topbeam <komut>)\n');
+  }
+  process.exit(1);
+});

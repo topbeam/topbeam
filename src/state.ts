@@ -8,8 +8,9 @@
  *   (uydurma kurtarma yok — CLI "state okunamadı" der).
  * - passport.jsonl APPEND-ONLY (değişmez onay logu) — asla yeniden yazılmaz.
  */
-import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { mkdir, open, readFile, realpath } from 'node:fs/promises';
+import { constants as FS } from 'node:fs';
+import { join, resolve, sep } from 'node:path';
 import { OCEAN_DIR, STATE_FILE, type OceanState, type PassportLogRecord } from './types.ts';
 import { buildLedger, BOS_LEDGER, type VerificationLedger } from './ledger.ts';
 import { parseGoalItems, type GoalItem } from './goal.ts';
@@ -17,6 +18,107 @@ import { MUHUR_FILE } from './muhur.ts';
 import { redactDeep } from './redact.ts';
 
 export type { PassportLogRecord } from './types.ts';
+
+// ── SYMLINK KORUMASI (2026-07-29 — sertleştirme saldırısının en ağır bulgusu) ──
+//
+// ÖLÇÜLDÜ, teorik değil: `.ocean/pano.html` bir symlink olduğunda `sync`
+// hedefteki dosyayı EZİYORDU. Yeniden üretim:
+//     ln -s ~/kurban.txt .ocean/pano.html && topbeam sync
+//     kurban.txt: 33 bayt  →  14205 bayt (kullanıcı verisi geri dönüşsüz gitti)
+// Symlink'ler git'te taşınır (mod 120000) → saldırganın önceden yazma yetkisine
+// İHTİYACI YOK: "depoyu klonla + topbeam çalıştır" yetiyor.
+//
+// Çözüm `lstat` DEĞİL — lstat ile yazma arasında TOCTOU yarışı kalır.
+// `O_NOFOLLOW` çekirdek seviyesinde atomiktir: son bileşen symlink ise
+// açma ELOOP ile başarısız olur, yazma hiç gerçekleşmez.
+//
+// İkinci kapı: `.ocean` DİZİNİNİN kendisi symlink olabilir (o zaman dosya
+// bileşeni symlink değildir, O_NOFOLLOW yakalamaz). Bu yüzden realpath(.ocean)
+// proje kökünün altında mı diye ayrıca bakılır.
+
+/** Yazma reddedildiğinde atılan hata — CLI bunu dürüst tek satıra çevirir. */
+export class GuvenliYazmaHatasi extends Error {
+  // NOT: parametre-özelliği (`readonly yol: string`) KULLANILMAZ — tsconfig
+  // `erasableSyntaxOnly` açık (node --experimental-strip-types uyumu için).
+  yol: string;
+  sebep: 'symlink' | 'disari-cikiyor';
+
+  constructor(yol: string, sebep: 'symlink' | 'disari-cikiyor', mesaj: string) {
+    super(mesaj);
+    this.name = 'GuvenliYazmaHatasi';
+    this.yol = yol;
+    this.sebep = sebep;
+  }
+}
+
+/** `.ocean` gerçekte proje kökünün altında mı? (dizin symlink'i ile kaçış kapısı) */
+async function oceanDiziniGuvenliMi(cwd: string): Promise<void> {
+  const kok = await realpath(resolve(cwd)).catch(() => resolve(cwd));
+  const dizin = await realpath(oceanDir(cwd)).catch(() => null);
+  if (dizin === null) return; // henüz yok — mkdir kuracak, sorun değil
+  if (dizin !== kok && !dizin.startsWith(kok + sep)) {
+    throw new GuvenliYazmaHatasi(
+      dizin,
+      'disari-cikiyor',
+      `Güvenlik: .ocean dizini proje kökünün DIŞINA çıkıyor (${dizin}). ` +
+        'Topbeam proje kökü dışına yazmaz. Symlink ise kaldır, sonra tekrar dene.',
+    );
+  }
+}
+
+/**
+ * Symlink takip ETMEYEN yazma. `yontem`:
+ *   'yaz'  → varsa üzerine yaz (O_TRUNC)
+ *   'ekle' → sonuna ekle (O_APPEND) — passport.jsonl append-only defteri
+ */
+async function guvenliYaz(
+  cwd: string,
+  yol: string,
+  icerik: string,
+  yontem: 'yaz' | 'ekle' = 'yaz',
+): Promise<void> {
+  await oceanDiziniGuvenliMi(cwd);
+  const bayraklar =
+    FS.O_WRONLY |
+    FS.O_CREAT |
+    FS.O_NOFOLLOW |
+    (yontem === 'ekle' ? FS.O_APPEND : FS.O_TRUNC);
+  let fh;
+  try {
+    fh = await open(yol, bayraklar, 0o644);
+  } catch (e) {
+    const kod = (e as NodeJS.ErrnoException).code;
+    // ELOOP (Linux/macOS) / EMLINK (bazı BSD'ler) = son bileşen symlink.
+    if (kod === 'ELOOP' || kod === 'EMLINK') {
+      throw new GuvenliYazmaHatasi(
+        yol,
+        'symlink',
+        `Güvenlik: ${yol} bir symlink — Topbeam symlink üzerinden YAZMAZ ` +
+          '(hedefteki dosyayı ezerdi). Bağlantıyı kaldır, sonra tekrar dene.',
+      );
+    }
+    throw e;
+  }
+  try {
+    await fh.writeFile(icerik, 'utf8');
+  } finally {
+    await fh.close();
+  }
+}
+
+/**
+ * init.ts gibi .ocean DIŞINA da yazan çağrılar için dışa açık kapı
+ * (goal.md/notes.md .ocean içinde, CLAUDE.md proje kökünde).
+ * Aynı O_NOFOLLOW korumasını uygular.
+ */
+export async function guvenliYazDisa(
+  cwd: string,
+  yol: string,
+  icerik: string,
+  yontem: 'yaz' | 'ekle' = 'yaz',
+): Promise<void> {
+  return guvenliYaz(cwd, yol, icerik, yontem);
+}
 
 export const GOAL_FILE = 'goal.md';
 export const NOTES_FILE = 'notes.md';
@@ -84,7 +186,7 @@ export async function readState(cwd: string): Promise<OceanState | null> {
 export async function writeState(cwd: string, state: OceanState): Promise<{ hits: number }> {
   await mkdir(oceanDir(cwd), { recursive: true });
   const { value, hits } = redactDeep(state);
-  await writeFile(statePath(cwd), `${JSON.stringify(value, null, 2)}\n`, 'utf8');
+  await guvenliYaz(cwd, statePath(cwd), `${JSON.stringify(value, null, 2)}\n`);
   return { hits };
 }
 
@@ -93,7 +195,7 @@ export async function writeState(cwd: string, state: OceanState): Promise<{ hits
 export async function writePano(cwd: string, html: string): Promise<void> {
   await mkdir(oceanDir(cwd), { recursive: true });
   const { value } = redactDeep(html);
-  await writeFile(panoPath(cwd), value, 'utf8');
+  await guvenliYaz(cwd, panoPath(cwd), value);
 }
 
 // ── passport.jsonl (append-only onay defteri) ────────────────────────────────
@@ -102,7 +204,7 @@ export async function writePano(cwd: string, html: string): Promise<void> {
 export async function appendPassportLog(cwd: string, record: PassportLogRecord): Promise<void> {
   await mkdir(oceanDir(cwd), { recursive: true });
   const { value } = redactDeep(record);
-  await appendFile(passportLogPath(cwd), `${JSON.stringify(value)}\n`, 'utf8');
+  await guvenliYaz(cwd, passportLogPath(cwd), `${JSON.stringify(value)}\n`, 'ekle');
 }
 
 /**
@@ -195,7 +297,7 @@ export async function readGoalItems(cwd: string): Promise<GoalItem[]> {
 export async function writeMuhur(cwd: string, text: string): Promise<void> {
   await mkdir(oceanDir(cwd), { recursive: true });
   const { value } = redactDeep(text);
-  await writeFile(muhurPath(cwd), value, 'utf8');
+  await guvenliYaz(cwd, muhurPath(cwd), value);
 }
 
 /**
@@ -206,14 +308,14 @@ export async function writeMuhur(cwd: string, text: string): Promise<void> {
 export async function writeMakbuz(cwd: string, text: string): Promise<void> {
   await mkdir(oceanDir(cwd), { recursive: true });
   const { value } = redactDeep(text);
-  await writeFile(makbuzPath(cwd), value, 'utf8');
+  await guvenliYaz(cwd, makbuzPath(cwd), value);
 }
 
 /** Makbuzun tek dosya HTML hâli — aynı maskeleme kapısı. */
 export async function writeMakbuzHtml(cwd: string, html: string): Promise<void> {
   await mkdir(oceanDir(cwd), { recursive: true });
   const { value } = redactDeep(html);
-  await writeFile(makbuzHtmlPath(cwd), value, 'utf8');
+  await guvenliYaz(cwd, makbuzHtmlPath(cwd), value);
 }
 
 export interface ParsedNote {

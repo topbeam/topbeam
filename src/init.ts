@@ -12,7 +12,7 @@
 import { readFile, writeFile, appendFile, mkdir } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { newOceanState, type LogEntry } from './types.ts';
-import { goalPath, notesPath, oceanDir, readState, statePath, writeState } from './state.ts';
+import { goalPath, guvenliYazDisa, notesPath, oceanDir, readState, statePath, writeState } from './state.ts';
 
 export const CLAUDE_MD_MARKER = '## Topbeam';
 
@@ -120,12 +120,12 @@ export async function runInit(cwd: string, opts: { now?: Date } = {}): Promise<I
   // goal.md / notes.md — varsa dokunma.
   if (await exists(goalPath(cwd))) skipped.push('.ocean/goal.md');
   else {
-    await writeFile(goalPath(cwd), GOAL_TEMPLATE, 'utf8');
+    await guvenliYazDisa(cwd, goalPath(cwd), GOAL_TEMPLATE);
     created.push('.ocean/goal.md');
   }
   if (await exists(notesPath(cwd))) skipped.push('.ocean/notes.md');
   else {
-    await writeFile(notesPath(cwd), NOTES_TEMPLATE, 'utf8');
+    await guvenliYazDisa(cwd, notesPath(cwd), NOTES_TEMPLATE);
     created.push('.ocean/notes.md');
   }
 
@@ -142,7 +142,7 @@ export async function runInit(cwd: string, opts: { now?: Date } = {}): Promise<I
     skipped.push(`CLAUDE.md (${CLAUDE_MD_MARKER} bölümü zaten var)`);
   } else {
     const sep = claudeMd === '' || claudeMd.endsWith('\n') ? '' : '\n';
-    await appendFile(claudeMdPath, `${sep}${CLAUDE_MD_SECTION}`, 'utf8');
+    await guvenliYazDisa(cwd, claudeMdPath, `${sep}${CLAUDE_MD_SECTION}`, 'ekle');
     claudeMdUpdated = true;
     created.push(`CLAUDE.md → "${CLAUDE_MD_MARKER}" bölümü eklendi`);
   }

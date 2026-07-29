@@ -143,8 +143,20 @@ export interface ClaimSignals {
 
 /** Bir iddiayı destekleyen tekil kanıt parçası. */
 export interface ClaimEvidence {
-  /** Kanıtın türü — nereden geldiği. */
-  kind: 'git-diff' | 'transcript-tool-use' | 'test-output' | 'human';
+  /**
+   * Kanıtın türü — nereden geldiği.
+   *
+   * ⚠️ `insan-gozlemi` bir ÖLÇÜM DEĞİLDİR (2026-07-29, Ekin kararı). İnsanın
+   * `topbeam gozlem` ile kendi yazdığı tanıklıktır: "kullandım, şunu gördüm".
+   * Makine hiçbir şey doğrulamamıştır. Bu yüzden:
+   *   - seviyesi ASLA 'dosya-kaniti'/'test-kaniti' olamaz (gozlem.ts'te kilitli),
+   *   - pano ve makbuzda ÖLÇÜMDEN ayrı, "insan beyanı" rozetiyle görünür,
+   *   - yine de `verify` ile insan-onayına çıkabilir — çünkü onay zaten
+   *     insanın işidir; eksik olan, insanın MAKİNE DIŞI işini kayda geçirebilmesiydi.
+   * Gerekçe: teslim sözlerinin çoğu yaşantıdır ("dağınıklık toplandı hissediyor").
+   * Bunlar susturulursa bar dolmaz; ölçümle karıştırılırsa moat ölür. Ayrı sınıf.
+   */
+  kind: 'git-diff' | 'transcript-tool-use' | 'test-output' | 'human' | 'insan-gozlemi';
   /** Tek satır insan-okur özet (maskeleme sonrası). */
   summary: string;
   /** Opsiyonel referans: commit hash, tool_use id, dosya yolu, komut metni. */
