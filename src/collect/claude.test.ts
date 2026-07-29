@@ -424,3 +424,50 @@ test('ATA SINIRI: 2 seviyeden fazla yukarı çıkılmaz', async () => {
   const res = await collectClaude(proj, { claudeDir });
   assert.equal(res.transcriptsFound, 0, '3 seviye yukarıdaki oturum okunmamalı');
 });
+
+test('SAKLAMA UYARISI: 25 günden eski transcript varsa kullanıcı uyarılır', async () => {
+  // Claude Code kayıtları 30 günde siliyor (cleanupPeriodDays). Silinince
+  // dosya/test kanıtı YENİDEN ÜRETİLEMEZ; kalıcı olan tek şey passport.jsonl.
+  // Kullanıcı kanıtını kaybetmeden ÖNCE haber almalı.
+  const { mkdtemp, mkdir: mk, writeFile: wf, utimes } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os');
+  const { join: j } = await import('node:path');
+
+  const ev = await mkdtemp(j(tmpdir(), 'topbeam-retention-'));
+  const claudeDir = j(ev, '.claude');
+  const proj = j(ev, 'proje');
+  await mk(proj, { recursive: true });
+  const slug = slugifyCwd(proj);
+  const dir = j(claudeDir, 'projects', slug);
+  await mk(dir, { recursive: true });
+
+  const dosya = j(dir, 's1.jsonl');
+  await wf(dosya, `{"type":"user","cwd":"${proj}","sessionId":"s1"}\n`, 'utf8');
+  // 27 gün öncesine yaşlandır
+  const eski = new Date(Date.now() - 27 * 86_400_000);
+  await utimes(dosya, eski, eski);
+
+  const res = await collectClaude(proj, { claudeDir });
+  assert.ok(
+    res.notes.some((n) => n.includes('cleanupPeriodDays')),
+    `saklama uyarısı verilmeli — notlar: ${JSON.stringify(res.notes)}`,
+  );
+  assert.ok(res.notes.some((n) => n.includes('27 günlük')), 'gerçek yaş yazılmalı');
+});
+
+test('SAKLAMA UYARISI: taze kayıtta uyarı VERİLMEZ (gereksiz korku yok)', async () => {
+  const { mkdtemp, mkdir: mk, writeFile: wf } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os');
+  const { join: j } = await import('node:path');
+
+  const ev = await mkdtemp(j(tmpdir(), 'topbeam-taze-'));
+  const claudeDir = j(ev, '.claude');
+  const proj = j(ev, 'proje');
+  await mk(proj, { recursive: true });
+  const dir = j(claudeDir, 'projects', slugifyCwd(proj));
+  await mk(dir, { recursive: true });
+  await wf(j(dir, 's1.jsonl'), `{"type":"user","cwd":"${proj}","sessionId":"s1"}\n`, 'utf8');
+
+  const res = await collectClaude(proj, { claudeDir });
+  assert.equal(res.notes.some((n) => n.includes('cleanupPeriodDays')), false);
+});
