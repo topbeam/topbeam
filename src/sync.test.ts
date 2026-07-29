@@ -500,3 +500,26 @@ test('GERÇEK terminal kaydı defterdeyse aynı state rozeti ALIR (kapı çift y
   assert.ok(html.includes('2 / 3 madde onaylandı'));
   assert.equal(html.includes('kanal kaydı yok'), false);
 });
+
+/**
+ * SÜRÜM KÜNYESİ (2026-07-29): `tool_version` = özeti ÜRETEN sürüm.
+ * `...state` yayılımı onu init anındaki değerde donduruyordu; makbuz bu alanı
+ * dışarıya "Araç: topbeam vX" diye yazdığı için güncellenmiş bir kurulum eski
+ * sürümü beyan ediyordu. Künye yanlışsa makbuz da yanlıştır.
+ */
+test('sync, state.tool_version alanını ÇALIŞAN sürüme tazeler (eski künye donmaz)', async () => {
+  const { TOOL_VERSION } = await import('./types.ts');
+  const { proj, claudeDir } = await makeProject();
+  await runInit(proj, { now: NOW });
+
+  // Eski bir sürümle kurulmuş gibi yap (yükseltme senaryosu)
+  const s0 = await readState(proj);
+  assert.ok(s0);
+  await writeState(proj, { ...s0, tool_version: '0.0.1-eski' });
+
+  const res = await withClaudeDir(claudeDir, () => runSync(proj, { now: NOW }));
+  assert.equal(res.ok, true);
+
+  const s1 = await readState(proj);
+  assert.equal(s1?.tool_version, TOOL_VERSION, 'sync künyeyi tazelemeli — makbuz bunu dışarıya yazar');
+});

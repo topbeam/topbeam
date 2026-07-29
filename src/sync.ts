@@ -42,6 +42,7 @@ import {
   writeState,
 } from './state.ts';
 import { claimOnayli, dogrulananSayisi } from './ledger.ts';
+import { TOOL_VERSION } from './types.ts';
 import type { Claim, LogCounts, LogEntry, OceanState, ScopeNotes } from './types.ts';
 
 export interface SyncResult {
@@ -218,6 +219,14 @@ export async function runSync(cwd: string, opts: SyncOptions = {}): Promise<Sync
   const sessionsSeen = [...new Set([...state.sessionsSeen, ...claude.sessions.map((s) => s.sessionId)])];
   const next: OceanState = {
     ...state,
+    /**
+     * SÜRÜM KÜNYESİ: `tool_version` = bu özeti ÜRETEN sürüm, projeyi kuran sürüm
+     * DEĞİL. `...state` yayılımı onu init anındaki değerde donduruyordu; makbuz
+     * bu alanı "Araç: topbeam vX" diye dışarıya yazdığı için, güncellenmiş bir
+     * kurulum eski sürümü beyan ediyordu (2026-07-29'da 0.1.1, kendini v0.1.0
+     * diye tanıttı). Künye yanlışsa makbuz da yanlıştır.
+     */
+    tool_version: TOOL_VERSION,
     updatedAt: nowIso,
     lastSyncedAt: nowIso,
     log,
