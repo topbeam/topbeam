@@ -591,7 +591,7 @@ header.top .goal .k{font-family:var(--mono);font-size:9.5px;letter-spacing:.14em
 .ev-human{color:var(--teal2);background:var(--teald)}
 .ev-none{color:var(--plan);background:rgba(135,144,160,.14)}
 .ev-ocean{color:var(--violet);background:rgba(167,139,250,.13)}
-/* kaynaksız onay iddiası: sakin uyarı — alarm değil, dürüst işaret */
+/* unsupported approval claim: a calm mark, not an alarm */
 .ev-stale{color:var(--watch);background:rgba(251,191,36,.11)}
 .kaynaksiz{display:block;font-size:11.5px;color:var(--watch);margin-top:2px}
 .krow .v.stale{color:var(--watch)}
@@ -644,7 +644,7 @@ header.top .goal .k{font-family:var(--mono);font-size:9.5px;letter-spacing:.14em
 .beyanlar>summary::after{content:'show';font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--plan);margin-left:auto}
 .beyanlar[open]>summary::after{content:'hide'}
 .beyanlar>summary:hover{color:var(--dim)}
-/* Bar: SONLU bölmeler, iki durumlu. Yüzde yok, animasyon yok, kısmi doluluk yok. */
+/* Bar: finite segments, two states. No percentages, no animation, no partial fill. */
 .bar{display:flex;gap:4px;margin:0 0 14px}
 .bar .seg{flex:1;height:7px;border-radius:3px;background:var(--s4);border:1px solid var(--line2)}
 .bar .seg.on{background:var(--teal);border-color:var(--teal)}
