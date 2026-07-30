@@ -5,7 +5,7 @@
 > npm package [`topbeam`](https://www.npmjs.com/package/topbeam) · CLI command `topbeam` · repo
 > [`github.com/topbeam/topbeam`](https://github.com/topbeam/topbeam). The working directory the tool
 > writes on disk stays `.ocean/` **on purpose** (`src/state.ts`: no data-migration risk).
-> *Verified 2026-07-30: registry latest `0.1.1`; local `package.json` `0.1.2` (not yet published).*
+> *Verified 2026-07-30: registry latest `0.1.2` (published; `0.1.1` is deprecated).*
 > If you are looking for "where is topbeam" six months from now — it is here.
 
 An honest project board for vibe coders. Topbeam doesn't narrate your project;
