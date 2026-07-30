@@ -44,7 +44,7 @@ npm i -g topbeam          # or install it for good
 ```
 
 `topbeam` is on npm (MIT, zero runtime dependencies). The published version is
-`0.1.1`; this source tree is `0.1.2` and not published yet. Whatever you have,
+`0.1.2` — `0.1.1` is deprecated and should not be installed. Whatever you have,
 `topbeam --version` is the one that tells you the truth about it.
 
 ### Install from source
