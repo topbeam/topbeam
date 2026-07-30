@@ -1,10 +1,10 @@
 <!doctype html>
-<html lang="tr">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Topbeam — Claude ne yaptı? Şimdi ne yapmalısın?</title>
-<meta name="description" content="Topbeam, Claude Code transcript'ini ve git'i deterministik okur; hangi iddianın kanıtı olduğunu ve sıradaki tek hareketi söyler. LLM yok, senin makinende; CI okuması opsiyonel ve kapatılabilir.">
+<title>Topbeam — What did Claude do? What should you do next?</title>
+<meta name="description" content="Topbeam reads your Claude Code transcript and git deterministically, then says which claim has evidence behind it and what the single next move is. No LLM, on your machine; the CI read is optional and can be switched off.">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#161b14">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23161b14'/%3E%3Cpath d='M5 16h22' stroke='%23edf1e8' stroke-opacity='.22' stroke-width='2' stroke-linecap='round'/%3E%3Ccircle cx='16' cy='16' r='4.5' fill='%234dd894'/%3E%3C/svg%3E">
@@ -333,48 +333,48 @@ footer a:hover{border-bottom-color:var(--acc)}
       <span class="by">by REVERI</span>
     </div>
 
-    <h1>Claude ne yaptı?<br><span class="q2">Şimdi ne yapmalısın?</span></h1>
+    <h1>What did Claude do?<br><span class="q2">What should you do next?</span></h1>
 
     <p class="lead">
-      Topbeam, Claude Code transcript'ini ve git'in kendisini deterministik okur —
-      LLM çağrısı yok, her şey senin makinende. Tek dış soru opsiyoneldir ve
-      kapatılabilir: &ldquo;bu commit CI'da yeşil mi?&rdquo; (<code>--no-ci</code>).
-      Modelin &ldquo;bitti, çalışıyor&rdquo; cümlesi özete giremez; yalnız kayıt girer.
+      Topbeam reads your Claude Code transcript and git itself, deterministically —
+      no LLM call, everything stays on your machine. The one outward question is optional
+      and can be switched off: &ldquo;is this commit green in CI?&rdquo; (<code>--no-ci</code>).
+      The model's &ldquo;done, it works&rdquo; sentence cannot enter the summary; only records can.
     </p>
 
     <p class="promise">
-      Topbeam sana projenin hikâyesini anlatmaz; mevcut gerçeği ve
-      ilerlemek için gereken tek hareketi söyler.
+      Topbeam does not tell you the story of your project; it tells you what is true
+      right now, and the one move that gets you further.
     </p>
 
     <div class="install">
-      <span class="eyebrow">Kurulum</span>
+      <span class="eyebrow">Install</span>
       <div class="cmd">
         <code>npx topbeam init</code>
-        <button class="copy" type="button" data-copy="npx topbeam init">Kopyala</button>
+        <button class="copy" type="button" data-copy="npx topbeam init">Copy</button>
       </div>
 
       <div class="tiny prelaunch">
         <p>
-          <b>Yayında:</b> <code>topbeam@0.1.1</code> — npm'de, MIT, sıfır bağımlılık
+          <b>Published:</b> <code>topbeam@0.1.1</code> — on npm, MIT, zero dependencies
           (<a href="https://www.npmjs.com/package/topbeam">npmjs.com/package/topbeam</a>).
-          Kısaltması yok: <code>beam</code> diye bir komut olmayacak.
+          No short form: there will be no <code>beam</code> command.
         </p>
         <p>
-          <b>Ad geçişi:</b> ürün 2026-07-28'de <em>Ocean</em> adından Topbeam'e geçti —
-          paket adı, komut adı ve arayüz metinleri artık <code>topbeam</code>.
-          Diskteki çalışma klasörü bilerek <code>.ocean/</code> kaldı: mevcut kurulumlarda
-          veri göçü riski çıkmasın diye. Tek istisna bu, gizlemiyorum.
+          <b>Name change:</b> on 2026-07-28 the product moved from <em>Ocean</em> to Topbeam —
+          the package name, the command name and the interface strings are now <code>topbeam</code>.
+          The working folder on disk deliberately stayed <code>.ocean/</code>, so existing installs
+          are not put through a data migration. That is the only exception, and it is not hidden.
         </p>
       </div>
 
       <p class="tiny reach">
-        Bugün denemenin tek yolu var: <a class="lnk" href="mailto:info@reveriajans.com?subject=Topbeam%20erken%20eri%C5%9Fim">erken erişim için yaz</a>
-        — <span class="mail">info@reveriajans.com</span>. Otomatik liste yok, cevabı insan yazar.
+        A question, or something broke? <a class="lnk" href="mailto:info@reveriajans.com?subject=Topbeam">write to us</a>
+        — <span class="mail">info@reveriajans.com</span>. No mailing list; a person writes the reply.
       </p>
 
       <div class="facts">
-        <span>Node ≥ 20</span><span>lokal-first</span><span>LLM yok</span><span>CI okuması opsiyonel (--no-ci)</span><span>MIT lisanslı çekirdek</span>
+        <span>Node ≥ 20</span><span>local-first</span><span>no LLM</span><span>CI read is optional (--no-ci)</span><span>MIT-licensed core</span>
       </div>
     </div>
   </div>
@@ -383,28 +383,28 @@ footer a:hover{border-bottom-color:var(--acc)}
 <!-- ══ 2 · ACI ════════════════════════════════════════════════════════════ -->
 <section class="pain">
   <div class="wrap narrow">
-    <span class="eyebrow">Tanıdık gelen durum</span>
-    <h2>Claude çalışmayı bitirdi. Kontrol işi sana kaldı.</h2>
+    <span class="eyebrow">A familiar situation</span>
+    <h2>Claude finished the work. Checking it fell to you.</h2>
 
     <ol class="qs">
-      <li><span class="n">01</span><span>Gerçekte ne değişti?</span></li>
-      <li><span class="n">02</span><span>Hangisi test edildi?</span></li>
-      <li><span class="n">03</span><span>Hangi karar yalnızca modelin iddiası?</span></li>
-      <li><span class="n">04</span><span>Yarın nereden devam edeceğim?</span></li>
+      <li><span class="n">01</span><span>What actually changed?</span></li>
+      <li><span class="n">02</span><span>Which of it was tested?</span></li>
+      <li><span class="n">03</span><span>Which decision is only the model's claim?</span></li>
+      <li><span class="n">04</span><span>Where do I pick this up tomorrow?</span></li>
     </ol>
 
     <p class="notpad">
-      Topbeam ikinci bir görev panosu oluşturmaz — mevcut kanıtı kendi okur.
+      Topbeam does not create a second task board — it reads the evidence you already have.
     </p>
 
     <div class="field">
-      <span class="eyebrow">Sahadan</span>
+      <span class="eyebrow">From the field</span>
       <ul class="quotes">
         <li>&ldquo;It says it's done. It isn't.&rdquo;</li>
         <li>&ldquo;I waste time going back to verify.&rdquo;</li>
         <li>&ldquo;I've become the quality gate.&rdquo;</li>
       </ul>
-      <p class="profile">Profil: <b>Yorgun Denetçi</b> — öfke değil, yorgunluk.</p>
+      <p class="profile">Profile: <b>the tired reviewer</b> — not anger, fatigue.</p>
     </div>
   </div>
 </section>
@@ -413,69 +413,71 @@ footer a:hover{border-bottom-color:var(--acc)}
 <section class="cardzone">
   <div class="wrap narrow">
     <div class="head">
-      <span class="eyebrow acc">Gerçek pano çıktısı</span>
-      <h2>Topbeam tek bir şey gösterir.</h2>
+      <span class="eyebrow acc">Real board output</span>
+      <h2>Topbeam shows one thing.</h2>
       <p class="small">
-        Aşağıdaki kart Topbeam'in kendi geliştirilmesi sırasında üretildi. Birebir,
-        düzeltilmeden. Uydurma örnek değil.
+        The card below was produced while Topbeam was being built on itself. The tool speaks
+        Turkish, so this is a line-for-line translation of that output — nothing added, nothing
+        removed, nothing tidied up. It is not an invented example.
       </p>
     </div>
 
-    <article class="card" aria-label="Sıradaki tek hareket kartı">
+    <article class="card" aria-label="The single next move card">
       <div class="cardTop">
-        <span class="eyebrow">Sıradaki tek hareket</span>
-        <span class="pill">doğrulanmadı</span>
+        <span class="eyebrow">The single next move</span>
+        <span class="pill">not verified</span>
       </div>
 
       <h3 class="fact">
-        3 dosya için düzenleme kaydı var ama git'te izi yok
-        (commit'lenmiş ya da geri alınmış olabilir) — uygulandı görünüyor, doğrulanmadı
+        3 files have an edit record but no trace in git
+        (they may have been committed, or reverted) — looks applied, not verified
       </h3>
 
       <div class="evrows">
-        <div class="krow"><span class="k">Git diff</span><span class="v none">kayıt yok</span></div>
-        <div class="krow"><span class="k">Test çıktısı</span><span class="v none">kayıt yok</span></div>
-        <div class="krow"><span class="k">İnsan onayı</span><span class="v none">kayıt yok</span></div>
+        <div class="krow"><span class="k">Git diff</span><span class="v none">no record</span></div>
+        <div class="krow"><span class="k">Test output</span><span class="v none">no record</span></div>
+        <div class="krow"><span class="k">Human approval</span><span class="v none">no record</span></div>
       </div>
 
       <div class="block">
-        <span class="k">Eksik / belirsiz</span>
-        <p>Bu değişikliklerin git'te karşılığı görünmüyor — gerçekten uygulandı mı belirsiz.</p>
+        <span class="k">Missing / unclear</span>
+        <p>These changes have no counterpart in git — whether they were really applied is unclear.</p>
       </div>
 
       <div class="act">
-        <span class="eyebrow">Hareket</span>
-        <p class="verb">Değişikliğin git'te göründüğünü kontrol et.</p>
+        <span class="eyebrow">Move</span>
+        <p class="verb">Check that the change shows up in git.</p>
         <div class="cmd">
           <code>git status</code>
-          <button class="copy" type="button" data-copy="git status">Kopyala</button>
+          <button class="copy" type="button" data-copy="git status">Copy</button>
         </div>
       </div>
 
       <div class="cardfoot">
         <div class="block" style="margin:0">
-          <span class="k">Neden bu?</span>
-          <p>En son dokunulan ve henüz doğrulanmamış iş bu.</p>
+          <span class="k">Why this one?</span>
+          <p>This is the most recently touched work that is still unverified.</p>
         </div>
         <div class="block" style="margin:0">
-          <span class="k">Bitti sayılması için</span>
+          <span class="k">Counts as done when</span>
           <p>
-            Değişiklik git kaydında göründüğünde (dosya-kanıtı), test yeşil sonuç
-            verdiğinde (test-kanıtı) ya da
+            When the change shows up in the git record (file evidence), when a test comes
+            back green (test evidence), or when you approve it yourself with
             <code style="font-family:var(--mono);font-size:.88em">ocean verify &lt;id&gt;</code>
-            ile sen onayladığında (insan-onayı) bitti sayılır.
+            (human approval).
           </p>
         </div>
       </div>
     </article>
 
     <p class="tiny cardnote">
-      Kartta tek bir hareket var. Liste değil, öncelik sırası değil — sıradaki tek hareket.
+      The card holds one move. Not a list, not a ranked backlog — the single next move.
     </p>
     <p class="tiny cardnote" style="margin-top:.6rem">
-      Kart, ürünün adı değişmeden önce üretildi; içindeki komut <code>ocean verify</code> yazıyor —
-      bugünkü sürüm <code>topbeam verify</code> yazıyor. Kartı elle düzeltmedim: düzeltseydim
-      üstündeki &ldquo;birebir, düzeltilmeden&rdquo; cümlesi yalan olurdu.
+      The card was produced before the product was renamed, so the command inside it reads
+      <code>ocean verify</code>; today's version prints <code>topbeam verify</code>. It was
+      translated but not corrected — correcting it would have made the sentence above, about
+      nothing being tidied up, untrue.
     </p>
   </div>
 </section>
@@ -483,53 +485,82 @@ footer a:hover{border-bottom-color:var(--acc)}
 <!-- ══ 4 · NASIL ÇALIŞIR ══════════════════════════════════════════════════ -->
 <section>
   <div class="wrap narrow">
-    <span class="eyebrow">Nasıl çalışır</span>
-    <h2>Dört komut. Fazlası yok.</h2>
+    <span class="eyebrow">How it works</span>
+    <h2>Three commands and one habit. Four more when you need them.</h2>
 
     <ol class="steps">
       <li>
         <span class="n">01</span>
         <h3>npx topbeam init</h3>
-        <p>Projeyi bağlar. Çalışma klasörü kurulur (adı <code>.ocean/</code> — ürünün eski adından kalma, veri göçü olmasın diye korundu), projenin CLAUDE.md'sine kısa bir Topbeam bölümü eklenir. Sen elle bir şey doldurmazsın.</p>
+        <p>Connects the project. It creates the working folder (named <code>.ocean/</code> — left from the product's old name, kept so existing installs are not put through a migration) and adds a <code>.ocean/</code> line to your <code>.gitignore</code>, because that folder holds the text of the commands you ran. It also <em>offers</em> to append a short Topbeam section to your CLAUDE.md: it prints the exact text first, then asks. Without a terminal it does not ask and does not write. <code>--claude-md</code> says yes up front, <code>--no-claude-md</code> says leave it alone.</p>
       </li>
       <li>
         <span class="n">02</span>
-        <h3>Normal çalış</h3>
-        <p>Claude Code ile her zamanki gibi devam et. Topbeam arada bir şey istemez, akışını bölmez, ayrı bir yere kayıt tutturmaz.</p>
+        <h3>Work as usual</h3>
+        <p>Carry on with Claude Code the way you already do. Topbeam asks for nothing in between, does not interrupt you, and does not make you keep a second record somewhere.</p>
       </li>
       <li>
         <span class="n">03</span>
         <h3>npx topbeam sync</h3>
-        <p>Transcript kayıtları + git gerçekleri okunur; kanıt-seviyeli iddialar, log geçmişi ve kart üretilir. <code>.ocean/pano.html</code> yazılır.</p>
+        <p>Reads the transcript records and the git facts, then produces evidence-levelled claims, the log history and the card. Writes <code>.ocean/pano.html</code>.</p>
       </li>
       <li>
         <span class="n">04</span>
         <h3>npx topbeam open</h3>
-        <p>Pano yolunu yazdırır. Tarayıcıyı otomatik açmaz — sen açarsın.</p>
+        <p>Prints the path to the board. It does not open your browser — you do.</p>
       </li>
     </ol>
 
     <p class="tiny" style="margin-top:1.1rem">
-      Beşinci komut yalnız senin için: <code>npx topbeam verify &lt;id&gt;</code> — bir iddianın
-      kanıtlarını gösterir, onayını sorar. İnsan onayı tek meşru yükseltme yoludur ve geri alınmaz.
-      Teslim sözlerinin hepsi onaylandığında bir kez bildirim düşer + mühür yazılır.
+      One command is only for you: <code>npx topbeam verify &lt;id&gt;</code> — it shows a claim's
+      evidence and asks for your approval. Human approval is the only legitimate way a claim moves
+      up, and it is never taken back: work you do later in the same area does not empty a promise
+      you already signed. TERMINAL ONLY: if the answer arrives from a pipe or a script, nothing is
+      recorded. That stops approval from happening by accident — but it is a speed bump, not a wall:
+      <code>script(1)</code> opens a fake terminal, and someone who deliberately wants to automate
+      approval gets past it. When every delivery promise has been approved, one notification fires
+      and a seal is written.
     </p>
 
     <p class="tiny" style="margin-top:.7rem">
-      Altıncı komut dışarıya bakar: <code>npx topbeam makbuz</code> — müşteriye, ekibe ya da
-      işverene yapıştırabileceğin tek sayfalık teslim makbuzu yazar
-      (<code>.ocean/makbuz.md</code>; <code>--html</code> ile tek dosya HTML). İçinde teslim
-      sözleri ve kanıt seviyeleri, kanıt özeti, neyin kapsam dışı kaldığı ve karşı tarafın
-      <em>kendi makinesinde</em> çalıştırabileceği doğrulama komutları (commit SHA'ları, test
-      komutu, onay defteri) durur. Onaylanmamış bir madde makbuzda onaylı görünmez.
+      One command looks outward: <code>npx topbeam makbuz</code> — it writes the one-page delivery
+      receipt you can paste to a client, a teammate or an employer (<code>.ocean/makbuz.md</code>;
+      <code>--html</code> for a single-file HTML). Inside it: the delivery promises with their
+      evidence levels, an evidence summary, what fell outside the scope, and the verification
+      commands the other side can run <em>on their own machine</em> (commit SHAs, the test command,
+      the approval ledger). An unapproved item never appears approved. For anything it did not
+      measure, the receipt says &ldquo;I don't know&rdquo; — not &ldquo;it isn't there&rdquo;.
     </p>
 
     <p class="tiny" style="margin-top:.7rem">
-      Yukarıdaki dört başlıktaki <code>npx</code> komutları bugün çalışır —
-      paket npm'de yayında (<code>topbeam@0.1.1</code>).
-      Paket adı ve komut adı aynı: <code>topbeam</code>. Global kurarsan
-      (<code>npm i -g topbeam</code>) komutlar kısaca <code>topbeam sync</code> olur —
-      yayın sürümünde panonun kendi çıktısında göreceğin ad budur.
+      The <code>npx</code> commands above work today — the package is published on npm
+      (<code>topbeam@0.1.1</code>). Package name and command name are the same: <code>topbeam</code>.
+      If you install it globally (<code>npm i -g topbeam</code>) they shorten to
+      <code>topbeam sync</code> — that is the name the board prints in the published version.
+    </p>
+
+    <p class="tiny" style="margin-top:.7rem">
+      Some of what you deliver never touches the machine: someone used it, someone said it was
+      worth it. <code>npx topbeam gozlem "&lt;text&gt;"</code> records that in your own words, signed
+      with your operating-system username, append-only. It is <em>not</em> evidence — its level
+      stays &ldquo;not verified&rdquo;, and the board keeps it apart from the measurements under a
+      human-statement badge. You can still approve it later with <code>verify</code>; approving was
+      always a person's job. (<code>gozlem</code> and <code>makbuz</code> keep their Turkish names —
+      they are the words already in your fingers.)
+    </p>
+
+    <p class="tiny" style="margin-top:.7rem">
+      Leaving is a command too. <code>npx topbeam uninstall</code> takes back the traces the tool
+      left in <em>your</em> files: the CLAUDE.md section and the .gitignore line. It deliberately
+      leaves <code>.ocean/</code> where it is — the signed approval ledger inside cannot be produced
+      again. <code>--purge</code> removes that folder as well, and prints what you are losing first.
+    </p>
+
+    <p class="tiny" style="margin-top:.7rem">
+      One warning the tool gives you rather than hides: Claude Code deletes its transcripts after
+      <code>cleanupPeriodDays</code>, 30 days by default. Once they are gone, the file and test
+      evidence cannot be produced again. From day 25 onward <code>sync</code> says so out loud. What
+      survives is the approval ledger in <code>.ocean/passport.jsonl</code>, because you signed it.
     </p>
   </div>
 </section>
@@ -537,45 +568,50 @@ footer a:hover{border-bottom-color:var(--acc)}
 <!-- ══ 5 · DÜRÜSTLÜK ══════════════════════════════════════════════════════ -->
 <section style="background:var(--bg2);border-block:1px solid var(--line-soft)">
   <div class="wrap narrow">
-    <span class="eyebrow">Ürünün anayasası</span>
-    <h2>&ldquo;Değişti&rdquo; ile &ldquo;çalışıyor&rdquo; aynı şey değildir.</h2>
-    <p class="lead">Topbeam bu ikisini asla aynı kutuya koymaz. Her iddia bir seviye taşır.</p>
+    <span class="eyebrow">The product's constitution</span>
+    <h2>&ldquo;Changed&rdquo; and &ldquo;works&rdquo; are not the same thing.</h2>
+    <p class="lead">Topbeam never puts the two in the same box. Every claim carries a level.</p>
 
     <ul class="levels">
       <li>
-        <span class="badge b-proof">Kanıtlandı</span>
-        <p>Git kaydında görünen değişiklik ya da çıktısından okunan test sonucu var. Sayı okunamadıysa iddia yükseltilmez.</p>
+        <span class="badge b-proof">Evidenced</span>
+        <p>There is a change visible in the git record, or a test result read out of the output. If no number could be read, the claim is not raised.</p>
       </li>
       <li>
-        <span class="badge b-seems">Uygulandı görünüyor</span>
-        <p>Düzenleme kaydı var, ama git'te karşılığı yok. Topbeam burada &ldquo;oldu&rdquo; demez; ne bilmediğini söyler.</p>
+        <span class="badge b-seems">Looks applied</span>
+        <p>There is an edit record, but no counterpart in git. Topbeam does not say &ldquo;it happened&rdquo; here; it says what it does not know.</p>
       </li>
       <li>
-        <span class="badge b-none">Doğrulanmadı</span>
-        <p>Kanıt yok. Modelin beyanı log'da &ldquo;beyan&rdquo; rozetiyle durur — kanıt sayılmaz.</p>
+        <span class="badge b-none">Not verified</span>
+        <p>No evidence. The model's statement sits in the log under a &ldquo;statement&rdquo; badge — it does not count as evidence.</p>
       </li>
     </ul>
 
     <p class="tiny" style="margin-top:1.1rem">
-      Alttaki kanıt etiketleri: <code>dosya-kanıtı</code> · <code>test-kanıtı</code> ·
-      <code>insan-onayı</code> · <code>doğrulanmadı</code>.
+      The labels underneath are the ones the tool actually prints, in Turkish:
+      <code>dosya-kanıtı</code> — file evidence, the change is in git ·
+      <code>test-kanıtı</code> — test evidence, a number was read from test output ·
+      <code>insan-onayı</code> — human approval, a person checked it in their terminal ·
+      <code>doğrulanmadı</code> — not verified, looks applied, nobody has confirmed it.
     </p>
 
     <ul class="rules">
-      <li>Kanıtsız iddia gösterilmez.</li>
-      <li>&ldquo;Çalışıyor&rdquo; otomatik söylenmez — yalnız test kanıtı ya da senin onayınla.</li>
-      <li>Sayı uydurulmaz; okunamadıysa iddia doğrulanmadı kalır.</li>
-      <li>Yüzde-ilerleme yok, motivasyon cümlesi yok, kırmızı alarm yok.</li>
-      <li>İnsan onayları geri alınmaz — append-only kayıt.</li>
-      <li>Diske giden her metin secret-maskeleme filtresinden geçer.</li>
+      <li>A claim with no evidence is not shown.</li>
+      <li>&ldquo;It works&rdquo; is never said automatically — only with test evidence, or your approval.</li>
+      <li>Numbers are not invented; if one could not be read, the claim stays not verified.</li>
+      <li>No percentage progress, no encouragement, no red alarms.</li>
+      <li>Human approvals are never taken back — the ledger is append-only, and new work does not lower the bar.</li>
+      <li>Every piece of text that goes to disk passes a secret-masking filter, which does not claim to know every pattern.</li>
+      <li>Writes never follow a symlink (<code>O_NOFOLLOW</code>) and never leave the project root; a refused write exits with code 2, so a script can tell it apart from an ordinary error.</li>
+      <li>A mislabelled honesty badge is worse than no badge at all — so where the tool cannot measure, it says so.</li>
     </ul>
 
     <div class="diff">
-      <span class="eyebrow" style="margin-top:1.5rem">Fark</span>
-      <div class="drow"><span class="who">ccusage</span><span class="what">ne harcadığını söyler</span></div>
-      <div class="drow"><span class="who">CodeRabbit</span><span class="what">kodun iyi mi diye tahmin eder</span></div>
-      <div class="drow"><span class="who">clerk</span><span class="what">hikâye anlatır</span></div>
-      <div class="drow me"><span class="who">Topbeam</span><span class="what">Claude'un hangi iddiasının kanıtı olduğunu ve tek hareketi söyler — LLM'siz, deterministik, senin makinende</span></div>
+      <span class="eyebrow" style="margin-top:1.5rem">Difference</span>
+      <div class="drow"><span class="who">ccusage</span><span class="what">tells you what you spent</span></div>
+      <div class="drow"><span class="who">CodeRabbit</span><span class="what">guesses whether the code is good</span></div>
+      <div class="drow"><span class="who">clerk</span><span class="what">tells a story</span></div>
+      <div class="drow me"><span class="who">Topbeam</span><span class="what">tells you which of Claude's claims has evidence behind it, and the one move — no LLM, deterministic, on your machine</span></div>
     </div>
   </div>
 </section>
@@ -583,63 +619,64 @@ footer a:hover{border-bottom-color:var(--acc)}
 <!-- ══ 6 · FİYAT ══════════════════════════════════════════════════════════ -->
 <section>
   <div class="wrap narrow">
-    <span class="eyebrow">Fiyat</span>
-    <h2>Çekirdek ücretsiz. Çekirdek açık.</h2>
+    <span class="eyebrow">Pricing</span>
+    <h2>The core is free. The core is open.</h2>
     <p class="lead">
-      Topbeam'in okuyucu çekirdeği <b>MIT lisanslı</b> — kanıt kuralları, transcript ∩ git
-      kesişimi ve kart okunabilir kod. Ücretli katman kapalı kalır: <em>open core</em>.
+      Topbeam's reader core is <b>MIT licensed</b> — the evidence rules, the transcript ∩ git
+      intersection and the card are code you can read. The paid tier stays closed: <em>open core</em>.
     </p>
 
     <p class="tiny prelaunch" style="max-width:44rem">
-      <b>Kaynak açık:</b> <a class="lnk" href="https://github.com/topbeam/topbeam" rel="noopener">github.com/topbeam/topbeam</a>
-      — MIT, okuyucu çekirdeğin tamamı. Transcript'inde ne okuduğunu, neyi kanıt saydığını
-      ve neyi diske yazdığını satır satır görebilirsin; <em>bize güvenmen gerekmiyor.</em>
-      <br>Bugünkü sınırı da yazayım: ücretli katman aynı depoda <em>değil</em>, kapalı kalacak.
-      Ayrıca ürün Türkçe konuşuyor — arayüz metinleri, kart ve makbuz Türkçe.
+      <b>Source open:</b> <a class="lnk" href="https://github.com/topbeam/topbeam" rel="noopener">github.com/topbeam/topbeam</a>
+      — MIT, the whole reader core. You can read line by line what it takes from your transcript,
+      what it counts as evidence and what it writes to disk; <em>you do not have to trust us.</em>
+      <br>Today's limit, stated plainly: the paid tier is <em>not</em> in that repository and will
+      stay closed. And the tool speaks Turkish — the CLI output, the board, the card and the
+      receipt are Turkish. This page is the English one.
     </p>
 
     <div class="plans">
       <div class="plan">
         <h3>Free</h3>
-        <p class="small">Tek proje. Süre sınırı yok.</p>
+        <p class="small">One project. No time limit.</p>
         <p class="price">$0</p>
         <ul>
-          <li>Tek proje</li>
-          <li>Tam kart — sıradaki tek hareket</li>
-          <li>Log geçmişi</li>
-          <li>Manuel doğrulama (<code>topbeam verify</code>)</li>
-          <li>Teslim sözü barı + temel pasaport kaydı (o projeye ait)</li>
+          <li>One project</li>
+          <li>The full card — the single next move</li>
+          <li>Log history</li>
+          <li>Manual verification (<code>topbeam verify</code>)</li>
+          <li>The delivery-promise bar and a basic passport record (for that project)</li>
         </ul>
       </div>
 
       <div class="plan pro">
         <h3>Topbeam Pro</h3>
-        <p class="small">Birden fazla proje.</p>
-        <p class="price">$5<span class="per"> / ay</span> · $50<span class="per"> / yıl</span></p>
-        <p class="founding">Founding fiyatı — sonra $9.</p>
+        <p class="small">More than one project.</p>
+        <p class="price">$5<span class="per"> / month</span> · $50<span class="per"> / year</span></p>
+        <p class="founding">Founding price — $9 afterwards.</p>
         <ul>
-          <li>Sınırsız proje</li>
-          <li>Projeler arası taşınabilir pasaport geçmişi</li>
-          <li>Bar dolunca mühür + bildirim, gelişmiş doğrulama akışları</li>
-          <li>Founding fiyatı satın alındığı sürece korunur</li>
+          <li>Unlimited projects</li>
+          <li>Passport history that travels between projects</li>
+          <li>A seal and a notification when the bar fills, plus richer verification flows</li>
+          <li>The founding price holds for as long as the subscription runs</li>
         </ul>
       </div>
     </div>
 
     <div class="first10">
-      <span class="eyebrow">Bugünkü gerçek</span>
+      <span class="eyebrow">What is true today</span>
       <p>
-        <b>Pro diye bir şey henüz YOK.</b> Ödeme sayfası yok, kodda lisans kontrolü yok,
-        ve yukarıdaki iki maddenin ikisi de bugün <em>yazılmamış</em>: projeler arası
-        taşınabilir pasaport geçmişi mevcut değil (tüm durum o projenin kendi
-        <code>.ocean/</code> klasöründe durur, projeler arasında hiçbir bağ yoktur), proje
-        sayısında da hiçbir sınır uygulanmaz. Yukarıdaki tablo <b>bir plandır</b>, bir ürün
-        değil — kurmadan önce bilmen için burada duruyor, kurduktan sonra öğrenmen için değil.
+        <b>There is no Pro yet.</b> No payment page, no licence check in the code, and two of the
+        items above are simply <em>unwritten</em> today: passport history that travels between
+        projects does not exist (all state lives in that project's own <code>.ocean/</code> folder,
+        with no link between projects), and no limit on the number of projects is enforced anywhere.
+        The table above is <b>a plan</b>, not a product — it is here so you know before you install,
+        not so you find out afterwards.
       </p>
       <p style="margin-top:.7rem">
-        <b>Bu yüzden "ilk 10 kullanıcıya Pro bedava" demiyorum:</b> olmayan bir şey
-        hediye edilemez. Bugün herkes her şeyi kullanıyor, çünkü kilitlenmiş hiçbir şey yok.
-        Ücretli katman gerçekten yazılırsa, ondan önce burada yazacak.
+        <b>Which is why I am not offering &ldquo;Pro free for the first 10 users&rdquo;:</b> you
+        cannot give away something that does not exist. Today everyone has everything, because
+        nothing is locked. If the paid tier ever gets written, it will say so here first.
       </p>
     </div>
   </div>
@@ -649,18 +686,19 @@ footer a:hover{border-bottom-color:var(--acc)}
 <footer>
   <div class="wrap">
     <p class="origin">
-      <b>Topbeam.</b> İnşaatta son kirişin en tepeye çakıldığı ana <em>topping out</em> denir
-      — yapının bittiğini ilan eden tören; teslim sözlerinden sonuncusunun onaylanması da odur.
+      <b>Topbeam.</b> In construction, the moment the last beam is fixed at the top is called
+      <em>topping out</em> — the small ceremony that declares the structure finished. Approving
+      the last of your delivery promises is that moment.
     </p>
     <div class="fline">
       <span>Topbeam by REVERI</span>
-      <span>Lokal-first</span>
-      <span>Kanıta dayalı</span>
-      <span>MIT lisanslı çekirdek</span>
-      <span>Claude Code için üretildi</span>
+      <span>Local-first</span>
+      <span>Evidence-based</span>
+      <span>MIT-licensed core</span>
+      <span>Built for Claude Code</span>
     </div>
     <p class="fbot">
-      <a href="mailto:info@reveriajans.com?subject=Topbeam%20erken%20eri%C5%9Fim">info@reveriajans.com</a>
+      <a href="mailto:info@reveriajans.com?subject=Topbeam">info@reveriajans.com</a>
       &nbsp;·&nbsp;
       <a href="https://www.reveriajans.com" rel="noopener">reveriajans.com</a>
     </p>
@@ -675,7 +713,7 @@ footer a:hover{border-bottom-color:var(--acc)}
     var txt = b.getAttribute('data-copy') || '';
     var done = function () {
       var old = b.textContent;
-      b.textContent = 'Kopyalandı';
+      b.textContent = 'Copied';
       b.setAttribute('data-done', '1');
       setTimeout(function () {
         b.textContent = old;

@@ -1,22 +1,27 @@
 {
   "name": "topbeam",
   "version": "0.1.2",
-  "description": "Topbeam — vibe coder için dürüst proje panosu: Claude Code transcript'i + git gerçeklerinden deterministik log, kanıt seviyeli durum ve sıradaki-tek-hareket kartı. LLM yok, local-first; CI okuması opsiyonel ve --no-ci ile kapatılabilir.",
+  "description": "Honest project board for Claude Code. Reads your transcripts and git deterministically — no LLM — and labels every claim by evidence: file, test, human approval, or not verified. Local-first.",
   "type": "module",
   "license": "MIT",
   "author": "Ekin Kılıçkaya",
   "keywords": [
-    "topbeam",
     "claude-code",
-    "cli",
-    "local-first",
-    "evidence",
-    "buildpassport",
-    "git",
+    "claude",
     "transcript",
+    "cli",
+    "git",
+    "evidence",
     "provenance",
+    "audit",
+    "verification",
+    "project-status",
+    "progress-tracker",
+    "local-first",
+    "offline",
     "vibe-coding",
-    "offline"
+    "ai-coding",
+    "topbeam"
   ],
   "bin": {
     "topbeam": "dist/cli.js"
