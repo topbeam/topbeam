@@ -588,11 +588,19 @@ footer a:hover{border-bottom-color:var(--acc)}
     </ul>
 
     <p class="tiny" style="margin-top:1.1rem">
-      The labels underneath are the ones the tool actually prints, in Turkish:
-      <code>dosya-kanıtı</code> — file evidence, the change is in git ·
-      <code>test-kanıtı</code> — test evidence, a number was read from test output ·
-      <code>insan-onayı</code> — human approval, a person checked it in their terminal ·
-      <code>doğrulanmadı</code> — not verified, looks applied, nobody has confirmed it.
+      These are the labels the tool actually prints:
+      <b>File evidence</b> — confirmed against the git diff ·
+      <b>Test evidence</b> — confirmed by test output ·
+      <b>Human approval</b> — a person checked it in their terminal ·
+      <b>Not verified</b> — looks applied, nobody has confirmed it.
+    </p>
+    <p class="tiny" style="margin-top:.55rem">
+      One thing stays Turkish on purpose: the keys written to disk
+      (<code>dosya-kaniti</code>, <code>test-kaniti</code>, <code>insan-onayi</code>,
+      <code>dogrulanmadi</code>) and the data directory <code>.ocean/</code>.
+      They are the storage schema — renaming them would orphan the approvals already
+      signed in <code>passport.jsonl</code> on existing installs. You will see them if
+      you open <code>state.json</code>; you will not see them in the interface.
     </p>
 
     <ul class="rules">
