@@ -489,8 +489,18 @@ function renderTeslim(state: OceanState, ledger: VerificationLedger): string {
       const reason = i.reason !== undefined ? `<span class="preason">${esc(i.reason)}</span>` : '';
       // Madde "insan onaylı" diyor ama defterde karşılığı yoksa: silme yok,
       // dürüst not — hangi kaydın dayanağı düşmüş, görünsün.
+      /**
+       * ⚠️ TEK KURAL (2026-07-30, lansman postu yazılırken bulundu):
+       * burası eskiden `birimOnayli` (TÜM kayıtlar onaylı) kullanıyordu, oysa
+       * satırın tiki `maddeOnayli` (imzalı an) ile hesaplanıyor. Onay
+       * verildikten sonra aynı alana yeni bir doğrulanmamış kayıt düşünce iki
+       * kapı AYRIŞIYOR ve pano AYNI SATIRDA hem "Human approval" hem
+       * "no verification entry found" diyordu — kendi kendisiyle çelişiyordu.
+       * Bir kanıt ürününde çelişki, yanlış cevaptan pahalıdır.
+       * Uyarı artık tikin kullandığı kuralın TAM TERSİ: tik yoksa uyarı var.
+       */
       const kaynaksiz =
-        i.level === 'insan-onayi' && !birimOnayli(ledger, i.claimIds)
+        i.level === 'insan-onayi' && !done
           ? `<span class="preason kaynaksiz">${esc(ROZETSIZ_NOT)} — this promise could not be tied to a terminal approval in the ${esc(
               'passport.jsonl',
             )} ledger.</span>`

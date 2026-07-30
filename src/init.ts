@@ -137,16 +137,16 @@ export async function runInit(cwd: string, opts: InitOptions = {}): Promise<Init
     await writeState(cwd, state);
     created.push('.ocean/state.json');
   } else {
-    skipped.push('.ocean/state.json');
+    skipped.push('.ocean/state.json (already there, left alone)');
   }
 
   // goal.md / notes.md — varsa dokunma.
-  if (await exists(goalPath(cwd))) skipped.push('.ocean/goal.md');
+  if (await exists(goalPath(cwd))) skipped.push('.ocean/goal.md (already there, left alone)');
   else {
     await guvenliYazDisa(cwd, goalPath(cwd), GOAL_TEMPLATE);
     created.push('.ocean/goal.md');
   }
-  if (await exists(notesPath(cwd))) skipped.push('.ocean/notes.md');
+  if (await exists(notesPath(cwd))) skipped.push('.ocean/notes.md (already there, left alone)');
   else {
     await guvenliYazDisa(cwd, notesPath(cwd), NOTES_TEMPLATE);
     created.push('.ocean/notes.md');

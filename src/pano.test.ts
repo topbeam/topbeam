@@ -640,3 +640,38 @@ test('DÜRÜSTLÜK: kırpma varken pano "elenen kayıt yok" DEMEZ (kendini yalan
   );
   assert.ok(html.includes('500'), 'kaybın sayısı gösterilmeli');
 });
+
+test('DÜRÜSTLÜK: pano AYNI SÖZDE hem "onaylı" hem "kayıt yok" DİYEMEZ', () => {
+  // Ölçülen kusur (2026-07-30, lansman postu yazılırken): tik `maddeOnayli`
+  // (imzalı an) ile, uyarı `birimOnayli` (TÜM kayıtlar) ile hesaplanıyordu.
+  // Onaydan sonra aynı alana yeni bir doğrulanmamış kayıt düşünce iki kapı
+  // ayrışıyor ve satır kendi kendisiyle çelişiyordu.
+  const st = newOceanState('proje', new Date('2026-07-30T10:00:00Z'));
+  st.passport = [
+    {
+      id: 'soz-x',
+      title: 'söz bir',
+      status: 'completed',
+      claimIds: ['onayli-1', 'yeni-2'], // biri onaylı, biri YENİ ve onaysız
+      level: 'insan-onayi',
+      verification: { by: 'ekin', at: '2026-07-29T13:00:00Z', decision: 'approved', source: 'terminal' },
+    },
+  ];
+  const ledger = {
+    gecerli: new Map([['onayli-1', { claimId: 'onayli-1', at: '2026-07-29T13:00:00Z', by: 'ekin' }]]),
+    gecersiz: new Map(),
+    zamanlar: new Set(['2026-07-29T13:00:00Z']),
+    dosyaVar: true,
+    okunanSatir: 1,
+    reddedilenSatir: 0,
+  };
+  const html = renderPano(st, { ledger });
+
+  const onayliGorunuyor = html.includes('>human approval<') || html.includes('✓');
+  const kayitYokDiyor = html.includes('no verification entry found');
+  assert.equal(
+    onayliGorunuyor && kayitYokDiyor,
+    false,
+    'aynı sözde hem onaylı hem "kayıt yok" olamaz — pano kendini yalanlıyor',
+  );
+});

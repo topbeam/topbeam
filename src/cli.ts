@@ -90,7 +90,16 @@ async function cmdInit(args: Args): Promise<void> {
   }).finally(() => asker?.close());
   out(`Topbeam connected: ${res.projectName}`);
   for (const c of res.created) out(`  + ${c}`);
-  for (const s of res.skipped) out(`  = ${s} (already there, left alone)`);
+  /**
+   * Her atlanan girdi kendi gerekçesini TAŞIR — CLI genel bir son ek EKLEMEZ.
+   *
+   * Neden (2026-07-30, lansman postu yazılırken bulundu): son ek her satıra
+   * '(already there, left alone)' yapıştırıyordu. CLAUDE.md hiç YOKKEN bile
+   * 'already there' diyordu — yani dosyanın varlığı hakkında YALAN. Üstelik
+   * mesaj iki kez okunuyordu. Yalan söylememeyi vaat eden bir üründe bu küçük
+   * değil: okurun ilk 10 saniyede gördüğü şey.
+   */
+  for (const s of res.skipped) out(`  = ${s}`);
   out('');
   out('Next step: topbeam sync  (build the board from transcript + git facts)');
 }
