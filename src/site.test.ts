@@ -90,7 +90,9 @@ test('landing: yayın durumu GERÇEĞİ söyler (yayındayken "yayınlanmadı" y
     assert.ok(!eski.test(live), `paket yayındayken yayın-öncesi ifadesi duruyor: ${eski}`);
   }
   // Ve yayın iddiası GERÇEKTEN YAYINLANMIŞ sürümle birebir eşleşmeli.
-  assert.match(live, /Yayında:/, 'yayın durumu notu yok');
+  // İKİ DİLLİ NÖBET (2026-07-30): landing İngilizceye taşınıyor. Türkçeye çivili
+  // bir iddia, çeviriden sonra sessizce hiçbir şeyi ölçmez.
+  assert.match(live, /Yayında:|Published:/, 'yayın durumu notu yok');
   assert.ok(PUBLISHED_VERSION !== null, 'package.json → topbeam.publishedVersion tanımlı olmalı');
   assert.ok(
     live.includes(`${PKG_NAME}@${PUBLISHED_VERSION}`),
@@ -143,11 +145,17 @@ test('landing: "kaynak açık" iddiası GERÇEK depoya bağlı (tıklanabilir li
   // 2026-07-29 open-core kararından ÖNCE bu kural "depo kapalı olduğunu açıkça yaz"
   // idi. Depo public olduğu için kural yön değiştirdi ama GEVŞEMEDİ: açık-kaynak
   // iddiası ancak okunabilir bir depoya işaret ediyorsa dürüsttür.
-  assert.match(html, /MIT lisanslı çekirdek/, 'MIT olgusu (doğru) kayboldu');
+  assert.match(html, /MIT lisanslı çekirdek|MIT[- ]licen[cs]ed core/i, 'MIT olgusu (doğru) kayboldu');
   assert.ok(!/depo herkese açık değil/.test(live), 'depo public iken "kapalı" yazıyor');
 
   // Sayfa kaynağın açık olduğunu söylüyorsa, tıklanabilir depo linki ŞART.
-  if (/[Kk]aynak açık|açık kaynak/.test(live)) {
+  /**
+   * ⚠️ ÖLÇÜLDÜ (2026-07-30, register jürisi): tetikleyici yalnız Türkçeydi.
+   * İngilizce sayfada HİÇ ateşlenmiyor → GitHub linki SİLİNSE bile test yeşil
+   * kalıyordu. "Açık kaynak iddiası tıklanabilir depoya bağlı" rozeti,
+   * kanıtlamayı bıraktığı anda hâlâ takılı duruyordu.
+   */
+  if (/[Kk]aynak açık|açık kaynak|open[- ]source|[Ss]ource is open|MIT[- ]licen[cs]ed core/i.test(live)) {
     const repo = hrefs(live).find((h) => /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/?$/.test(h));
     assert.ok(repo !== undefined, '"kaynak açık" deniyor ama tıklanabilir depo linki yok');
     // Link, paketin beyan ettiği depoyla AYNI olmalı — başka bir depoyu
@@ -177,7 +185,21 @@ test('landing: yüzde-ilerleme ve hype dili yok (ürünün kendi kuralı)', () =
     .replace(/<!--[\s\S]*?-->/g, '')
     .replace(/<[^>]+>/g, ' ');
   assert.ok(!/(%\s?\d+|\d+\s?%)/.test(text), 'gövde metninde yüzde ifadesi var');
-  for (const w of ['devrim', 'sihir', 'mükemmel', 'garanti', 'inanılmaz', 'zahmetsiz']) {
+  /**
+   * ⚠️ ÖLÇÜLDÜ (2026-07-30): liste yalnız Türkçeydi. İngilizce sayfaya
+   * "a game-changing, revolutionary way to effortlessly unlock progress"
+   * enjekte edildi ve nöbetçi PASS dedi. Aynı sayfada 'sihir' geçince kırılıyordu
+   * — yani nöbetçi çalışıyor ama YANLIŞ DİLE bakıyordu.
+   */
+  const hype = [
+    // Türkçe
+    'devrim', 'sihir', 'mükemmel', 'garanti', 'inanılmaz', 'zahmetsiz',
+    // İngilizce
+    'revolutionary', 'game-changing', 'game changing', 'magical', 'effortless',
+    'seamlessly', 'unlock your', 'supercharge', 'blazing fast', 'world-class',
+    'cutting-edge', 'next-generation', 'guaranteed',
+  ];
+  for (const w of hype) {
     assert.ok(!text.toLowerCase().includes(w), `hype kelimesi: "${w}"`);
   }
 });
