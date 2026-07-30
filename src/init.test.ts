@@ -30,9 +30,13 @@ test('sıfırdan init: state + goal + notes + CLAUDE.md bölümü kurulur', asyn
   assert.ok(claudeMd.includes(CLAUDE_MD_MARKER));
   assert.ok(claudeMd.includes('.ocean/goal.md'));
   assert.ok(claudeMd.includes('.ocean/notes.md'));
-  assert.ok(claudeMd.includes('doğrulanmadı')); // dürüstlük talimatı
+  assert.ok(claudeMd.includes('not verified')); // dürüstlük talimatı
   // Sözler İNSANINDIR: Claude'a açıkça "ekleme, silme" denir (moat koruması)
-  assert.ok(claudeMd.includes('teslim\n   sözleri kullanıcınındır'));
+  assert.ok(
+    claudeMd.includes(
+      '**delivery promises in that file belong to the user — do not add, delete\n   or rewrite them.**',
+    ),
+  );
 });
 
 test('goal.md şablonu HİÇ SÖZ İÇERMEZ (söz insanındır) + yönerge; hedef satırı sızmaz', async () => {
@@ -46,9 +50,12 @@ test('goal.md şablonu HİÇ SÖZ İÇERMEZ (söz insanındır) + yönerge; hede
   // DÜRÜSTLÜK: "birim = İNSANIN yazdığı söz" yasası — araç kendi cümlesini
   // insanın sözüymüş gibi bara koyamaz. Şablon sıfır madde kurar.
   assert.equal(items.length, 0, 'şablon hiçbir söz yazmaz — söz kullanıcınındır');
-  assert.ok(/kendi sözlerini yaz/i.test(goal), 'kullanıcıya sözün ONUN olduğu söylenir');
-  assert.ok(goal.includes('araç senin adına söz veremez'), 'gerekçe açıkça yazılı');
-  assert.ok(goal.includes('Eşleme ipuçları'), 'ipucu yönergesi korunur');
+  assert.ok(/write your own promises/i.test(goal), 'kullanıcıya sözün ONUN olduğu söylenir');
+  assert.ok(
+    goal.includes('the tool cannot make a promise on your behalf'),
+    'gerekçe açıkça yazılı',
+  );
+  assert.ok(goal.includes('Matching hints'), 'ipucu yönergesi korunur');
 
   // Yönerge satırları panonun HEDEF cümlesi yerine geçmez (alıntı ile yazılı).
   assert.equal(await readGoal(dir), null);

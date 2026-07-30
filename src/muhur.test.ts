@@ -65,11 +65,11 @@ function metin(): string {
 
 test('mühür KAPSAMI dürüstçe yazar: kaç söz, ne zaman, kim imzaladı', () => {
   const m = metin();
-  assert.ok(m.startsWith('# Mühür — Deneme Proje'));
-  assert.ok(m.includes('Kapsam    : 2 teslim sözü — hepsi insan onaylı.'));
+  assert.ok(m.startsWith('# Seal — Deneme Proje'));
+  assert.ok(m.includes('Scope    : 2 delivery promises — every one human-approved.'));
   assert.ok(m.includes('2026-07-29 14:03'));
   assert.ok(m.includes(AT), 'makine-okur ISO damgası da kalmalı');
-  assert.ok(m.includes('Son imza  : ekin (terminal onayı, .ocean/passport.jsonl)'));
+  assert.ok(m.includes('Signed by: ekin (terminal approval, .ocean/passport.jsonl)'));
   assert.ok(m.includes('topbeam v0.1.0'));
 });
 
@@ -77,17 +77,26 @@ test('mühür her sözü ve DAYANAĞINI listeler (ölçülmüş kayıt sayısı 
   const m = metin();
   assert.ok(m.includes('- Giriş akışı çalışıyor src/auth'));
   assert.ok(m.includes('- test: testler yeşil'));
-  assert.ok(m.includes('dayanak: 1 kayıt (1 insan-onayı)'));
-  assert.ok(m.includes('onay: ekin — 2026-07-29 14:03'));
+  assert.ok(m.includes('rests on: 1 records (1 human approval)'));
+  assert.ok(m.includes('approved by: ekin — 2026-07-29 14:03'));
 });
 
 test('"ne demek DEĞİL" bölümü mühürde her zaman durur (aşırı iddia kapısı)', () => {
   const m = metin();
-  assert.ok(m.includes('## Bu mühür ne demek DEĞİL'));
-  assert.ok(m.includes('"Ürün hatasız" demek değildir'));
+  assert.ok(m.includes('## What this seal does NOT mean'));
+  assert.ok(m.includes('It does not say the product is free of defects'));
   // hype/yüzde dili yok
   assert.equal(/%\d/.test(m), false);
-  for (const yasak of ['Tebrikler', 'Harika', 'başarıyla', 'mükemmel']) {
+  for (const yasak of [
+    'Tebrikler',
+    'Harika',
+    'başarıyla',
+    'mükemmel',
+    'Congratulations',
+    'Awesome',
+    'successfully',
+    'perfect',
+  ]) {
     assert.equal(m.includes(yasak), false, `mühür '${yasak}' içermemeli`);
   }
 });
@@ -102,8 +111,8 @@ test('defterde imza yoksa UYDURULMAZ: "imza kaydı yok" yazar', () => {
     ledger: defter([]), // hiçbir kaydın terminal onayı yok
     toolVersion: '0.1.0',
   });
-  assert.ok(m.includes('onay: imza kaydı yok'));
-  assert.equal(m.includes('onay: ekin —'), false);
+  assert.ok(m.includes('approved by: no signature on record'));
+  assert.equal(m.includes('approved by: ekin —'), false);
 });
 
 test('kaydı bilinmeyen söz için seviye dökümü uydurulmaz', () => {
@@ -116,7 +125,7 @@ test('kaydı bilinmeyen söz için seviye dökümü uydurulmaz', () => {
     ledger: defter([]),
     toolVersion: '0.1.0',
   });
-  assert.ok(m.includes('dayanak: 1 kayıt (kayıt bulunamadı)'));
+  assert.ok(m.includes('rests on: 1 records (no records found)'));
 });
 
 test('deterministik: aynı girdi → aynı metin; dosya adı sabit', () => {

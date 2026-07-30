@@ -88,12 +88,12 @@ export function unitTitle(claims: readonly Claim[], firstTs: string): string {
     const rep = [...claims].sort((a, b) =>
       a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : a.id.localeCompare(b.id),
     )[0];
-    return rep === undefined ? '(kayıtsız birim)' : claimTitle(rep.text);
+    return rep === undefined ? '(unit with no records)' : claimTitle(rep.text);
   }
 
   const parcalar: string[] = [];
-  if (dosya > 0) parcalar.push(`${dosya} dosya`);
-  if (test > 0) parcalar.push(`${test} test koşumu`);
+  if (dosya > 0) parcalar.push(`${dosya} ${dosya === 1 ? 'file' : 'files'}`);
+  if (test > 0) parcalar.push(`${test} test ${test === 1 ? 'run' : 'runs'}`);
   const kuyruk =
     ornek.length > 0
       ? ` (${ornek.join(', ')}${dosya > ornek.length ? ` +${dosya - ornek.length}` : ''})`

@@ -177,7 +177,7 @@ interface KritikKural {
 const KRITIK: readonly KritikKural[] = [
   {
     tur: 'odeme',
-    label: 'ödeme',
+    label: 'payments',
     tokens: new Set([
       'payment', 'payments', 'odeme', 'billing', 'invoice', 'invoices', 'checkout',
       'stripe', 'paddle', 'subscription', 'subscriptions', 'purchase', 'purchases',
@@ -186,7 +186,7 @@ const KRITIK: readonly KritikKural[] = [
   },
   {
     tur: 'kimlik',
-    label: 'kimlik/oturum',
+    label: 'auth/session',
     tokens: new Set([
       'auth', 'authentication', 'authorization', 'login', 'logout', 'signin', 'signup',
       'session', 'sessions', 'password', 'passwords', 'oauth', 'jwt', 'credential',
@@ -195,12 +195,12 @@ const KRITIK: readonly KritikKural[] = [
   },
   {
     tur: 'sema',
-    label: 'veri şeması',
+    label: 'data schema',
     tokens: new Set(['migration', 'migrations', 'migrate', 'schema', 'schemas', 'prisma', 'ddl']),
   },
   {
     tur: 'yapilandirma',
-    label: 'yapılandırma',
+    label: 'config',
     tokens: new Set([
       'env', 'dotenv', 'config', 'configs', 'configuration', 'settings', 'secrets',
       'dockerfile', 'nginx', 'entrypoint',
@@ -341,19 +341,19 @@ function upgradeAction(claim: Claim, cevre: Cevre): NextAction {
   if (claim.kind === 'test') {
     // Test sonucu okunamamıştı → testi yeniden koş, okunur sonuç al.
     if (typeof scripts.test === 'string') {
-      return { verb: 'Testleri yeniden çalıştır ve sonucu kaydet.', command: 'npm test' };
+      return { verb: 'Run the tests again and record the result.', command: 'npm test' };
     }
     const ref = kopyalanabilirKomut(claim.evidence.find((e) => e.ref !== undefined)?.ref);
     return ref !== undefined
-      ? { verb: 'Test komutunu yeniden çalıştır ve sonucu kaydet.', command: ref }
-      : { verb: 'Testleri yeniden çalıştır ve sonucu kaydet.' };
+      ? { verb: 'Run the test command again and record the result.', command: ref }
+      : { verb: 'Run the tests again and record the result.' };
   }
   // Dosya claim'i: en güçlü yükseltme yolu = projenin kendi test kapısı.
   if (typeof scripts.test === 'string') {
-    return { verb: 'Testleri çalıştır.', command: 'npm test' };
+    return { verb: 'Run the tests.', command: 'npm test' };
   }
   if (typeof scripts.build === 'string') {
-    return { verb: "Build alıp değişikliğin derlendiğini gör.", command: 'npm run build' };
+    return { verb: 'Build it, and see that the change compiles.', command: 'npm run build' };
   }
   /**
    * GİT-YOK DALI. Git deposu olmayan dizinde 'git status' önermek kullanıcıyı
@@ -362,11 +362,11 @@ function upgradeAction(claim: Claim, cevre: Cevre): NextAction {
    */
   if (cevre.isGitRepo === false) {
     return {
-      verb: 'Bu dizin git deposu değil — değişikliği kendi gözünle aç, kontrol et ve onayla.',
+      verb: 'This directory is not a git repo — open the change yourself, look at it, and approve it.',
       command: verifyCommand(claim.id),
     };
   }
-  return { verb: "Değişikliğin git'te göründüğünü kontrol et.", command: 'git status' };
+  return { verb: 'Check that the change shows up in git.', command: 'git status' };
 }
 
 /** Kırık/şüpheli test koşumunu tekrarlama hareketi — mümkünse AYNI komutla. */
@@ -375,27 +375,29 @@ function testTekrarAksiyonu(claim: Claim, scripts: Readonly<Record<string, strin
     claim.evidence.find((e) => e.kind === 'test-output' && e.ref !== undefined)?.ref ??
       claim.evidence.find((e) => e.ref !== undefined)?.ref,
   );
-  if (ref !== undefined) return { verb: 'Aynı test komutunu yeniden çalıştır.', command: ref };
+  if (ref !== undefined) return { verb: 'Run the same test command again.', command: ref };
   if (typeof scripts.test === 'string') {
-    return { verb: 'Testleri yeniden çalıştır.', command: 'npm test' };
+    return { verb: 'Run the tests again.', command: 'npm test' };
   }
-  return { verb: 'Testleri yeniden çalıştır.' };
+  return { verb: 'Run the tests again.' };
 }
 
 function upgradeUnknown(claim: Claim): string {
-  if (claim.kind === 'test') return "Test koşumunun gerçek sonucu (geçti/kaldı sayısı) bilinmiyor.";
-  return "Bu değişikliklerin git'te karşılığı görünmüyor — gerçekten uygulandı mı belirsiz.";
+  if (claim.kind === 'test') {
+    return 'The real result of that test run — how many passed, how many failed — is not known.';
+  }
+  return 'These changes have no counterpart in git — whether they were really applied is unclear.';
 }
 
 function upgradeDoneWhen(claim: Claim, cevre: Cevre): string {
   if (claim.kind === 'test') {
-    return `Test çıktısından okunur bir geçti/kaldı sonucu alındığında (test-kanıtı) ya da '${verifyCommand(claim.id)}' ile sen onayladığında (insan-onayı) bitti sayılır.`;
+    return `the test output gives a readable pass/fail result (test evidence), or you approve it yourself with '${verifyCommand(claim.id)}' (human approval).`;
   }
   // Git yoksa "git kaydında göründüğünde" koşulu ERİŞİLEMEZ bir koşuldur → söylenmez.
   if (cevre.isGitRepo === false) {
-    return `Test yeşil sonuç verdiğinde (test-kanıtı) ya da '${verifyCommand(claim.id)}' ile sen onayladığında (insan-onayı) bitti sayılır — bu dizin git deposu olmadığı için dosya-kanıtı yolu kapalı.`;
+    return `the test comes back green (test evidence), or you approve it yourself with '${verifyCommand(claim.id)}' (human approval) — the file-evidence route is closed here, because this directory is not a git repo.`;
   }
-  return `Değişiklik git kaydında göründüğünde (dosya-kanıtı), test yeşil sonuç verdiğinde (test-kanıtı) ya da '${verifyCommand(claim.id)}' ile sen onayladığında (insan-onayı) bitti sayılır.`;
+  return `the change shows up in the git record (file evidence), the test comes back green (test evidence), or you approve it yourself with '${verifyCommand(claim.id)}' (human approval).`;
 }
 
 // ── kural motoru ─────────────────────────────────────────────────────────────
@@ -702,8 +704,8 @@ function kuralKirikTest(ctx: Ctx): Secim | null {
   const bayat = yas !== null && tarih !== null && yas >= HEURISTIC.bayatKirikGun;
   const yesilKaydiAranabilir = kosumAnahtari(claim) !== null;
   const bayatKuyruk = bayat
-    ? ` ama kayıt ${tarih} tarihli — ${yas} gün önceki koşum, bugünün ölçümü değil${
-        yesilKaydiAranabilir ? '; yeşile döndüğü kayıtlarda görünmediği için hâlâ önde' : ''
+    ? ` — but the record is dated ${tarih}: a run from ${yas} days ago, not today's measurement${
+        yesilKaydiAranabilir ? '; it is still in front because no later record shows it going green' : ''
       }.`
     : null;
 
@@ -714,25 +716,27 @@ function kuralKirikTest(ctx: Ctx): Secim | null {
   const ciKirik = s?.ci === true;
 
   const bas = ciKirik
-    ? 'CI koşumu kırmızı bitti (GitHub kaydı)'
+    ? 'The CI run finished red (GitHub record)'
     : failed !== undefined
-      ? `Kayıtlarda kırık test var (${atifOn}${failed} başarısız)`
-      : `Test komutu sıfır-dışı çıkışla bitti (${atifOn}exit ${s?.exit})`;
+      ? `The records hold a broken test (${atifOn}${failed} failing)`
+      : `The test command exited non-zero (${atifOn}exit ${s?.exit})`;
   const tazeKuyruk = ciKirik
-    ? ' — CI kırmızıyken üstüne konan iş de şüpheli, o yüzden bu her şeyin önünde.'
+    ? ' — work stacked on top of a red CI is suspect too, so this one comes before everything else.'
     : failed !== undefined
-      ? ' — kırık test dururken üstüne konan iş de şüpheli, o yüzden bu her şeyin önünde.'
-      : ' — kırık koşum sinyali, doğrulanmamış işlerin önüne geçer.';
+      ? ' — work stacked on top of a broken test is suspect too, so this one comes before everything else.'
+      : ' — a broken-run signal goes ahead of the unverified work.';
   const why = `${bas}${bayatKuyruk ?? tazeKuyruk}`;
 
-  const bayatNot = bayat ? ` — bu sonuç ${tarih} tarihli koşumdan, ${yas} gün önce` : '';
+  const bayatNot = bayat ? ` — this result comes from a run dated ${tarih}, ${yas} days ago` : '';
   const unknown = ciKirik
-    ? `CI’ın şu an hâlâ kırmızı olup olmadığı bilinmiyor — bu sonuç o commit’in son kayıtlı koşumundan${bayatNot}.`
+    ? bayat
+      ? `Whether CI is still red right now is not known${bayatNot}.`
+      : "Whether CI is still red right now is not known — this result comes from that commit's last recorded run."
     : failed !== undefined
       ? bayat
-        ? `Testin şu an hâlâ kırık olup olmadığı bilinmiyor${bayatNot}.`
-        : 'Testin şu an hâlâ kırık olup olmadığı bilinmiyor — bu sonuç son kayıtlı koşumdan.'
-      : `Komutun neden hata koduyla bittiği ve şu an hâlâ hata verip vermediği bilinmiyor${bayatNot}.`;
+        ? `Whether the test is still broken right now is not known${bayatNot}.`
+        : 'Whether the test is still broken right now is not known — this result comes from the last recorded run.'
+      : `Why the command exited with an error code, and whether it still does, is not known${bayatNot}.`;
 
   /**
    * CI'da "bitti" koşulu LOKAL yeşil değildir: aynı commit'te CI'ın yeşile
@@ -740,8 +744,8 @@ function kuralKirikTest(ctx: Ctx): Secim | null {
    * sorunun kapandığını sanır — sessiz bir yalan.
    */
   const doneWhen = ciKirik
-    ? `Aynı commit’te CI yeşil sonuç verdiğinde (test-kanıtı) ya da '${verifyCommand(claim.id)}' ile sen onayladığında (insan-onayı) bitti sayılır — lokal testin geçmesi CI’ı yeşile çevirmez.`
-    : `Aynı test komutu başarısız test kalmadan geçtiğinde (test-kanıtı) ya da '${verifyCommand(claim.id)}' ile sen onayladığında (insan-onayı) bitti sayılır.`;
+    ? `CI comes back green on the same commit (test evidence), or you approve it yourself with '${verifyCommand(claim.id)}' (human approval) — a passing local test does not turn CI green.`
+    : `the same test command passes with no failing tests left (test evidence), or you approve it yourself with '${verifyCommand(claim.id)}' (human approval).`;
 
   return {
     claim,
@@ -768,8 +772,8 @@ function kuralKritikDosya(ctx: Ctx): Secim | null {
   return {
     claim: pick.claim,
     rule: 'kritik-dosya',
-    why: `Doğrulanmamış işler içinde en riskli dosya burada (${pick.k.label}: ${adListesi(pick.k.paths)}) — sessiz bir hata en pahalıya burada patlar.`,
-    unknown: `${pick.k.label} tarafına dokunan bu değişikliğin doğru çalıştığına dair hiçbir kayıt yok.`,
+    why: `The riskiest file among the unverified work sits here (${pick.k.label}: ${adListesi(pick.k.paths)}) — a silent mistake costs the most in this spot.`,
+    unknown: `Nothing on record says this change works — and it touches ${pick.k.label}.`,
   };
 }
 
@@ -793,9 +797,9 @@ function kuralKayipRiski(ctx: Ctx): Secim | null {
   return {
     claim,
     rule: 'kayip-riski',
-    why: `Bu küme ${n} dosya — doğrulanmamış işlerin en büyüğü ve git kaydında hiç izi yok; en çok emek, en az kanıt burada.`,
+    why: `This cluster is ${n} files — the largest piece of unverified work, and it has no trace in the git record; the most effort and the least evidence are both here.`,
     // git status bu kümeyi zaten göstermiyor (tanımı bu) → asıl soru commit'lendi mi.
-    action: { verb: "Bu kümenin commit'lenip commit'lenmediğine bak.", command: 'git log --oneline -5' },
+    action: { verb: 'Check whether this cluster was ever committed.', command: 'git log --oneline -5' },
   };
 }
 
@@ -814,8 +818,8 @@ function kuralBayat(ctx: Ctx): Secim | null {
   const enTaze = Math.min(...yaslar);
   const why =
     ctx.unverified.length === 1
-      ? `Doğrulanmamış tek iş ${gun} gündür bekliyor — taze iş yok, sırada duran bu.`
-      : `Doğrulanmamış işlerin en tazesi bile ${enTaze} gün önceden; ${gun} günle en uzun bekleyeni bu — hafızadan ilk düşecek olan.`;
+      ? `The one unverified item has been waiting ${gun} days — nothing fresher is in the queue, so this is what's next.`
+      : `Even the freshest unverified item is ${enTaze} days old; at ${gun} days this one has waited longest — the first to drop out of memory.`;
   return { claim, rule: 'bayat', why };
 }
 
@@ -856,7 +860,7 @@ function kuralKume(ctx: Ctx): Secim | null {
   return {
     claim: best.claim,
     rule: 'kume',
-    why: `Aynı oturumdaki ${best.adet} doğrulanmamış kayıttan en kapsamlısı bu (${best.dosya} dosya) — bu küme tek tek değil, birlikte doğrulanır.`,
+    why: `Of the ${best.adet} unverified records from the same session, this one covers the most (${best.dosya} files) — a cluster like this gets verified together, not one by one.`,
   };
 }
 
@@ -864,7 +868,7 @@ function kuralKume(ctx: Ctx): Secim | null {
 function kuralEnYeni(ctx: Ctx): Secim | null {
   const claim = ctx.unverified[0];
   if (claim === undefined) return null;
-  return { claim, rule: 'en-yeni', why: 'En son dokunulan ve henüz doğrulanmamış iş bu.' };
+  return { claim, rule: 'en-yeni', why: 'This is the most recently touched work that nobody has verified yet.' };
 }
 
 const KURALLAR: Readonly<Record<string, (ctx: Ctx) => Secim | null>> = {
@@ -924,13 +928,13 @@ export function buildCard(claims: readonly Claim[], opts: CardOptions = {}): Car
   if (claims.length === 0) {
     return {
       id: 'kart-bos',
-      fact: 'Henüz kanıtlı iş kaydı yok.',
+      fact: 'No evidenced work has been recorded yet.',
       factLevel: 'dogrulanmadi',
       evidence: { gitDiff: null, testOutput: null, humanApproval: null },
-      unknown: 'Claude Code bu projede henüz iz bırakmadı ya da senkron hiç koşmadı.',
-      action: { verb: 'Senkronu çalıştır.', command: 'topbeam sync' },
-      why: 'Kart yalnız gerçek kayıtlardan üretilir; önce kayıtları toplamak gerekir.',
-      doneWhen: 'İlk claim üretildiğinde kart gerçek işe geçer.',
+      unknown: 'Either Claude Code has left no trace in this project yet, or sync has never run.',
+      action: { verb: 'Run the sync.', command: 'topbeam sync' },
+      why: 'The card is built from real records only; the records have to be collected first.',
+      doneWhen: 'the first claim is produced — from then on the card shows real work.',
       rule: 'kayit-yok',
       updatedAt,
     };
@@ -964,13 +968,13 @@ export function buildCard(claims: readonly Claim[], opts: CardOptions = {}): Car
       factLevel: pickEvidenced.level,
       factDate: pickEvidenced.createdAt,
       evidence: evidenceLines(pickEvidenced),
-      unknown: 'Ürünün senin gözünle istenen davranışı verdiği henüz doğrulanmadı.',
-      action: { verb: 'Sonucu kendin doğrula.', command: verifyCommand(pickEvidenced.id) },
+      unknown: 'Nobody has looked at this yet and confirmed it does what it should.',
+      action: { verb: 'Check the result yourself.', command: verifyCommand(pickEvidenced.id) },
       why:
         kritik !== undefined
-          ? `Kanıtlı ama onay bekleyen işler içinde en riskli dosya bunda (${kritik.k.label}: ${adListesi(kritik.k.paths)}) — insan gözü en çok burada gerekiyor.`
-          : 'Kanıtlı işler arasında insan onayı olmayan en yenisi bu.',
-      doneWhen: `'${verifyCommand(pickEvidenced.id)}' ile insan onayı kaydedildiğinde (insan-onayı) bitti sayılır.`,
+          ? `Among the evidenced work still waiting for approval, the riskiest file is in this one (${kritik.k.label}: ${adListesi(kritik.k.paths)}) — a human eye is needed here most.`
+          : 'This is the newest evidenced item with no human approval on it.',
+      doneWhen: `'${verifyCommand(pickEvidenced.id)}' records a human approval for it.`,
       rule: 'insan-onayi-bekliyor',
       updatedAt,
     };
@@ -984,10 +988,10 @@ export function buildCard(claims: readonly Claim[], opts: CardOptions = {}): Car
     factLevel: latest.level,
     factDate: latest.createdAt,
     evidence: evidenceLines(latest),
-    unknown: 'Şu an bekleyen doğrulanmamış iş görünmüyor.',
-    action: { verb: 'Claude ile sıradaki işi başlat.' },
-    why: 'Kayıtlı tüm işler insan onaylı.',
-    doneWhen: 'Yeni iş kaydı düştüğünde kart güncellenir.',
+    unknown: 'No unverified work appears to be waiting right now.',
+    action: { verb: 'Start the next piece of work with Claude.' },
+    why: 'Every recorded item carries a human approval.',
+    doneWhen: 'a new work record lands — the card moves on then.',
     rule: 'tamam',
     updatedAt,
   };

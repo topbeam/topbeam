@@ -179,15 +179,15 @@ export async function collectGit(cwd: string, opts: GitCollectOptions = {}): Pro
   const probe = await runGit(bin, ['rev-parse', '--is-inside-work-tree'], cwd, timeoutMs);
   if (probe.enoent) {
     facts.gitAvailable = false;
-    facts.notes.push('git bulunamadı (PATH üzerinde yok) — git gerçekleri toplanamadı.');
+    facts.notes.push('git was not found (not on PATH) — no git facts could be collected.');
     return facts;
   }
   if (probe.timedOut) {
-    facts.notes.push('git zaman aşımına uğradı — git gerçekleri toplanamadı.');
+    facts.notes.push('git timed out — no git facts could be collected.');
     return facts;
   }
   if (!probe.ok || probe.stdout.trim() !== 'true') {
-    facts.notes.push('Bu dizin bir git çalışma ağacı değil — git kanıtı yok.');
+    facts.notes.push('This directory is not a git working tree — there is no git evidence.');
     return facts;
   }
   facts.isGit = true;
@@ -212,7 +212,7 @@ export async function collectGit(cwd: string, opts: GitCollectOptions = {}): Pro
     facts.headDate = parts[2] ?? null;
     facts.headSubject = parts.length > 3 ? parts.slice(3).join('\t') : null;
   } else {
-    facts.notes.push('HEAD commit okunamadı — muhtemelen henüz commit yok.');
+    facts.notes.push('The HEAD commit could not be read — most likely there are no commits yet.');
   }
 
   // --untracked-files=all: yeni dizindeki yeni dosyalar `?? dizin/` diye
@@ -242,10 +242,12 @@ export async function collectGit(cwd: string, opts: GitCollectOptions = {}): Pro
       facts.dirtyFiles.push({ status: durum, path: tirnaksiz(ham) });
     }
     if (lines.length > MAX_DIRTY_FILES) {
-      facts.notes.push(`Kirli dosya listesi ${MAX_DIRTY_FILES} ile sınırlandı (toplam ${lines.length}).`);
+      facts.notes.push(
+        `The changed-file list was capped at ${MAX_DIRTY_FILES} (${lines.length} in total).`,
+      );
     }
   } else {
-    facts.notes.push('git status okunamadı.');
+    facts.notes.push('git status could not be read.');
   }
 
   /**
@@ -297,17 +299,17 @@ export async function collectGit(cwd: string, opts: GitCollectOptions = {}): Pro
     }
     if (bozukCommit > 0) {
       facts.notes.push(
-        `${bozukCommit} commit kaydı ayrıştırılamadı ve atlandı (hash biçimi beklenen 40-hane değil).`,
+        `${bozukCommit} commit record${bozukCommit === 1 ? ' was' : 's were'} skipped because they could not be parsed (the hash was not the expected 40 characters).`,
       );
     }
     if (kirpilanCommit > 0) {
       facts.notes.push(
-        `${kirpilanCommit} commit'in dosya listesi ${MAX_COMMIT_FILES} ile sınırlandı — ` +
-          'kırpılan yollar için commit kanıtı kurulamaz (kaçırmak, yanlış suçlamaktan iyidir).',
+        `The file list of ${kirpilanCommit} commit${kirpilanCommit === 1 ? '' : 's'} was capped at ${MAX_COMMIT_FILES} — ` +
+          'no commit evidence can be built for the paths that were cut (missing something is better than accusing wrongly).',
       );
     }
   } else if (facts.headHash !== null) {
-    facts.notes.push('git log okunamadı.');
+    facts.notes.push('git log could not be read.');
   }
 
   if (facts.headHash !== null) {
@@ -331,14 +333,16 @@ export async function collectGit(cwd: string, opts: GitCollectOptions = {}): Pro
         if (files.length < MAX_NUMSTAT_FILES) files.push({ path: parts.slice(2).join('\t'), added, removed });
       }
       if (filesChanged > MAX_NUMSTAT_FILES) {
-        facts.notes.push(`diff dosya listesi ${MAX_NUMSTAT_FILES} ile sınırlandı (toplam ${filesChanged}).`);
+        facts.notes.push(
+          `The diff file list was capped at ${MAX_NUMSTAT_FILES} (${filesChanged} in total).`,
+        );
       }
       facts.diffStat = { filesChanged, insertions, deletions, files };
     } else {
-      facts.notes.push('git diff okunamadı.');
+      facts.notes.push('git diff could not be read.');
     }
   } else {
-    facts.notes.push('Commit olmadığı için diff hesaplanamadı.');
+    facts.notes.push('There are no commits, so no diff could be computed.');
   }
 
   return facts;

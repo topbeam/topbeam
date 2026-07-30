@@ -65,10 +65,10 @@ export const EVIDENCE_LEVELS: readonly EvidenceLevel[] = [
 
 /** UI etiketleri — sakin, teknik-olmayan Türkçe. Kırmızı alarm dili yok. */
 export const EVIDENCE_LEVEL_LABELS_TR: Record<EvidenceLevel, string> = {
-  'dosya-kaniti': 'Dosya kanıtı — git diff ile doğrulandı',
-  'test-kaniti': 'Test kanıtı — test çıktısıyla doğrulandı',
-  'insan-onayi': 'İnsan onayı — kullanıcı doğruladı',
-  dogrulanmadi: 'Uygulandı görünüyor, doğrulanmadı',
+  'dosya-kaniti': 'File evidence — confirmed against the git diff',
+  'test-kaniti': 'Test evidence — confirmed by test output',
+  'insan-onayi': 'Human approval — a person checked it in their terminal',
+  dogrulanmadi: 'Not verified — looks applied, nobody has confirmed it',
 };
 
 /** BuildPassport EvidenceLevel karşılıkları (BP schema_version 1, core/types.ts). */
@@ -296,7 +296,7 @@ export interface Card {
 }
 
 /** Kart ana buton metni — UI sabiti (pano statik: komutu gösterir). */
-export const CARD_PRIMARY_BUTTON_TR = 'Doğrulamayı başlat';
+export const CARD_PRIMARY_BUTTON_TR = 'Start verifying';
 
 // ── Pasaport (BuildPassport-uyumlu) ──────────────────────────────────────────
 

@@ -159,7 +159,7 @@ test('onay (e): insan-onayı + pasaport completed + append-only log + kanıt gö
 
   // pano tazelendi
   const html = await readFile(join(dir, '.ocean', 'pano.html'), 'utf8');
-  assert.ok(html.includes('1 / 2 madde onaylandı'));
+  assert.ok(html.includes('1 / 2 approved'));
 });
 
 test('BAR DOLUNCA: mühür yazılır + bildirim BİR KEZ, tekrarlanmaz', async () => {
@@ -172,30 +172,30 @@ test('BAR DOLUNCA: mühür yazılır + bildirim BİR KEZ, tekrarlanmaz', async (
   assert.equal(res2.fullTick, true);
   assert.equal(res2.notified, true);
   assert.equal(d2.notifications.length, 1);
-  assert.ok(d2.notifications[0]?.includes('Ürün geliştirildi'));
+  assert.ok(d2.notifications[0]?.includes('Every delivery promise is now human-approved'));
 
   const st = await readState(dir);
   assert.ok(st?.fullTickNotifiedAt);
-  assert.ok(st?.log.some((e) => e.source === 'ocean' && e.text.includes('Bar doldu')));
+  assert.ok(st?.log.some((e) => e.source === 'ocean' && e.text.includes('The bar is full')));
 
   // MÜHÜR: kapsam dürüstçe yazılı
   const muhur = await readFile(muhurPath(dir), 'utf8');
-  assert.ok(muhur.includes('Kapsam    : 2 teslim sözü — hepsi insan onaylı.'));
+  assert.ok(muhur.includes('Scope    : 2 delivery promises — every one human-approved.'));
   assert.ok(muhur.includes('- Giriş ekranı hazır src/a.ts'));
-  assert.ok(muhur.includes('## Bu mühür ne demek DEĞİL'));
-  assert.ok(d2.lines.some((l) => l.includes('Mühür yazıldı')));
+  assert.ok(muhur.includes('## What this seal does NOT mean'));
+  assert.ok(d2.lines.some((l) => l.includes('Seal written')));
 
   // pano tören bandı
   const html = await readFile(join(dir, '.ocean', 'pano.html'), 'utf8');
-  assert.ok(html.includes('Ürün geliştirildi 🎉'));
-  assert.ok(html.includes('2 / 2 madde onaylandı'));
+  assert.ok(html.includes('Topped out 🎉'));
+  assert.ok(html.includes('2 / 2 approved'));
 
   // zaten onaylı claim'i tekrar verify → yeniden onay istenmez, bildirim yok
   const d3 = fakeDeps('e');
   const res3 = await runVerify(dir, 'test-s1-0', d3);
   assert.equal(res3.approved, false);
   assert.equal(d3.notifications.length, 0);
-  assert.ok(d3.lines.some((l) => l.includes('zaten insan onaylı')));
+  assert.ok(d3.lines.some((l) => l.includes('already human-approved')));
 });
 
 // ── teslim sözü onayı (barı dolduran tek yol) ───────────────────────────────
@@ -211,7 +211,7 @@ test('teslim sözü id\'si ile onay: söze eşleşen TÜM kayıtlar tek soruda g
   // KÖR ONAY YOK: iki iddia da soru sorulmadan önce gösterildi
   assert.ok(deps.lines.some((l) => l.includes('1 dosya değişti')));
   assert.ok(deps.lines.some((l) => l.includes('19 test geçti')));
-  assert.ok(deps.lines.some((l) => l.includes('Teslim sözü: Dikey dilim bitti')));
+  assert.ok(deps.lines.some((l) => l.includes('Promise : Dikey dilim bitti')));
 
   const st = await readState(dir);
   assert.ok(st?.claims.every((c) => c.level === 'insan-onayi'));
@@ -244,7 +244,7 @@ test('sözün tek kaydını onaylamak sözü "tamam" YAPMAZ (partial, dürüst s
   assert.ok(st?.passport[0]?.reason?.includes('1/2'));
   const html = await readFile(join(dir, '.ocean', 'pano.html'), 'utf8');
   // yarısı onaylı söz bölmeyi DOLDURMAZ
-  assert.ok(html.includes('0 / 1 madde onaylandı'));
+  assert.ok(html.includes('0 / 1 approved'));
   assert.equal(html.includes('class="seg on"'), false);
 });
 
@@ -262,7 +262,7 @@ test('bilinmeyen id hatası teslim sözlerini de gösterir (yol tarif eder)', as
   const res = await runVerify(dir, 'olmayan-id', fakeDeps('e'));
   assert.equal(res.ok, false);
   assert.ok(res.error?.includes(sozId(GOAL_TEK_SOZ)));
-  assert.ok(res.error?.includes('2 kayıt'));
+  assert.ok(res.error?.includes('2 records'));
   assert.ok(res.error?.includes('Dikey dilim bitti'));
 });
 
@@ -272,8 +272,8 @@ test('KAYDI OLMAYAN söz onaylanamaz: "kanıt yok" der, lastik damga vurdurmaz',
   const deps = fakeDeps('e');
   const res = await runVerify(dir, sozId(goal), deps);
   assert.equal(res.ok, false);
-  assert.ok(res.error?.includes('bağlanan kayıt yok'));
-  assert.ok(res.error?.includes('ipucu'), 'ne yapacağı söylenmeli');
+  assert.ok(res.error?.includes('No record is bound to this delivery promise'));
+  assert.ok(res.error?.includes('Add a hint'), 'ne yapacağı söylenmeli');
   await assert.rejects(() => readFile(passportLogPath(dir), 'utf8'));
 });
 
@@ -358,10 +358,10 @@ test('ETKİLEŞİMSİZ KANAL: pipe/otomasyon "e" cevabı seviyeyi YÜKSELTMEZ, l
   await assert.rejects(() => readFile(passportLogPath(dir), 'utf8'));
 
   // kullanıcıya neden söylenir (sessiz yutma yok)
-  assert.ok(bot.lines.some((l) => l.includes('terminalden gelmedi')));
+  assert.ok(bot.lines.some((l) => l.includes('the answer did not come from a terminal')));
   // ...ve kapının SINIRI da söylenir: bu bir duvar değil, kasis.
   assert.ok(
-    bot.lines.some((l) => l.includes('duvar değil')),
+    bot.lines.some((l) => l.includes('It is not a wall')),
     'kapının aşılabilir olduğu kullanıcıdan gizlenmemeli',
   );
 });
@@ -522,9 +522,9 @@ test('DEFTERSİZ "insan-onayi" seviyesi onaylı SAYILMAZ: dürüstçe işaretlen
 
   // "zaten onaylı" DEMEZ — dayanağı olmayan seviye kapıyı kilitleyemez
   assert.equal(res.approved, true);
-  assert.equal(deps.lines.some((l) => l.includes('zaten insan onaylı')), false);
+  assert.equal(deps.lines.some((l) => l.includes('already human-approved')), false);
   assert.ok(
-    deps.lines.some((l) => l.includes('kanal kaydı yok')),
+    deps.lines.some((l) => l.includes('no ledger entry')),
     'dayanaksız seviye ekranda dürüstçe işaretlenmeli',
   );
 
@@ -537,19 +537,19 @@ test('DEFTERSİZ "insan-onayi" seviyesi onaylı SAYILMAZ: dürüstçe işaretlen
   const d2 = fakeDeps('e');
   const res2 = await runVerify(dir, 'dosya-git-s1', d2);
   assert.equal(res2.approved, false);
-  assert.ok(d2.lines.some((l) => l.includes('zaten insan onaylı')));
-  assert.equal(d2.lines.some((l) => l.includes('kanal kaydı yok')), false);
+  assert.ok(d2.lines.some((l) => l.includes('already human-approved')));
+  assert.equal(d2.lines.some((l) => l.includes('no ledger entry')), false);
 });
 
 test('rapor sayısı DEFTERDEN: dayanaksız "completed" madde onaylandı diye sayılmaz', async () => {
   const dir = await makeStateDir(claimsBirimli(), GOAL_TEK_SOZ);
   const deps = fakeDeps('e');
   await runVerify(dir, 'dosya-git-s1', deps); // sözün YALNIZ bir kaydı onaylı
-  assert.ok(deps.lines.some((l) => l.includes('Teslim sözü: 0 / 1 madde onaylandı')));
+  assert.ok(deps.lines.some((l) => l.includes('Delivery promises: 0 / 1 approved.')));
 
   const d2 = fakeDeps('e');
   await runVerify(dir, 'test-s1-0', d2); // söz tamamlandı → defterle 1/1
-  assert.ok(d2.lines.some((l) => l.includes('Teslim sözü: 1 / 1 madde onaylandı')));
+  assert.ok(d2.lines.some((l) => l.includes('Delivery promises: 1 / 1 approved.')));
 });
 
 test('GENİŞ SÖZ uyarısı: eşiği aşan kayıt sayısında soru öncesi lastik-damga uyarısı', async () => {
@@ -567,12 +567,12 @@ test('GENİŞ SÖZ uyarısı: eşiği aşan kayıt sayısında soru öncesi last
   const res = await runVerify(dir, sozId(goal), deps);
 
   assert.equal(res.approved, false);
-  assert.ok(deps.lines.some((l) => l.includes(`bu söz ${KALABALIK_ESIK + 1} kaydı kapsıyor`)));
-  assert.ok(deps.lines.some((l) => l.includes('onay olmaktan çıkar')));
+  assert.ok(deps.lines.some((l) => l.includes(`this promise covers ${KALABALIK_ESIK + 1} records`)));
+  assert.ok(deps.lines.some((l) => l.includes('stops being an approval')));
 
   // eşiğin altında uyarı YOK (gürültü yapmaz)
   const az = await makeStateDir(cok.slice(0, 2), goal);
   const d2 = fakeDeps('h');
   await runVerify(az, sozId(goal), d2);
-  assert.equal(d2.lines.some((l) => l.includes('kaydı kapsıyor')), false);
+  assert.equal(d2.lines.some((l) => l.includes('this promise covers')), false);
 });

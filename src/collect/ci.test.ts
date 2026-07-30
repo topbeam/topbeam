@@ -83,10 +83,24 @@ test('collectCi: gh kurulu DEĞİLSE zarif boş + dürüst kapsam notu (kurulum 
   assert.equal(res.kapali, false);
   assert.deepEqual(res.eslesme, []);
   assert.equal(res.notes.length, 1);
-  assert.match(res.notes[0] ?? '', /CI kaydı okunamadı/);
-  assert.match(res.notes[0] ?? '', /gh` komutu kurulu değil/);
-  // Kurulum/token isteme dili YOK.
-  assert.doesNotMatch(res.notes[0] ?? '', /kur\b|yükle|token al|giriş yap\b/i);
+  assert.match(res.notes[0] ?? '', /CI could not be read/);
+  assert.match(res.notes[0] ?? '', /`gh` command is not installed/);
+  /**
+   * NÖBETÇİ (yasak-kelime listesi) — kurulum/token isteme dili YOK.
+   *
+   * Türkçe hâli /kur\b|yükle|token al|giriş yap\b/i idi: imperatif "kur"u
+   * yakalar, bildirim kipindeki "kurulu/kurulum"u yakalamazdı (Türkçe ekleri
+   * \b sınırını kaldırıyordu). İngilizcede aynı ayrım kelime sınırıyla
+   * kurulamıyor ("install" hem "install it" hem "does not ask you to install
+   * anything" içinde geçiyor) → aynı sayıda (4) ve aynı türde (imperatif
+   * İSTEK) karşılık kuruldu: install it/gh/the · download · get a token · log in.
+   * Kaynaktaki bildirim kipi ("is not installed", "does not ask you to install
+   * anything") istek değildir, bilerek dışarıda.
+   */
+  assert.doesNotMatch(
+    res.notes[0] ?? '',
+    /\binstall (?:it|gh|the)\b|\bdownload\b|\bget a token\b|\blog in\b/i,
+  );
   assert.deepEqual(buildCiClaims(res, gitFacts()), []);
 });
 
@@ -98,7 +112,10 @@ test('collectCi: gh hata verirse (uzak depo yok) zarif boş + sebep notu', async
   });
   assert.equal(res.okundu, false);
   assert.deepEqual(res.eslesme, []);
-  assert.match(res.notes[0] ?? '', /CI kaydı okunamadı: bu depo bir GitHub uzak deposuna bağlı değil/);
+  assert.match(
+    res.notes[0] ?? '',
+    /CI could not be read: this repository is not connected to a GitHub remote/,
+  );
 });
 
 test('collectCi: yetki yoksa zarif boş — giriş İSTENMEZ, sebep yazılır', async () => {
@@ -108,18 +125,18 @@ test('collectCi: yetki yoksa zarif boş — giriş İSTENMEZ, sebep yazılır', 
       Promise.resolve(cmd({ ok: false, stdout: '', stderr: 'gh auth login required\nHTTP 401' })),
   });
   assert.equal(res.okundu, false);
-  assert.match(res.notes[0] ?? '', /GitHub oturumu yok/);
-  assert.match(res.notes[0] ?? '', /Topbeam giriş istemez/);
+  assert.match(res.notes[0] ?? '', /no GitHub session/);
+  assert.match(res.notes[0] ?? '', /Topbeam does not ask you to log in/);
 });
 
-test('collectCi: ağ hatası → zarif boş + "ağa ulaşılamadı"', async () => {
+test('collectCi: ağ hatası → zarif boş + "the network could not be reached"', async () => {
   const res = await collectCi('/proje', gitFacts(), {
     env: {},
     run: () =>
       Promise.resolve(cmd({ ok: false, stdout: '', stderr: 'dial tcp: lookup api.github.com: no such host' })),
   });
   assert.equal(res.okundu, false);
-  assert.match(res.notes[0] ?? '', /ağa ulaşılamadı/);
+  assert.match(res.notes[0] ?? '', /the network could not be reached/);
 });
 
 test('collectCi: zaman aşımı → zarif boş, fırlatmaz', async () => {
@@ -128,7 +145,7 @@ test('collectCi: zaman aşımı → zarif boş, fırlatmaz', async () => {
     run: () => Promise.resolve(cmd({ ok: false, timedOut: true, stdout: '', stderr: '' })),
   });
   assert.equal(res.okundu, false);
-  assert.match(res.notes[0] ?? '', /zaman aşımına uğradı/);
+  assert.match(res.notes[0] ?? '', /CI could not be read: gh timed out/);
 });
 
 test('collectCi: git deposu değilse gh HİÇ çağrılmaz (boşuna dış çağrı yok)', async () => {
@@ -140,7 +157,7 @@ test('collectCi: git deposu değilse gh HİÇ çağrılmaz (boşuna dış çağr
   );
   assert.equal(kayit.cagri, 0);
   assert.equal(res.okundu, false);
-  assert.match(res.notes[0] ?? '', /git deposu değil/);
+  assert.match(res.notes[0] ?? '', /this directory is not a git repository/);
 });
 
 test('collectCi: JSON bozuksa zarif boş + dürüst not', async () => {
@@ -149,7 +166,7 @@ test('collectCi: JSON bozuksa zarif boş + dürüst not', async () => {
     run: () => Promise.resolve(cmd({ stdout: 'bu JSON değil' })),
   });
   assert.equal(res.okundu, false);
-  assert.match(res.notes[0] ?? '', /beklenen JSON biçiminde değil/);
+  assert.match(res.notes[0] ?? '', /was not in the expected JSON shape/);
 });
 
 // ── OFFLINE MODU (--no-ci / TOPBEAM_NO_CI) ───────────────────────────────────
@@ -160,7 +177,7 @@ test('OFFLINE: --no-ci bayrağı → gh HİÇ çağrılmaz, kapsam notu yazılı
   assert.equal(kayit.cagri, 0);
   assert.equal(res.kapali, true);
   assert.equal(res.okundu, false);
-  assert.match(res.notes[0] ?? '', /CI okuması kapalı \(--no-ci \/ TOPBEAM_NO_CI\)/);
+  assert.match(res.notes[0] ?? '', /CI reading is switched off \(--no-ci \/ TOPBEAM_NO_CI\)/);
   assert.deepEqual(buildCiClaims(res, gitFacts()), []);
 });
 
@@ -196,7 +213,11 @@ test('SHA EŞLEŞMEZSE YÜKSELTME YOK: yabancı commit’in yeşil koşumu claim
   assert.equal(res.eslesmeyen, 1);
   assert.deepEqual(res.eslesme, []);
   assert.deepEqual(buildCiClaims(res, git), []); // hiçbir seviye yükselmez
-  assert.ok(res.notes.some((n) => /bağlanamadı ve kapsam dışı bırakıldı/.test(n)));
+  assert.ok(
+    res.notes.some((n) =>
+      /could not be tied to a known commit of this project and was left out of scope/.test(n),
+    ),
+  );
 });
 
 test('SHA ÖNEK eşleşmesi de YETMEZ: kısa hash’le başlayan başka SHA eşleşme saymaz', async () => {
@@ -255,9 +276,9 @@ test('SUCCESS → test-kanıtı seviyesinde claim (SHA birebir eşleşti)', asyn
   assert.ok(c);
   assert.equal(c.level, 'test-kaniti');
   assert.equal(c.kind, 'test');
-  assert.match(c.text, /CI yeşil: 2 workflow/);
+  assert.match(c.text, /CI green: 2 workflows/);
   assert.match(c.text, new RegExp(SHA_HEAD.slice(0, 7)));
-  assert.match(c.text, /HEAD commit’i/);
+  assert.match(c.text, /the HEAD commit/);
   assert.equal(c.createdAt, '2026-07-29T11:01:00Z'); // en yeni koşumun kendi zamanı
   // Yeşil CI sayı sinyali yazmaz — "kaç test geçti" uydurulmaz.
   assert.equal(c.signals?.passedTests, undefined);
@@ -281,16 +302,16 @@ test('FAILURE → kırık sinyali (ciFailed) + kart bunu manşete alır', async 
   assert.ok(c);
   assert.equal(c.level, 'test-kaniti');
   assert.equal(c.signals?.ciFailed, true);
-  assert.match(c.text, /CI kırmızı: CI workflow’u/);
-  assert.match(c.text, /1 workflow yeşil/);
+  assert.match(c.text, /CI red: the CI workflow/);
+  assert.match(c.text, /1 workflow green/);
   // Sayı uydurulmaz: CI'da geçti/kaldı sayısı ve exit kodu yoktur.
   assert.equal(c.signals?.failedTests, undefined);
   assert.equal(c.signals?.nonZeroExit, undefined);
 
   const kart = buildCard(claims, { now: new Date('2026-07-29T12:00:00Z'), isGitRepo: true });
   assert.equal(kart.rule, 'kirik-test');
-  assert.match(kart.why, /CI koşumu kırmızı bitti/);
-  assert.match(kart.doneWhen, /lokal testin geçmesi CI’ı yeşile çevirmez/);
+  assert.match(kart.why, /The CI run finished red/);
+  assert.match(kart.doneWhen, /a passing local test does not turn CI green/);
 });
 
 test('KIRIK CI, lokal yeşil koşumla manşetten DÜŞMEZ (farklı ölçüm, farklı ağaç)', async () => {
@@ -302,7 +323,7 @@ test('KIRIK CI, lokal yeşil koşumla manşetten DÜŞMEZ (farklı ölçüm, far
   const ciClaim = buildCiClaims(res, git);
   const lokalYesil = {
     id: 'test-oturum-0',
-    text: '299 test geçti, 0 başarısız (npm test).',
+    text: '299 tests passed, 0 failed (npm test).',
     level: 'test-kaniti' as const,
     kind: 'test' as const,
     signals: { passedTests: 299, failedTests: 0 },
@@ -314,7 +335,7 @@ test('KIRIK CI, lokal yeşil koşumla manşetten DÜŞMEZ (farklı ölçüm, far
     isGitRepo: true,
   });
   assert.equal(kart.rule, 'kirik-test');
-  assert.match(kart.fact, /CI kırmızı/);
+  assert.match(kart.fact, /CI red/);
 });
 
 test('CI yeşili, LOKAL kırık koşumu temizlemez (kart hâlâ kırığı gösterir)', async () => {
@@ -325,7 +346,7 @@ test('CI yeşili, LOKAL kırık koşumu temizlemez (kart hâlâ kırığı göst
   });
   const lokalKirik = {
     id: 'test-oturum-0',
-    text: 'Test koşumunda 3 test başarısız (npm test).',
+    text: 'The test run reported 3 failing tests (npm test).',
     level: 'test-kaniti' as const,
     kind: 'test' as const,
     signals: { failedTests: 3 },
@@ -337,7 +358,7 @@ test('CI yeşili, LOKAL kırık koşumu temizlemez (kart hâlâ kırığı göst
     isGitRepo: true,
   });
   assert.equal(kart.rule, 'kirik-test');
-  assert.match(kart.fact, /3 test başarısız/);
+  assert.match(kart.fact, /3 failing tests/);
 });
 
 test('HEAD DEĞİL, geride bir commit eşleşirse mesafe AÇIKÇA yazılır', async () => {
@@ -349,7 +370,7 @@ test('HEAD DEĞİL, geride bir commit eşleşirse mesafe AÇIKÇA yazılır', as
   assert.equal(res.eslesme[0]?.behind, 1);
   const c = buildCiClaims(res, git)[0];
   assert.ok(c);
-  assert.match(c.text, /HEAD’den 1 commit geride/);
+  assert.match(c.text, /1 commit behind HEAD/);
 });
 
 test('Çalışma ağacı kirliyse CI’ın diski görmediği claim metnine yazılır', async () => {
@@ -360,7 +381,7 @@ test('Çalışma ağacı kirliyse CI’ın diski görmediği claim metnine yazı
   });
   const c = buildCiClaims(res, git)[0];
   assert.ok(c);
-  assert.match(c.text, /çalışma ağacında 2 dosya değişik, CI bu değişiklikleri görmedi/);
+  assert.match(c.text, /the working tree has 2 changed files that CI did not see/);
 });
 
 test('Sonuçlanmamış/iptal koşum claim ÜRETMEZ, kapsam notunda durur', async () => {
@@ -375,8 +396,8 @@ test('Sonuçlanmamış/iptal koşum claim ÜRETMEZ, kapsam notunda durur', async
     ),
   });
   assert.deepEqual(buildCiClaims(res, git), []);
-  assert.ok(res.notes.some((n) => /yeşil ya da kırmızı değil/.test(n)));
-  assert.ok(res.notes.some((n) => /sonuç uydurulmaz/.test(n)));
+  assert.ok(res.notes.some((n) => /neither green nor red/.test(n)));
+  assert.ok(res.notes.some((n) => /no result is invented/.test(n)));
 });
 
 test('Workflow başına SON koşum alınır (eski kırık, yeni yeşille değişir)', async () => {
@@ -393,15 +414,15 @@ test('Workflow başına SON koşum alınır (eski kırık, yeni yeşille değiş
   assert.equal(res.eslesme[0]?.runs.length, 1);
   const c = buildCiClaims(res, git)[0];
   assert.ok(c);
-  assert.match(c.text, /CI yeşil/);
+  assert.match(c.text, /CI green/);
 });
 
 test('Hiç eşleşme yoksa dürüst not: push edilmemiş ya da pencere dışı olabilir', async () => {
   const res = await collectCi('/proje', gitFacts(), { env: {}, run: mockGh('[]') });
   assert.equal(res.okundu, true);
   assert.deepEqual(res.eslesme, []);
-  assert.ok(res.notes.some((n) => /hiçbiri bulunamadı/.test(n)));
-  assert.ok(res.notes.some((n) => /push edilmemiş/.test(n)));
+  assert.ok(res.notes.some((n) => /None of this project’s \d+ known commits appeared/.test(n)));
+  assert.ok(res.notes.some((n) => /may not be pushed yet/.test(n)));
 });
 
 // ── saf yardımcılar ──────────────────────────────────────────────────────────
@@ -426,7 +447,7 @@ test('parseCiRuns: dizi olmayan JSON → ok=false', () => {
 });
 
 test('ghHataSebebi: bilinmeyen hata AYNEN geçer (uydurma teşhis yok)', () => {
-  assert.equal(ghHataSebebi('beklenmedik bir şey oldu'), 'beklenmedik bir şey oldu');
+  assert.equal(ghHataSebebi('something unexpected happened'), 'something unexpected happened');
   assert.match(ghHataSebebi(`${'x'.repeat(400)}`), /…$/);
-  assert.match(ghHataSebebi(''), /ayrıntı yok/);
+  assert.match(ghHataSebebi(''), /no detail given/);
 });

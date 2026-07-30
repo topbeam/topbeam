@@ -167,16 +167,16 @@ test('ONAYSIZ MADDE ONAYLI GÖRÜNMEZ: defter kaydı olmayan madde tik ALMAZ', (
   const m = makbuzMetni(girdi({ ledger: BOS_LEDGER }));
   assert.ok(m.includes('- [ ] **2. test: testler yeşil**'), 'tik verilmemeli');
   assert.equal(m.includes('- [x]'), false, 'defter boşken hiçbir madde tikli olamaz');
-  assert.ok(m.includes('insan onayı DOĞRULANAMADI'), 'neden söylenmeli');
-  assert.ok(m.includes('0 / 3 madde insan onaylı'));
-  assert.equal(m.includes('İNSAN ONAYLI'), false);
+  assert.ok(m.includes('human approval NOT CONFIRMED'), 'neden söylenmeli');
+  assert.ok(m.includes('0 / 3 human-approved'));
+  assert.equal(m.includes('HUMAN APPROVED'), false);
 });
 
 test('defterle desteklenen madde tik ALIR — imza ve tarih defterden gelir', () => {
   const m = makbuzMetni(girdi());
   assert.ok(m.includes('- [x] **2. test: testler yeşil**'));
-  assert.ok(m.includes('İNSAN ONAYLI — ekin · 2026-07-29 14:03 (terminal imzası · .ocean/passport.jsonl)'));
-  assert.ok(m.includes('1 / 3 madde insan onaylı'));
+  assert.ok(m.includes('HUMAN APPROVED — ekin · 2026-07-29 14:03 (terminal signature · .ocean/passport.jsonl)'));
+  assert.ok(m.includes('1 / 3 human-approved'));
   // Onaysız iki madde tik almamalı
   assert.ok(m.includes('- [ ] **1. Giriş akışı çalışıyor src/auth**'));
   assert.ok(m.includes('- [ ] **3. Hata durumları insan diliyle anlatılıyor**'));
@@ -194,15 +194,15 @@ test('sozSatirlari: onay YALNIZ defterden — status alanı tek başına yetmez'
     [false, true, false],
   );
   // Kaydı olmayan söz: "kayıt yok" der, kanıt uydurmaz.
-  assert.equal(dolu[2]?.kanit, 'kayıt yok');
-  assert.equal(dolu[0]?.kanit, '1 kayıt (1 dosya-kanıtı)');
+  assert.equal(dolu[2]?.kanit, 'no records');
+  assert.equal(dolu[0]?.kanit, '1 records (1 file evidence)');
 });
 
 test('HTML de aynı kapıdan geçer: onaysız madde HTML makbuzda da tiksiz', () => {
   const h = makbuzHtml(girdi({ ledger: BOS_LEDGER }));
   assert.equal(h.includes('[x]'), false);
-  assert.ok(h.includes('insan onayı DOĞRULANAMADI'));
-  assert.ok(h.includes('Hiçbir madde henüz insan onaylı değil'));
+  assert.ok(h.includes('human approval NOT CONFIRMED'));
+  assert.ok(h.includes('No item is human-approved yet'));
 });
 
 // ── 2. SHA'LAR GERÇEK STATE'TEN GELİR ───────────────────────────────────────
@@ -223,15 +223,15 @@ test("SHA'LAR STATE'TEN: makbuzdaki her `git show` kimliği log'daki gerçek com
 test('commit kaydı YOKSA SHA UYDURULMAZ: HEAD kimliğine düşer, o da yoksa "kayıt yok"', () => {
   // git-diff kanıtı var (HEAD kimliği ölçülmüş) ama commit log satırı yok.
   const sadeceHead = makbuzMetni(girdi({ log: [] }));
-  assert.ok(sadeceHead.includes('Commit: özet kaydı yok'));
+  assert.ok(sadeceHead.includes('Commits: no summary on record'));
   assert.ok(sadeceHead.includes('git show 3e8cb9c --stat'));
-  assert.ok(sadeceHead.includes("ölçüldüğü andaki HEAD'dir"));
+  assert.ok(sadeceHead.includes('the HEAD at the moment the records were measured'));
 
   // Hiçbir git kanıtı yok → tek bir SHA bile yazılmamalı.
   const hicbiri = makbuzMetni(girdi({ log: [], claims: [claims[1] as Claim] }));
-  assert.ok(hicbiri.includes('Commit: kayıt yok'));
+  assert.ok(hicbiri.includes('Commits: no record'));
   assert.equal(/git show \S/.test(hicbiri), false, 'kaynağı olmayan SHA yazılamaz');
-  assert.equal(/[0-9a-f]{7,40}/.test(hicbiri.split('## Kanıt özeti')[1] ?? ''), false);
+  assert.equal(/[0-9a-f]{7,40}/.test(hicbiri.split('## Evidence summary')[1] ?? ''), false);
 });
 
 test('commitKayitlari: yalnız git kaynaklı + gerçek kimlikli satırlar, en yeni önce', () => {
@@ -262,22 +262,22 @@ test('commit listesi tek sayfa sınırını aşmaz ama toplamı DÜRÜSTÇE yaza
     ref: String(i).repeat(7),
   }));
   const m = makbuzMetni(girdi({ log: cok }));
-  assert.ok(m.includes(`- Commit: ${COMMIT_MAX} kayıt gösteriliyor (state'te 12)`));
+  assert.ok(m.includes(`- Commits: showing ${COMMIT_MAX} records (12 in state)`));
 });
 
 test('test komutu PROJEDEN gelir; yoksa uydurulmaz', () => {
   assert.ok(makbuzMetni(girdi()).includes('\nnpm test\n'));
   const yok = makbuzMetni(girdi({ testKomutu: null }));
-  assert.ok(yok.includes('test komutu kaydı yok'));
+  assert.ok(yok.includes('no test command on record'));
   assert.equal(yok.includes('\nnpm test\n'), false);
 });
 
 test('son test ölçümü ölçülmüş kayıttan gelir; test kaydı yoksa "kayıt yok"', () => {
   assert.equal(sonTestKaydi(claims)?.id, 'c2');
   assert.equal(sonTestKaydi([claims[0] as Claim]), null);
-  assert.ok(makbuzMetni(girdi()).includes('- Son test ölçümü: 299 test geçti, 0 başarısız (npm test).'));
+  assert.ok(makbuzMetni(girdi()).includes('- Last test measurement: 299 test geçti, 0 başarısız (npm test).'));
   assert.ok(
-    makbuzMetni(girdi({ claims: [claims[0] as Claim] })).includes('- Son test ölçümü: kayıt yok'),
+    makbuzMetni(girdi({ claims: [claims[0] as Claim] })).includes('- Last test measurement: no record'),
   );
 });
 
@@ -291,7 +291,7 @@ test('kanıt özeti: her kayıt TEK kovaya girer, insan onayı defterden sayıl�
   const o2 = kanitOzeti(sahte, BOS_LEDGER);
   assert.equal(o2.insanOnayi, 0);
   assert.equal(o2.kaynaksiz, 1);
-  assert.ok(makbuzMetni(girdi({ claims: sahte, ledger: BOS_LEDGER })).includes('kanal kaydı yok: 1'));
+  assert.ok(makbuzMetni(girdi({ claims: sahte, ledger: BOS_LEDGER })).includes('no channel record: 1'));
 });
 
 // ── 3. BOŞ DURUMDA DÜRÜST METİN ─────────────────────────────────────────────
@@ -306,16 +306,16 @@ test('BOŞ DURUM: kayıt da söz de yokken makbuz yine üretilir ve durumunu sö
     ledger: BOS_LEDGER,
     toolVersion: '0.1.0',
   });
-  assert.ok(m.startsWith('# Teslim Makbuzu — Bomboş'));
-  assert.ok(m.includes('teslim sözü yazılmamış'));
-  assert.ok(m.includes('- Kayıt (claim): 0 toplam'));
-  assert.ok(m.includes('Onay defteri: .ocean/passport.jsonl yok — hiçbir kayıt insan onaylı sayılmadı'));
-  assert.ok(m.includes('- Son test ölçümü: kayıt yok'));
-  assert.ok(m.includes('- Commit: kayıt yok'));
-  assert.ok(m.includes('Kapsam kaydı yok'), 'scope yoksa sayı uydurulmaz');
-  assert.ok(m.includes('## Bu makbuz ne demek DEĞİL'));
+  assert.ok(m.startsWith('# Delivery Receipt — Bomboş'));
+  assert.ok(m.includes('No delivery promise has been written in this project'));
+  assert.ok(m.includes('- Records (claims): 0 in total'));
+  assert.ok(m.includes('Approval ledger: .ocean/passport.jsonl is missing — no record counted as human-approved'));
+  assert.ok(m.includes('- Last test measurement: no record'));
+  assert.ok(m.includes('- Commits: no record'));
+  assert.ok(m.includes('No scope record'), 'scope yoksa sayı uydurulmaz');
+  assert.ok(m.includes('## What this receipt does NOT mean'));
   // Sahte mühür/rozet yok
-  for (const yasak of ['Mühür', 'onaylandı 🎉', 'Tebrikler', 'başarıyla']) {
+  for (const yasak of ['Seal', '🎉', 'Topped out', 'Congratulations', 'successfully']) {
     assert.equal(m.includes(yasak), false, `boş makbuz '${yasak}' içermemeli`);
   }
 });
@@ -323,20 +323,20 @@ test('BOŞ DURUM: kayıt da söz de yokken makbuz yine üretilir ve durumunu sö
 test('BOŞ PASAPORT iki ayrı gerçek: "yazılmamış" ile "senkronlanmamış" karıştırılmaz', () => {
   const ortak = { projectName: 'P', at: AT, items: [], claims: [], log: [], ledger: BOS_LEDGER, toolVersion: '0.1.0' };
   const hicYok = makbuzMetni(ortak);
-  assert.ok(hicYok.includes('teslim sözü yazılmamış'));
+  assert.ok(hicYok.includes('No delivery promise has been written in this project'));
 
   // goal.md'de söz VAR ama state'e işlenmemiş: insanın sözü "yok" sayılamaz.
   const senksiz = makbuzMetni({ ...ortak, goalSozSayisi: 7 });
-  assert.ok(senksiz.includes('7 teslim sözü yazılı'));
+  assert.ok(senksiz.includes('7 delivery promises are written in'));
   assert.ok(senksiz.includes('topbeam sync'));
-  assert.equal(senksiz.includes('teslim sözü yazılmamış'), false);
-  assert.ok(makbuzHtml({ ...ortak, goalSozSayisi: 7 }).includes('7 teslim sözü yazılı'));
+  assert.equal(senksiz.includes('No delivery promise has been written in this project'), false);
+  assert.ok(makbuzHtml({ ...ortak, goalSozSayisi: 7 }).includes('7 delivery promises are written in'));
 });
 
 test('söz VAR ama hiçbiri onaylı DEĞİL: makbuz "teslim onayı değildir" der', () => {
   const m = makbuzMetni(girdi({ ledger: BOS_LEDGER }));
-  assert.ok(m.includes('**Hiçbir madde henüz insan onaylı değil.**'));
-  assert.ok(m.includes('bir teslim onayı DEĞİLDİR'));
+  assert.ok(m.includes('**No item is human-approved yet.**'));
+  assert.ok(m.includes('This receipt is NOT a delivery approval'));
 });
 
 // ── 4. MARKDOWN YAPIŞTIRILABİLİR (BAĞIMSIZ OKUNUR) ──────────────────────────
@@ -344,13 +344,13 @@ test('söz VAR ama hiçbiri onaylı DEĞİL: makbuz "teslim onayı değildir" de
 test('MARKDOWN YAPIŞTIRILABİLİR: tek sayfa, HTML yok, tek başına okunur', () => {
   const m = makbuzMetni(girdi());
   // Markdown iskeleti tam
-  assert.ok(m.startsWith('# Teslim Makbuzu — Deneme Proje'));
+  assert.ok(m.startsWith('# Delivery Receipt — Deneme Proje'));
   for (const bolum of [
-    '## Teslim sözleri',
-    '## Kanıt özeti',
-    '## Kendin doğrula (üçüncü kişi için)',
-    '## Bu makbuzun bilmedikleri (kapsam)',
-    '## Bu makbuz ne demek DEĞİL',
+    '## Delivery promises',
+    '## Evidence summary',
+    '## Check it yourself (for a third party)',
+    '## What this receipt does not know (scope)',
+    '## What this receipt does NOT mean',
   ]) {
     assert.ok(m.includes(bolum), `${bolum} bölümü olmalı`);
   }
@@ -361,7 +361,7 @@ test('MARKDOWN YAPIŞTIRILABİLİR: tek sayfa, HTML yok, tek başına okunur', (
   // Bağımsız okunur: başka bir dosyaya bakmadan ne olduğu anlaşılır; pano
   // gerektirmez. (Adı geçen dosyalar doğrulama içindir, ön koşul değil.)
   assert.equal(m.includes('pano.html'), false);
-  assert.ok(m.includes('kanıtları özetler, sonuç iddia etmez'));
+  assert.ok(m.includes('summarises evidence; it does not claim a result'));
   // Kod bloğu kapanmış (yapıştırılan yerde biçim bozulmasın)
   assert.equal((m.match(/```/g) ?? []).length % 2, 0);
 });
@@ -370,7 +370,7 @@ test('makbuzda hype/yüzde/ilerleme dili YOK', () => {
   const m = makbuzMetni(girdi());
   assert.equal(/%\s?\d/.test(m), false, 'yüzde yok');
   assert.equal(/\d+\s?%/.test(m), false, 'yüzde yok');
-  for (const yasak of ['Tebrikler', 'Harika', 'mükemmel', 'başarıyla', 'ilerleme kaydedildi']) {
+  for (const yasak of ['Congratulations', 'Awesome', 'perfect', 'successfully', 'progress recorded']) {
     assert.equal(m.includes(yasak), false, `makbuz '${yasak}' içermemeli`);
   }
 });
@@ -382,16 +382,16 @@ test('deterministik: aynı girdi → aynı metin (md ve html)', () => {
 
 test('kapsam bloğu ölçülmüş sayıları taşır (bilmedikleri gizlenmez)', () => {
   const m = makbuzMetni(girdi());
-  assert.ok(m.includes('Proje dışı düzenleme: 12'));
-  assert.ok(m.includes('Kayıt üretmeyen kontrol komutu: 4'));
-  assert.ok(m.includes('Log satır zinciri: ham 454 satır'));
+  assert.ok(m.includes('Edits outside the project: 12'));
+  assert.ok(m.includes('Check commands that produce no record: 4'));
+  assert.ok(m.includes('Log line chain: raw 454 lines'));
   const gitsiz = makbuzMetni(girdi({ scope: { ...scope, gitYok: true } }));
-  assert.ok(gitsiz.includes('bu dizin bir git deposu değil'));
+  assert.ok(gitsiz.includes('this directory is not a git repository'));
 });
 
 test('CI kaydı yoksa KAPSAMLI dürüst cümle ("bu makbuzda yok"), varsa bağlantı yazılır', () => {
   // "CI yok" demez — yalnız kendi gördüğü hakkında konuşur (bilinmiyor ≠ yok).
-  assert.ok(makbuzMetni(girdi()).includes('CI koşumu: bu makbuzda CI kaydı yok'));
+  assert.ok(makbuzMetni(girdi()).includes('CI runs: no CI record in this receipt'));
   const ciVar = makbuzMetni(
     girdi({ ci: [{ ad: 'node-test', url: 'https://example.invalid/run/1', durum: 'geçti' }] }),
   );
@@ -409,28 +409,28 @@ test('CI kayıtları claim olarak geldiğinde makbuz onları GÖRÜR (yanlışl�
     createdAt: '2026-07-29T01:00:00Z',
   };
   const m = makbuzMetni(girdi({ claims: [...claims, ciClaim] }));
-  assert.equal(m.includes('bu makbuzda CI kaydı yok'), false, 'kayıt varken "yok" denemez');
-  assert.ok(m.includes('- CI koşumu: 1 kayıt'));
+  assert.equal(m.includes('no CI record in this receipt'), false, 'kayıt varken "yok" denemez');
+  assert.ok(m.includes('- CI runs: 1 records'));
   assert.ok(m.includes('CI yeşil: 1 workflow'));
-  assert.ok(makbuzHtml(girdi({ claims: [...claims, ciClaim] })).includes('CI koşumu: 1 kayıt'));
+  assert.ok(makbuzHtml(girdi({ claims: [...claims, ciClaim] })).includes('CI runs: 1 records'));
   assert.deepEqual(ciKayitlari([...claims, ciClaim]).map((c) => c.id), ['ci-yesil-3e8cb9c']);
 });
 
 test('"ağ yok" iddiası KAPSAMLI: makbuz üretimi için söylenir, ürünün tamamı için değil', () => {
   const m = makbuzMetni(girdi());
-  assert.ok(m.includes('bu makbuz üretilirken ağa çıkılmadı'));
-  assert.equal(/deterministik özet: LLM yok, ağ yok/.test(m), false, 'kapsamsız iddia kalmamalı');
+  assert.ok(m.includes('nothing left this machine while the receipt was produced'));
+  assert.equal(/deterministic summary: no LLM, no network/.test(m), false, 'kapsamsız iddia kalmamalı');
 });
 
 test('HTML tek dosya: dış istek yok (script/link/img/font yok), başlık ve içerik yerinde', () => {
   const h = makbuzHtml(girdi());
   assert.ok(h.startsWith('<!doctype html>'));
-  assert.ok(h.includes('<title>Teslim Makbuzu — Deneme Proje</title>'));
+  assert.ok(h.includes('<title>Delivery Receipt — Deneme Proje</title>'));
   for (const disistek of ['<script', '<link', '<img', '@import', 'src=', 'https://fonts']) {
     assert.equal(h.includes(disistek), false, `HTML '${disistek}' içermemeli (0 dış istek)`);
   }
   assert.ok(h.includes('git show 3e8cb9c --stat'), 'doğrulama adımları HTML\'de de var');
-  assert.ok(h.includes('Bu makbuz ne demek DEĞİL'));
+  assert.ok(h.includes('What this receipt does NOT mean'));
 });
 
 test('HTML kaçışı: madde metnindeki < > & kaçırılır (enjeksiyon yok)', () => {
@@ -465,11 +465,11 @@ test('runMakbuz: state\'ten dosyayı yazar, --html ikinci dosyayı üretir', asy
   assert.equal(res.sozOnayli, 0);
 
   const md = await readFile(res.mdPath as string, 'utf8');
-  assert.ok(md.startsWith('# Teslim Makbuzu — MakbuzProje'));
+  assert.ok(md.startsWith('# Delivery Receipt — MakbuzProje'));
   assert.equal(md.includes('- [x]'), false, 'defter yokken tik olamaz');
   assert.ok(md.includes('git show 3e8cb9c --stat'));
   const html = await readFile(res.htmlPath as string, 'utf8');
-  assert.ok(html.includes('<title>Teslim Makbuzu — MakbuzProje</title>'));
+  assert.ok(html.includes('<title>Delivery Receipt — MakbuzProje</title>'));
 });
 
 test('runMakbuz: --html verilmezse HTML dosyası ÜRETİLMEZ', async () => {

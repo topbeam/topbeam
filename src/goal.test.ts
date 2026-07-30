@@ -249,11 +249,11 @@ test('EŞLEŞMEYEN MADDE "kanıt yok" DURUR: seviye doğrulanmadı, kayıt yok, 
     assert.equal(madde.claimIds.length, 0);
     assert.equal(madde.level, 'dogrulanmadi');
     assert.equal(madde.status, 'not_verified');
-    assert.ok(madde.reason?.startsWith('Kanıt yok'), `dürüst gerekçe: ${madde.reason ?? ''}`);
+    assert.ok(madde.reason?.startsWith('No evidence'), `dürüst gerekçe: ${madde.reason ?? ''}`);
   }
   // ipucusuz madde, ipucu YAZILMADIĞINI söyler (kullanıcı ne yapacağını bilsin)
-  assert.ok(p[0]?.reason?.includes('ipucu yazılmamış'));
-  assert.ok(p[1]?.reason?.includes('eşleşen kayıt bulunamadı'));
+  assert.ok(p[0]?.reason?.includes('carries no hint to bind records to it'));
+  assert.ok(p[1]?.reason?.includes('no record matched the hint'));
 });
 
 test('BAR YALNIZ İNSAN ONAYIYLA DOLAR: test/dosya kanıtı bölmeyi doldurmaz', () => {
@@ -313,17 +313,17 @@ test('ONAY GERİ ALINMAZ: onaydan sonra yeni kayıt gelse de madde completed KAL
   assert.equal(sonra[0]?.verification?.by, 'ekin', 'insan kararı kaydı durur');
   // ...ama yeni iş SESSİZ DE KALMAZ — gerekçe onu söylemeli.
   assert.ok(
-    sonra[0]?.reason?.includes('Onaydan SONRA'),
+    sonra[0]?.reason?.includes('Since that approval'),
     `yeni kayıt gerekçede görünmeli: ${sonra[0]?.reason}`,
   );
-  assert.ok(sonra[0]?.reason?.includes('1 yeni'), 'kaç yeni kayıt olduğu sayıyla yazılmalı');
+  assert.ok(sonra[0]?.reason?.includes('1 new'), 'kaç yeni kayıt olduğu sayıyla yazılmalı');
 });
 
 test('elle atılan `[x]` tik BEYANDIR: barı doldurmaz, sessizce de yutulmaz', () => {
   const items = parseGoalItems('- [x] test: testler yeşil\n');
   const p = buildTeslim([], [claim('t1', { kind: 'test', level: 'test-kaniti' })], items);
   assert.equal(p[0]?.status, 'not_verified');
-  assert.ok(p[0]?.reason?.includes('beyandır, kanıt değil'));
+  assert.ok(p[0]?.reason?.includes('that is a statement, not evidence'));
   assert.equal(dogrulananSayisi(p, defter(['t1'])), 0, 'defterde kaydı olsa da onay claim başınadır');
 });
 

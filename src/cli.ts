@@ -28,47 +28,47 @@ function fail(msg: string): never {
 }
 
 const HELP = `
-Topbeam v${TOOL_VERSION} — dürüst proje panosu (local-first, LLM'siz)
+Topbeam v${TOOL_VERSION} — an honest project board (local-first, no LLM)
 
-Kullanım: topbeam <komut> [seçenekler]
+Usage: topbeam <command> [options]
 
-Komutlar:
-  init            Bu projeyi Topbeam'e bağla (.ocean/ kurulumu + .gitignore satırı)
-                  CLAUDE.md'ye bölüm eklemek için ONAYINI SORAR — otomasyonda
-                  sormaz ve EKLEMEZ (--claude-md ile açıkça istenir)
-  sync            Claude Code transcript + git gerçeklerinden log ve kartı güncelle
-  verify <id>     Bir işi doğrula (insan onayı kaydet — kanıt seviyesi yükselir)
-                  <id> tek kayıt ya da teslim sözü (soz-…) olabilir; söz
-                  verirsen o söze eşleşen tüm kayıtlar tek onayla geçer
-                  YALNIZ terminalden: cevap pipe/otomasyondan gelirse onay
-                  kaydedilmez (insan onayı = gerçek insan)
-  open            Pano yolunu göster (tarayıcıyı otomatik AÇMAZ)
-  gozlem "<metin>"  Kendi gözlemini kayda geçir — MAKİNE DIŞI işin için
-                  ("kullandım, şunu gördüm"). KANIT DEĞİLDİR: seviyesi
-                  "doğrulanmadı" kalır ve panoda "insan beyanı" rozetiyle
-                  ölçümden AYRI görünür. verify ile onaylanabilir.
-  uninstall       Topbeam'in senin dosyalarına bıraktığı izleri geri al
-                  (CLAUDE.md bölümü + .gitignore satırı). .ocean/ BİLEREK KALIR:
-                  içindeki imzalı onay defterin yeniden üretilemez.
-                  --purge ile .ocean/ de silinir (ne kaybettiğin yazılır)
-  makbuz          Dışarıya gösterilebilir tek sayfalık teslim makbuzu üret
-                  (.ocean/makbuz.md · --html ile .ocean/makbuz.html)
-                  Üçüncü kişi kendi makinesinde yeniden doğrulayabilsin diye
-                  commit SHA'ları + test komutu + defter dosyası kopyalanabilir
-                  yazılır. Onaysız madde ONAYLI görünmez.
+Commands:
+  init            Connect this project to Topbeam (.ocean/ setup + a .gitignore line)
+                  ASKS FIRST before adding a section to CLAUDE.md — in automation
+                  it does not ask and does not add (say --claude-md to mean yes)
+  sync            Rebuild the log and the card from Claude Code transcripts + git facts
+  verify <id>     Verify a piece of work (record human approval — the evidence level rises)
+                  <id> can be a single record or a delivery promise (soz-…); give a
+                  promise and every record matching it passes with one approval
+                  TERMINAL ONLY: if the answer arrives from a pipe or a script,
+                  nothing is recorded (human approval means a real human)
+  open            Print the board's path (does NOT open a browser)
+  gozlem "<text>"   Put your own observation on the record — for the work a
+                  machine cannot see ("I used it, here is what I saw"). NOT
+                  EVIDENCE: its level stays "not verified" and the board shows it
+                  APART from measurement, badged "human statement". verify can approve it.
+  uninstall       Undo the marks Topbeam left in your files
+                  (the CLAUDE.md section + the .gitignore line). .ocean/ STAYS, ON PURPOSE:
+                  the signed approval ledger inside it cannot be reproduced.
+                  --purge deletes .ocean/ too (what you lose is spelled out)
+  makbuz          Write a one-page delivery receipt you can show to someone else
+                  (.ocean/makbuz.md · --html also writes .ocean/makbuz.html)
+                  Commit SHAs + the test command + the ledger file are written out
+                  in copyable form, so a third party can re-check them on their own
+                  machine. An unapproved item never looks APPROVED.
 
-Seçenekler:
-  --claude-md     init: CLAUDE.md'ye "## Topbeam" bölümünü SORMADAN ekle
-  --no-claude-md  init: CLAUDE.md'ye hiç dokunma
-  --purge         uninstall: .ocean/ dizinini de sil (onay defteri dahil — GERİ DÖNÜŞ YOK)
-  --html          makbuz: tek dosya HTML de üret (dış istek yok)
-  --no-ci         sync: opsiyonel CI okumasını tamamen kapat (TOPBEAM_NO_CI=1
-                  ile aynı) — Topbeam tümüyle lokal kalır, tek dış çağrı yapılmaz
-  --version       Sürümü yazdır
-  --help          Bu yardımı göster
+Options:
+  --claude-md     init: add the "## Topbeam" section to CLAUDE.md WITHOUT asking
+  --no-claude-md  init: leave CLAUDE.md alone
+  --purge         uninstall: delete the .ocean/ directory too (approval ledger included — NO WAY BACK)
+  --html          makbuz: also write a single-file HTML (no outbound requests)
+  --no-ci         sync: turn the optional CI read off completely (same as
+                  TOPBEAM_NO_CI=1) — Topbeam stays local, not one outbound call
+  --version       Print the version
+  --help          Show this help
 
-İlke: kanıtsız hiçbir iddia gösterilmez; "çalışıyor" yalnız test kanıtı
-veya insan onayıyla söylenir. Özet deterministiktir (LLM yok).
+Principle: no claim is shown without evidence; "it works" is said only with test
+evidence or human approval. The summary is deterministic (no LLM).
 `.trim();
 
 // ── komutlar ─────────────────────────────────────────────────────────────────
@@ -88,11 +88,11 @@ async function cmdInit(args: Args): Promise<void> {
     ...(claudeMdBayrak !== undefined ? { claudeMd: claudeMdBayrak } : {}),
     ...(asker !== null ? { sor: asker.ask, yaz: out } : {}),
   }).finally(() => asker?.close());
-  out(`Topbeam bağlandı: ${res.projectName}`);
+  out(`Topbeam connected: ${res.projectName}`);
   for (const c of res.created) out(`  + ${c}`);
-  for (const s of res.skipped) out(`  = ${s} (vardı, dokunulmadı)`);
+  for (const s of res.skipped) out(`  = ${s} (already there, left alone)`);
   out('');
-  out('Sıradaki adım: topbeam sync  (transcript + git gerçeklerinden panoyu kur)');
+  out('Next step: topbeam sync  (build the board from transcript + git facts)');
 }
 
 const LEVEL_ORDER: EvidenceLevel[] = ['dosya-kaniti', 'test-kaniti', 'insan-onayi', 'dogrulanmadi'];
@@ -101,7 +101,7 @@ async function cmdSync(args: Args): Promise<void> {
   const cwd = process.cwd();
   // --no-ci: opsiyonel CI kaynağı hiç sorulmaz (TOPBEAM_NO_CI=1 de aynı işi görür).
   const res = await runSync(cwd, { noCi: args.flags['no-ci'] === true });
-  if (!res.ok || res.state === undefined) fail(res.error ?? 'Senkron başarısız.');
+  if (!res.ok || res.state === undefined) fail(res.error ?? 'Sync failed.');
 
   const st = res.state;
   const counts = new Map<EvidenceLevel, number>();
@@ -115,32 +115,33 @@ async function cmdSync(args: Args): Promise<void> {
   counts.set('insan-onayi', res.onayliClaim ?? 0);
   const levelSummary = [
     ...LEVEL_ORDER.filter((l) => (counts.get(l) ?? 0) > 0).map(
-      (l) => `${counts.get(l)} ${EVIDENCE_LEVEL_LABELS_TR[l].split(' — ')[0]?.toLocaleLowerCase('tr-TR')}`,
+      // NOT: etiketler artık İngilizce → küçültme de 'en-US' ile (tr-TR 'I'→'ı' yapardı).
+      (l) => `${counts.get(l)} ${EVIDENCE_LEVEL_LABELS_TR[l].split(' — ')[0]?.toLocaleLowerCase('en-US')}`,
     ),
-    ...(kaynaksiz > 0 ? [`${kaynaksiz} kanal kaydı yok`] : []),
+    ...(kaynaksiz > 0 ? [`${kaynaksiz} with no ledger entry`] : []),
   ].join(' · ');
   // Rapor da panoyla AYNI kapıdan geçer: onay sayısı passport.jsonl defterine
   // dayanır, maddenin kendi 'completed' iddiasına değil.
   const sozOnayli = res.sozOnayli ?? 0;
   const sozToplam = res.sozToplam ?? 0;
 
-  out(`Topbeam senkron tamam — ${st.projectName}`);
-  out(`  Transcript : ${res.transcriptsFound ?? 0} oturum tarandı`);
-  out(`  Claim      : ${st.claims.length}${levelSummary !== '' ? ` (${levelSummary})` : ''}`);
-  out(`  Log        : ${st.log.length} satır`);
+  out(`Topbeam sync done — ${st.projectName}`);
+  out(`  Transcript : ${res.transcriptsFound ?? 0} sessions scanned`);
+  out(`  Claims     : ${st.claims.length}${levelSummary !== '' ? ` (${levelSummary})` : ''}`);
+  out(`  Log        : ${st.log.length} lines`);
   out(
     sozToplam > 0
-      ? `  Teslim sözü: ${sozOnayli} / ${sozToplam} madde onaylandı`
-      : "  Teslim sözü: yok — sözlerini .ocean/goal.md'ye yaz, bar orada dolsun",
+      ? `  Promises   : ${sozOnayli} / ${sozToplam} approved`
+      : "  Promises   : none — write yours in .ocean/goal.md; that is where the bar fills",
   );
   // Defter ARŞİVDİR: sayılır ama ilerleme diye sunulmaz (payda büyüsün diye değil).
-  out(`  Defter     : ${res.defterKaydi ?? 0} oturum kaydı (ilerleme ölçüsü değil)`);
+  out(`  Ledger     : ${res.defterKaydi ?? 0} session entries (not a measure of progress)`);
   if (st.card !== undefined) {
-    out(`  Kart       : ${st.card.action.verb}${st.card.action.command !== undefined ? `  →  ${st.card.action.command}` : ''}`);
+    out(`  Card       : ${st.card.action.verb}${st.card.action.command !== undefined ? `  →  ${st.card.action.command}` : ''}`);
   }
-  out(`  Pano       : ${res.panoPath ?? ''}`);
+  out(`  Board      : ${res.panoPath ?? ''}`);
   if (res.notes.length > 0) {
-    out('Notlar:');
+    out('Notes:');
     for (const n of res.notes) out(`  - ${n}`);
   }
 }
@@ -193,11 +194,11 @@ function makeAsker(): { ask: (q: string) => Promise<string>; close: () => void }
  */
 async function cmdVerify(args: Args): Promise<void> {
   const id = args.positional[0];
-  if (id === undefined || id === '') fail('Kullanım: topbeam verify <id>');
+  if (id === undefined || id === '') fail('Usage: topbeam verify <id>');
   if (args.flags.by !== undefined) {
     fail(
-      "'--by' bayrağı kaldırıldı: onaylayan kimliği işletim sistemi kullanıcısından okunur.\n" +
-        'Başkasının adına onay kaydedilemez — insan onayı bu üründe gerçek insan demektir.',
+      "The '--by' flag was removed: the approver's identity is read from the operating-system user.\n" +
+        "No approval is written in someone else's name — in this product, human approval means a real person.",
     );
   }
   const cwd = process.cwd();
@@ -208,8 +209,8 @@ async function cmdVerify(args: Args): Promise<void> {
       out,
       interactive: process.stdin.isTTY === true,
     });
-    if (!res.ok) fail(res.error ?? 'Doğrulama başarısız.');
-    if (res.panoPath !== undefined) out(`Pano güncellendi: ${res.panoPath}`);
+    if (!res.ok) fail(res.error ?? 'Verification failed.');
+    if (res.panoPath !== undefined) out(`Board updated: ${res.panoPath}`);
   } finally {
     asker.close();
   }
@@ -223,17 +224,17 @@ async function cmdVerify(args: Args): Promise<void> {
 async function cmdMakbuz(args: Args): Promise<void> {
   const cwd = process.cwd();
   const res = await runMakbuz(cwd, { html: args.flags.html === true });
-  if (!res.ok) fail(res.error ?? 'Makbuz üretilemedi.');
-  out('Makbuz yazıldı (dışarıya gösterilebilir — Topbeam açmaz, göndermez):');
+  if (!res.ok) fail(res.error ?? 'The receipt could not be written.');
+  out('Receipt written (yours to show — Topbeam does not open it and does not send it):');
   out(`  ${res.mdPath ?? ''}`);
   if (res.htmlPath !== undefined) out(`  ${res.htmlPath}`);
   const toplam = res.sozToplam ?? 0;
   out(
     toplam > 0
-      ? `  Teslim sözü: ${res.sozOnayli ?? 0} / ${toplam} madde insan onaylı`
-      : "  Teslim sözü: yok — sözlerini .ocean/goal.md'ye yaz (makbuz yine üretildi, kanıt dökümü olarak)",
+      ? `  Promises: ${res.sozOnayli ?? 0} / ${toplam} human-approved`
+      : "  Promises: none — write yours in .ocean/goal.md (the receipt was written anyway, as a listing of evidence)",
   );
-  out('Makbuz kendi sınırlarını yazar; onaysız madde onaylı görünmez.');
+  out('The receipt states its own limits; an unapproved item does not look approved.');
 }
 
 async function cmdOpen(_args: Args): Promise<void> {
@@ -242,9 +243,9 @@ async function cmdOpen(_args: Args): Promise<void> {
   try {
     await access(p);
   } catch {
-    fail(`Pano henüz yok: ${p}\nÖnce: topbeam sync`);
+    fail(`The board does not exist yet: ${p}\nRun this first: topbeam sync`);
   }
-  out('Pano yolu (tarayıcında aç — Topbeam otomatik açmaz):');
+  out('Board path (open it in your browser — Topbeam will not open it for you):');
   out(`  ${p}`);
 }
 
@@ -253,8 +254,8 @@ async function cmdOpen(_args: Args): Promise<void> {
 async function cmdGozlem(args: Args): Promise<void> {
   const metin = args.positional.join(' ').trim();
   if (metin === '') {
-    fail('Kullanım: topbeam gozlem "kullandım, şunu gördüm"\n' +
-      'Bu bir KANIT değildir — makinenin göremediği işini kayda geçirir.');
+    fail('Usage: topbeam gozlem "I used it, here is what I saw"\n' +
+      'This is NOT EVIDENCE — it puts on the record the work a machine cannot see.');
   }
   const kullanici = (() => {
     try {
@@ -264,19 +265,19 @@ async function cmdGozlem(args: Args): Promise<void> {
     }
   })();
   if (kullanici.trim() === '') {
-    fail('Kimlik okunamadı (işletim sistemi kullanıcı adı) — imzasız gözlem yazılmaz.');
+    fail('Identity could not be read (operating-system username) — an unsigned observation is not written.');
   }
   const res = await gozlemEkle(process.cwd(), metin, { by: kullanici });
-  if (!res.ok) fail(res.error ?? 'Gözlem yazılamadı.');
-  out(`Gözlem kaydedildi: ${res.id}  (imza: ${kullanici})`);
-  out('  Bu bir KANIT DEĞİL — senin beyanın. Panoda "insan beyanı" rozetiyle görünür.');
-  out('  Sıradaki adım: topbeam sync   (sonra istersen: topbeam verify <söz-id>)');
+  if (!res.ok) fail(res.error ?? 'The observation could not be written.');
+  out(`Observation recorded: ${res.id}  (signed: ${kullanici})`);
+  out('  This is NOT EVIDENCE — it is your statement. The board shows it badged "human statement".');
+  out('  Next step: topbeam sync   (then, if you want: topbeam verify <promise-id>)');
 }
 
 async function cmdUninstall(args: Args): Promise<void> {
   const cwd = process.cwd();
   const res = await runUninstall(cwd, { purge: args.flags.purge === true });
-  out('Topbeam izleri geri alındı.');
+  out("Topbeam's marks have been undone.");
   for (const t of res.temizlenen) out(`  − ${t}`);
   for (const d of res.dokunulmayan) out(`  = ${d}`);
   if (res.uyarilar.length > 0) {
@@ -320,7 +321,7 @@ async function main(): Promise<void> {
       await cmdUninstall(args);
       break;
     default:
-      fail(`Bilinmeyen komut: ${args.cmd}\n\n${HELP}`);
+      fail(`Unknown command: ${args.cmd}\n\n${HELP}`);
   }
 }
 
@@ -335,12 +336,12 @@ await main().catch((e: unknown) => {
     process.exit(2); // 2 = güvenlik reddi (1 = normal hata) — betikler ayırt edebilsin
   }
   const mesaj = e instanceof Error ? e.message : String(e);
-  process.stderr.write(`✖ Beklenmeyen hata: ${mesaj}\n`);
+  process.stderr.write(`✖ Unexpected error: ${mesaj}\n`);
   // Ayrıntı isteyen için: TOPBEAM_DEBUG=1 ile tam iz.
   if (process.env.TOPBEAM_DEBUG === '1' && e instanceof Error && e.stack !== undefined) {
     process.stderr.write(`${e.stack}\n`);
   } else {
-    process.stderr.write('  (tam iz için: TOPBEAM_DEBUG=1 topbeam <komut>)\n');
+    process.stderr.write('  (for the full trace: TOPBEAM_DEBUG=1 topbeam <command>)\n');
   }
   process.exit(1);
 });

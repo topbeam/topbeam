@@ -59,8 +59,11 @@ export function gitignoreSatiriniCikar(metin: string): { text: string; bulundu: 
       bulundu = true;
       continue;
     }
-    // Bizim yazdığımız yorum satırı — yalnız o.
-    if (t.startsWith('# Topbeam çalışma verisi')) {
+    // Bizim yazdığımız yorum satırı — yalnız o. İKİ BİÇİM: yüzeyler İngilizceye
+    // taşındı (init artık "# Topbeam working data …" yazıyor) ama eski kurulumların
+    // .gitignore'unda Türkçe satır duruyor; ikisi de temizlenir yoksa uninstall
+    // arkada iz bırakır.
+    if (t.startsWith('# Topbeam working data') || t.startsWith('# Topbeam working data')) {
       bulundu = true;
       continue;
     }
@@ -84,12 +87,12 @@ export async function runUninstall(
     const { text, bulundu } = claudeMdBolumunuCikar(ham);
     if (bulundu) {
       await guvenliYazDisa(cwd, claudeMdPath, text);
-      temizlenen.push(`CLAUDE.md → "${CLAUDE_MD_MARKER}" bölümü kaldırıldı (başka içeriğe dokunulmadı)`);
+      temizlenen.push(`CLAUDE.md → "${CLAUDE_MD_MARKER}" section removed (nothing else was touched)`);
     } else {
-      dokunulmayan.push('CLAUDE.md (Topbeam bölümü yok)');
+      dokunulmayan.push('CLAUDE.md (no Topbeam section)');
     }
   } catch {
-    dokunulmayan.push('CLAUDE.md (dosya yok)');
+    dokunulmayan.push('CLAUDE.md (no such file)');
   }
 
   // 2) .gitignore satırı
@@ -99,16 +102,16 @@ export async function runUninstall(
     const { text, bulundu } = gitignoreSatiriniCikar(ham);
     if (bulundu) {
       await guvenliYazDisa(cwd, giPath, text);
-      temizlenen.push(`.gitignore → "${OCEAN_DIR}/" satırı kaldırıldı`);
+      temizlenen.push(`.gitignore → "${OCEAN_DIR}/" line removed`);
       uyarilar.push(
-        `Dikkat: ${OCEAN_DIR}/ artık git tarafından yok sayılmıyor. İçinde bu projede ` +
-          "koşulmuş komut metinleri var — commit'lemeden önce bak.",
+        `Heads-up: ${OCEAN_DIR}/ is no longer ignored by git. It holds the text of the ` +
+          'commands run in this project — look before you commit.',
       );
     } else {
-      dokunulmayan.push('.gitignore (Topbeam satırı yok)');
+      dokunulmayan.push('.gitignore (no Topbeam line)');
     }
   } catch {
-    dokunulmayan.push('.gitignore (dosya yok)');
+    dokunulmayan.push('.gitignore (no such file)');
   }
 
   // 3) .ocean/ — VARSAYILAN OLARAK KALIR
@@ -123,17 +126,19 @@ export async function runUninstall(
 
   if (opts.purge === true) {
     await rm(dizin, { recursive: true, force: true });
-    temizlenen.push(`${OCEAN_DIR}/ SİLİNDİ (--purge)`);
+    temizlenen.push(`${OCEAN_DIR}/ DELETED (--purge)`);
     if (defterSatir > 0) {
       uyarilar.push(
-        `${defterSatir} imzalı onay kaydı silindi ve GERİ GETİRİLEMEZ. ` +
-          'Bu, o işi kendi gözünle doğruladığının tek kalıcı kanıtıydı.',
+        `${defterSatir} signed approval ${defterSatir === 1 ? 'entry' : 'entries'} deleted — ` +
+          'NO WAY BACK. That was the only lasting record that you checked this work ' +
+          'with your own eyes.',
       );
     }
   } else {
     dokunulmayan.push(
-      `${OCEAN_DIR}/ (bilerek KALDI — içinde ${defterSatir} imzalı onay kaydın var, ` +
-        'yeniden üretilemez; silmek istersen: topbeam uninstall --purge)',
+      `${OCEAN_DIR}/ (kept ON PURPOSE — it holds ${defterSatir} signed approval ` +
+        `${defterSatir === 1 ? 'entry' : 'entries'} of yours, which cannot be reproduced; ` +
+        'to delete it: topbeam uninstall --purge)',
     );
   }
 

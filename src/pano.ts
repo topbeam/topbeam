@@ -70,17 +70,17 @@ function fmtTs(ts: string): string {
 }
 
 const LEVEL_PILL: Record<EvidenceLevel, { cls: string; label: string }> = {
-  'dosya-kaniti': { cls: 'ev-file', label: 'dosya-kanıtı' },
-  'test-kaniti': { cls: 'ev-test', label: 'test-kanıtı' },
-  'insan-onayi': { cls: 'ev-human', label: 'insan-onayı' },
-  dogrulanmadi: { cls: 'ev-none', label: 'doğrulanmadı' },
+  'dosya-kaniti': { cls: 'ev-file', label: 'file evidence' },
+  'test-kaniti': { cls: 'ev-test', label: 'test evidence' },
+  'insan-onayi': { cls: 'ev-human', label: 'human approval' },
+  dogrulanmadi: { cls: 'ev-none', label: 'not verified' },
 };
 
 const SOURCE_PILL: Record<LogSource, { cls: string; label: string }> = {
   git: { cls: 'ev-file', label: 'git' },
   test: { cls: 'ev-test', label: 'test' },
-  'claude-beyan': { cls: 'ev-none', label: 'beyan' },
-  insan: { cls: 'ev-human', label: 'insan' },
+  'claude-beyan': { cls: 'ev-none', label: 'statement' },
+  insan: { cls: 'ev-human', label: 'human' },
   // enum DEĞERİ 'ocean' (şema uyumu) — kullanıcıya görünen etiket: topbeam.
   ocean: { cls: 'ev-ocean', label: 'topbeam' },
 };
@@ -114,10 +114,10 @@ interface CmdBlockOptions {
 function cmdBlock(command: string, opts: CmdBlockOptions = {}): string {
   const c = esc(command);
   const cls = opts.cls === undefined ? '' : ` ${opts.cls}`;
-  const label = esc(opts.etiket ?? `Komutu kopyala: ${command}`);
+  const label = esc(opts.etiket ?? `Copy command: ${command}`);
   return (
     `<div class="cmdrow${cls}"><code class="cmd" data-cmd="${c}">${c}</code>` +
-    `<button class="btn mini" type="button" aria-label="${label}" aria-live="polite" data-cmd="${c}" onclick="oceanKopyala(this)">Kopyala</button></div>`
+    `<button class="btn mini" type="button" aria-label="${label}" aria-live="polite" data-cmd="${c}" onclick="oceanKopyala(this)">Copy</button></div>`
   );
 }
 
@@ -154,7 +154,7 @@ function insanOnayiSatiri(
 ): string | null {
   const kayit = kayitId === null ? undefined : ledger.gecerli.get(kayitId);
   if (kayit !== undefined) {
-    return `${kayit.by} doğruladı — ${fmtTs(kayit.at)} (terminal onayı, passport.jsonl)`;
+    return `${kayit.by} verified this — ${fmtTs(kayit.at)} (terminal approval, passport.jsonl)`;
   }
   // İddia var ama dayanağı yok → sessizce silinmez, dürüstçe işaretlenir.
   return card.evidence.humanApproval === null ? null : ROZETSIZ_NOT;
@@ -167,20 +167,20 @@ function renderCard(card: Card, ledger: VerificationLedger, claims: readonly Cla
   const row = (k: string, v: string | null, stale = false): string =>
     `<div class="krow"><span class="k">${k}</span><span class="v${v === null ? ' none' : ''}${
       stale ? ' stale' : ''
-    }">${v === null ? 'kayıt yok' : esc(v)}</span></div>`;
+    }">${v === null ? 'no record' : esc(v)}</span></div>`;
 
   const isClaimCard = card.id !== 'kart-bos' && card.id !== 'kart-tam';
   const verifyBox = isClaimCard
     ? `<div class="verifybox">
         <span class="eyebrow">${esc(CARD_PRIMARY_BUTTON_TR)}</span>
-        <p class="hint">Pano statik — komutu terminalde çalıştır:</p>
+        <p class="hint">The board is static — run the command in your terminal:</p>
         ${cmdBlock(`topbeam verify ${card.id}`)}
       </div>`
     : '';
 
-  return `<section class="panel hero" aria-label="Sıradaki tek hareket">
+  return `<section class="panel hero" aria-label="The single next move">
     <div class="heroTop">
-      <span class="eyebrow">Sıradaki tek hareket</span>
+      <span class="eyebrow">The single next move</span>
       ${levelPill(card.factLevel, onayli)}
     </div>
     <h2 class="fact">${esc(card.fact)}</h2>
@@ -188,24 +188,24 @@ function renderCard(card: Card, ledger: VerificationLedger, claims: readonly Cla
       // Gerçeğin KENDİ tarihi — kartın güncellenme damgasıyla karışmasın diye
       // fact'in hemen altında durur (kart bugün üretilir, koşum eski olabilir).
       card.factDate !== undefined
-        ? `<p class="factstamp">Bu gerçek <span class="mono">${esc(fmtTs(card.factDate))}</span> tarihli kayıttan</p>`
+        ? `<p class="factstamp">This fact comes from a record dated <span class="mono">${esc(fmtTs(card.factDate))}</span></p>`
         : ''
     }
     <div class="evrows">
       ${row('Git diff', ev.gitDiff)}
-      ${row('Test çıktısı', ev.testOutput)}
-      ${row('İnsan onayı', insanOnayiSatiri(card, ledger, kayitId), !onayli && ev.humanApproval !== null)}
+      ${row('Test output', ev.testOutput)}
+      ${row('Human approval', insanOnayiSatiri(card, ledger, kayitId), !onayli && ev.humanApproval !== null)}
     </div>
-    <div class="unknown"><span class="k">Eksik / belirsiz</span><p>${esc(card.unknown)}</p></div>
+    <div class="unknown"><span class="k">Missing / unclear</span><p>${esc(card.unknown)}</p></div>
     <div class="action">
-      <span class="eyebrow">Hareket</span>
+      <span class="eyebrow">Move</span>
       <p class="verb">${esc(card.action.verb)}</p>
       ${card.action.command !== undefined ? cmdBlock(card.action.command) : ''}
-      <p class="why"><span class="k">Neden bu?</span> ${esc(card.why)}</p>
-      <p class="done"><span class="k">Bitti sayılması için</span> ${esc(card.doneWhen)}</p>
+      <p class="why"><span class="k">Why this one?</span> ${esc(card.why)}</p>
+      <p class="done"><span class="k">Counts as done when</span> ${esc(card.doneWhen)}</p>
     </div>
     ${verifyBox}
-    <p class="stamp">Kart güncellendi: <span class="mono">${esc(fmtTs(card.updatedAt))}</span></p>
+    <p class="stamp">Card updated: <span class="mono">${esc(fmtTs(card.updatedAt))}</span></p>
   </section>`;
 }
 
@@ -262,10 +262,10 @@ function renderLog(
     const hamFarkli = ham !== null && ham > tutulan;
     if (!kirpildi && !hamFarkli) return '';
     const bas = kirpildi
-      ? `Son ${gosterilen} ${ad} satırı gösteriliyor — panoda tutulan ${tutulan} satırdan.`
-      : `Panoda ${tutulan} ${ad} satırı tutuluyor.`;
+      ? `Showing the last ${gosterilen} ${ad} lines — of the ${tutulan} this board keeps.`
+      : `This board keeps ${tutulan} ${ad} lines.`;
     const kuyruk = hamFarkli
-      ? ` Ham kayıtta ${ham} ${ad} satırı vardı; aradaki farkın dökümü yukarıdaki “Bu panonun kapsamı” bloğunda.`
+      ? ` The raw record held ${ham} ${ad} lines; the difference is broken down in the “What this board covers” block above.`
       : '';
     return `<p class="capnote">${bas}${kuyruk}</p>`;
   };
@@ -273,17 +273,17 @@ function renderLog(
   const hamBeyan = scope !== undefined ? scope.log.hamBeyan : null;
 
   const empty =
-    total === 0 ? '<p class="empty">Henüz log kaydı yok — <span class="mono">topbeam sync</span> sonrası dolar.</p>' : '';
+    total === 0 ? '<p class="empty">No log lines yet — they arrive after <span class="mono">topbeam sync</span>.</p>' : '';
   const kanitBos =
     total > 0 && kanit.length === 0
-      ? '<p class="empty">Kanıt taşıyan satır yok — aşağıdaki beyanlar Claude\'un kendi ifadeleridir, kanıt değildir.</p>'
+      ? '<p class="empty">No line here carries evidence — the statements below are what Claude said, not evidence.</p>'
       : '';
   const beyanBlok =
     beyan.length > 0
       ? `<details class="beyanlar">
-      <summary><span class="pill ev-none">beyan</span> Claude'un beyanları (${beyan.length}) — kanıt değil, katlı</summary>
+      <summary><span class="pill ev-none">statement</span> Claude's statements (${beyan.length}) — not evidence, folded away</summary>
       <ul class="timeline">${logItems(beyanShown, ledger)}</ul>
-      ${capNote(beyanShown.length, beyan.length, hamBeyan, 'beyan')}
+      ${capNote(beyanShown.length, beyan.length, hamBeyan, 'statement')}
     </details>`
       : '';
 
@@ -296,17 +296,17 @@ function renderLog(
   ).length;
   const kaynaksizNot =
     kaynaksizSayi > 0
-      ? `<p class="capnote">${kaynaksizSayi} satır kendini insan onayı sayıyor ama ` +
-        `<span class="mono">passport.jsonl</span> defterinde terminal imzalı bir doğrulama kaydına bağlanamadı — ` +
-        `rozetsiz bırakıldı, kayıt silinmedi.</p>`
+      ? `<p class="capnote">${kaynaksizSayi} lines call themselves human-approved but could not be ` +
+        `tied to a terminal-signed verification in the <span class="mono">passport.jsonl</span> ledger — ` +
+        `left without a badge; nothing was deleted.</p>`
       : '';
 
   return `<section class="panel" aria-label="Log history">
-    <div class="sechead"><span class="eyebrow">Log history</span><span class="count mono">panoda ${kanit.length} kanıt · ${beyan.length} beyan</span></div>
+    <div class="sechead"><span class="eyebrow">Log history</span><span class="count mono">on this board: ${kanit.length} evidence · ${beyan.length} statements</span></div>
     ${empty}
     ${kanitBos}
     <ul class="timeline">${logItems(kanitShown, ledger)}</ul>
-    ${capNote(kanitShown.length, kanit.length, hamKanit, 'kanıt')}
+    ${capNote(kanitShown.length, kanit.length, hamKanit, 'evidence')}
     ${kaynaksizNot}
     ${beyanBlok}
   </section>`;
@@ -322,12 +322,12 @@ function renderLog(
  * Sayı yoksa (eski state / sync koşmamış) UYDURULMAZ, "kayıt yok" denir.
  */
 function renderScope(scope: ScopeNotes | undefined): string {
-  const bas = `<div class="sechead"><span class="eyebrow">Bu panonun kapsamı — ve bilmedikleri</span></div>`;
+  const bas = `<div class="sechead"><span class="eyebrow">What this board covers — and what it does not know</span></div>`;
   if (scope === undefined) {
-    return `<section class="panel scope" aria-label="Panonun kapsamı">
+    return `<section class="panel scope" aria-label="What this board covers">
     ${bas}
-    <p class="empty">Kapsam kaydı yok — bu pano kapsam ölçümü eklenmeden önce üretilmiş.
-    <span class="mono">topbeam sync</span> koşunca neyin elendiği buraya yazılır.</p>
+    <p class="empty">No scope record — this board was produced before scope was measured.
+    Run <span class="mono">topbeam sync</span> and what was filtered out gets written here.</p>
   </section>`;
   }
 
@@ -339,40 +339,40 @@ function renderScope(scope: ScopeNotes | undefined): string {
   if (scope.disKapsamDuzenleme > 0) {
     rows.push(
       satir(
-        'Proje dışı düzenleme',
-        `${scope.disKapsamDuzenleme} düzenleme bu proje kökünün dışındaki dosyalardaydı — claim ve log'a alınmadı (bu pano yalnız bu projeyi anlatır).`,
+        'Edits outside the project',
+        `${scope.disKapsamDuzenleme} edits touched files outside this project root — no claim, no log line (this board speaks only about this project).`,
       ),
     );
   }
   if (c.ilgisizBeyan > 0) {
     rows.push(
       satir(
-        'İlişkilendirilemeyen beyan',
-        `${c.ilgisizBeyan} beyan satırı bu projeyle ilişkilendirilemedi — log'a alınmadı (beyan zaten kanıt değildir).`,
+        'Statements that could not be linked',
+        `${c.ilgisizBeyan} statement lines could not be tied to this project — left out of the log (a statement is not evidence anyway).`,
       ),
     );
   }
   if (scope.kontrolKomutu > 0) {
     rows.push(
       satir(
-        'Claim üretmeyen kontrol komutu',
-        `${scope.kontrolKomutu} kontrol komutu (tsc/eslint gibi) claim üretmedi — bu komutlar geçti/kaldı sayısı üretmez, sonuç uydurulmaz.`,
+        'Check commands that produced no claim',
+        `${scope.kontrolKomutu} check commands (tsc, eslint and the like) produced no claim — they report no pass/fail count, and a result is not invented.`,
       ),
     );
   }
   if (scope.atlananOturum > 0) {
     rows.push(
       satir(
-        'Atlanan oturum',
-        `${scope.atlananOturum} Claude Code oturumu baştan sona başka bir dizinde kaydedilmiş — claim üretilmedi.`,
+        'Skipped sessions',
+        `${scope.atlananOturum} Claude Code sessions were recorded from start to finish in another directory — no claim was produced.`,
       ),
     );
   }
   if (scope.kisaltilanYol > 0) {
     rows.push(
       satir(
-        'Kısaltılan yol',
-        `${scope.kisaltilanYol} yerde proje dışındaki mutlak yol “~/…” diye kısaltıldı — başka bir projenin yolu bu panonun manşetinde durmaz.`,
+        'Shortened paths',
+        `In ${scope.kisaltilanYol} places an absolute path outside the project was shortened to “~/…” — another project's path does not belong in this board's headline.`,
       ),
     );
   }
@@ -380,17 +380,17 @@ function renderScope(scope: ScopeNotes | undefined): string {
     rows.push(
       satir(
         'Git',
-        'Bu dizin bir git deposu değil — değişiklikler git ile karşılaştırılamadı, dosya-kanıtı yolu kapalı.',
+        'This directory is not a git repository — changes could not be compared against git, so the file-evidence route is closed.',
       ),
     );
   }
 
   // Sayı zinciri HER ZAMAN yazılır: panodaki her satırın nereden geldiği.
   const zincir =
-    `Ham ${c.hamToplam} satır (${c.hamKanit} kanıt · ${c.hamBeyan} beyan) → ` +
-    `${c.ilgisizBeyan} ilişkisiz beyan elendi → ${c.tekillestirilen} tekrar tekilleşti → ` +
-    `${c.kirpilan} satır sınırda kırpıldı → panoda ${c.tutulan} satır.`;
-  rows.push(satir('Log satır zinciri', zincir));
+    `Raw ${c.hamToplam} lines (${c.hamKanit} evidence · ${c.hamBeyan} statements) → ` +
+    `${c.ilgisizBeyan} unlinked statements dropped → ${c.tekillestirilen} duplicates merged → ` +
+    `${c.kirpilan} lines cut at the display limit → ${c.tutulan} lines on the board.`;
+  rows.push(satir('Log line chain', zincir));
 
   /**
    * ⚠️ PANONUN KENDİ DÜRÜSTLÜK BEYANI (2026-07-29 sertleştirme bulgusu).
@@ -410,20 +410,20 @@ function renderScope(scope: ScopeNotes | undefined): string {
   const elenenVar =
     rows.length > 1 || c.kirpilan > 0 || c.ilgisizBeyan > 0 || c.tekillestirilen > 0;
   const temiz = !elenenVar
-    ? '<p class="scopelead">Bu senkronda elenen kayıt yok — ham kayıtların tamamı panoda.</p>'
+    ? '<p class="scopelead">Nothing was filtered out in this sync — every raw record is on the board.</p>'
     : c.kirpilan > 0 && rows.length === 1
-      ? `<p class="scopelead">Bu panoda ham kayıtların ${esc(String(c.tutulan))}/${esc(String(c.hamToplam))} satırı görünüyor — ${esc(String(c.kirpilan))} satır listeye sığmadı. Tam kayıt <code>.ocean/state.json</code> içinde.</p>`
-      : '<p class="scopelead">Gürültü kesildi, ama iz bırakılarak: aşağıdakiler bilerek kapsam dışında tutuldu.</p>';
+      ? `<p class="scopelead">This board shows ${esc(String(c.tutulan))} of ${esc(String(c.hamToplam))} raw lines — ${esc(String(c.kirpilan))} did not fit the list. The full record is in <code>.ocean/state.json</code>.</p>`
+      : '<p class="scopelead">The noise was cut, but a trace was left: the items below were deliberately kept out of scope.</p>';
 
   const notlar =
     scope.notlar.length > 0
       ? `<details class="scopenotes">
-      <summary>Motor notları (${scope.notlar.length})</summary>
+      <summary>Engine notes (${scope.notlar.length})</summary>
       <ul class="notelist">${scope.notlar.map((n) => `<li>${esc(n)}</li>`).join('\n')}</ul>
     </details>`
       : '';
 
-  return `<section class="panel scope" aria-label="Panonun kapsamı">
+  return `<section class="panel scope" aria-label="What this board covers">
     ${bas}
     ${temiz}
     <ul class="scopelist">${rows.join('\n')}</ul>
@@ -442,7 +442,7 @@ function renderBar(dolu: number, toplam: number): string {
     { length: toplam },
     (_, i) => `<span class="seg${i < dolu ? ' on' : ''}"></span>`,
   ).join('');
-  const etiket = `${toplam} teslim sözünden ${dolu} tanesi insan onaylı`;
+  const etiket = `${dolu} of ${toplam} delivery promises are human-approved`;
   return `<div class="bar" role="img" aria-label="${esc(etiket)}">${segs}</div>`;
 }
 
@@ -455,11 +455,11 @@ function renderBar(dolu: number, toplam: number): string {
  */
 function renderTeslim(state: OceanState, ledger: VerificationLedger): string {
   const items = state.passport;
-  const bas = `<span class="eyebrow">Teslim sözleri</span>`;
+  const bas = `<span class="eyebrow">Delivery promises</span>`;
   if (items.length === 0) {
-    return `<section class="panel" aria-label="Teslim sözleri">
+    return `<section class="panel" aria-label="Delivery promises">
     <div class="sechead">${bas}</div>
-    <p class="empty">Teslim sözlerini <span class="mono">.ocean/goal.md</span>'ye yaz, bar orada dolsun.</p>
+    <p class="empty">Write your delivery promises in <span class="mono">.ocean/goal.md</span> — that is where the bar fills.</p>
   </section>`;
   }
 
@@ -468,12 +468,12 @@ function renderTeslim(state: OceanState, ledger: VerificationLedger): string {
   const verified = dogrulananSayisi(items, ledger);
   const full = pasaportTamMi(items, ledger);
   const band = full
-    ? `<div class="fullband">Ürün geliştirildi 🎉 — teslim sözlerinin hepsi insan onaylı. Mühür: <span class="mono">.ocean/muhur.md</span></div>`
+    ? `<div class="fullband">Topped out 🎉 — every delivery promise is human-approved. Seal: <span class="mono">.ocean/muhur.md</span></div>`
     : '';
   const rows = items
     .map((i) => {
       const done = maddeOnayli(ledger, i);
-      const adet = i.claimIds.length > 0 ? `<span class="pcount mono">${i.claimIds.length} kayıt</span>` : '';
+      const adet = i.claimIds.length > 0 ? `<span class="pcount mono">${i.claimIds.length} records</span>` : '';
       /**
        * Çıplak id elle seçilmez: her satır kartla AYNI kopyala desenini taşır.
        * Kaydı olmayan sözde komut YOK — onaylanacak bir şey olmadığı hâlde
@@ -484,23 +484,23 @@ function renderTeslim(state: OceanState, ledger: VerificationLedger): string {
           ? ''
           : cmdBlock(`topbeam verify ${i.id}`, {
               cls: 'pcmd',
-              etiket: `Doğrulama komutunu kopyala — ${kisaBaslik(i.title)}`,
+              etiket: `Copy the verification command — ${kisaBaslik(i.title)}`,
             });
       const reason = i.reason !== undefined ? `<span class="preason">${esc(i.reason)}</span>` : '';
       // Madde "insan onaylı" diyor ama defterde karşılığı yoksa: silme yok,
       // dürüst not — hangi kaydın dayanağı düşmüş, görünsün.
       const kaynaksiz =
         i.level === 'insan-onayi' && !birimOnayli(ledger, i.claimIds)
-          ? `<span class="preason kaynaksiz">${esc(ROZETSIZ_NOT)} — bu söz ${esc(
+          ? `<span class="preason kaynaksiz">${esc(ROZETSIZ_NOT)} — this promise could not be tied to a terminal approval in the ${esc(
               'passport.jsonl',
-            )} defterindeki bir terminal onayına bağlanamadı.</span>`
+            )} ledger.</span>`
           : '';
       return `<li class="pitem"><span class="tick ${done ? 'on' : ''}">${done ? '✓' : '○'}</span><span class="ptitle">${esc(i.title)}${reason}${kaynaksiz}</span>${adet}${levelPill(i.level, done)}${cmd}</li>`;
     })
     .join('\n');
 
-  return `<section class="panel" aria-label="Teslim sözleri">
-    <div class="sechead">${bas}<span class="count mono">${verified} / ${items.length} madde onaylandı</span></div>
+  return `<section class="panel" aria-label="Delivery promises">
+    <div class="sechead">${bas}<span class="count mono">${verified} / ${items.length} approved</span></div>
     ${renderBar(verified, items.length)}
     ${band}
     <ul class="plist">${rows}</ul>
@@ -517,27 +517,27 @@ function renderTeslim(state: OceanState, ledger: VerificationLedger): string {
  */
 function renderDefter(claims: readonly Claim[], ledger: VerificationLedger): string {
   const kayitlar = buildDefter(claims);
-  const bas = `<div class="sechead"><span class="eyebrow">Defter</span><span class="count mono">${kayitlar.length} oturum kaydı</span></div>`;
+  const bas = `<div class="sechead"><span class="eyebrow">Sessions</span><span class="count mono">${kayitlar.length} session records</span></div>`;
   const not =
-    '<p class="capnote">Bu bir ilerleme ölçüsü değildir — yalnız hangi oturumda ne ölçüldüğünün kaydı. İlerleme yukarıdaki teslim sözlerinde.</p>';
+    '<p class="capnote">This is not a measure of progress — only a record of what was measured in which session. Progress lives in the delivery promises above.</p>';
   if (kayitlar.length === 0) {
-    return `<section class="panel" aria-label="Defter">
+    return `<section class="panel" aria-label="Sessions">
     ${bas}
     ${not}
-    <p class="empty">Henüz oturum kaydı yok — <span class="mono">topbeam sync</span> sonrası dolar.</p>
+    <p class="empty">No session records yet — they arrive after <span class="mono">topbeam sync</span>.</p>
   </section>`;
   }
   const rows = kayitlar
     .map((k) => {
       const onayli = birimOnayli(ledger, k.claimIds);
-      return `<li class="pitem"><span class="ptitle">${esc(k.title)}</span><span class="pcount mono">${k.claimIds.length} kayıt</span>${levelPill(k.level, onayli)}</li>`;
+      return `<li class="pitem"><span class="ptitle">${esc(k.title)}</span><span class="pcount mono">${k.claimIds.length} records</span>${levelPill(k.level, onayli)}</li>`;
     })
     .join('\n');
-  return `<section class="panel" aria-label="Defter">
+  return `<section class="panel" aria-label="Sessions">
     ${bas}
     ${not}
     <details class="defter">
-      <summary>Oturum kayıtları (${kayitlar.length})</summary>
+      <summary>Session records (${kayitlar.length})</summary>
       <ul class="plist">${rows}</ul>
     </details>
   </section>`;
@@ -633,16 +633,16 @@ header.top .goal .k{font-family:var(--mono);font-size:9.5px;letter-spacing:.14em
 .scopenotes{margin-top:12px;border-top:1px solid var(--line);padding-top:10px}
 .scopenotes>summary{cursor:pointer;font-size:12px;color:var(--muted);list-style:none;padding:4px 0}
 .scopenotes>summary::-webkit-details-marker{display:none}
-.scopenotes>summary::after{content:'göster';font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--plan);margin-left:8px}
-.scopenotes[open]>summary::after{content:'gizle'}
+.scopenotes>summary::after{content:'show';font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--plan);margin-left:8px}
+.scopenotes[open]>summary::after{content:'hide'}
 .notelist{list-style:none;margin-top:6px}
 .notelist li{font-size:12px;color:var(--muted);padding:5px 0;border-bottom:1px solid var(--line);overflow-wrap:anywhere}
 .notelist li:last-child{border-bottom:none}
 .beyanlar{margin-top:14px;border-top:1px solid var(--line);padding-top:10px}
 .beyanlar>summary{cursor:pointer;font-size:12px;color:var(--muted);display:flex;align-items:center;gap:8px;list-style:none;padding:4px 0}
 .beyanlar>summary::-webkit-details-marker{display:none}
-.beyanlar>summary::after{content:'göster';font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--plan);margin-left:auto}
-.beyanlar[open]>summary::after{content:'gizle'}
+.beyanlar>summary::after{content:'show';font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--plan);margin-left:auto}
+.beyanlar[open]>summary::after{content:'hide'}
 .beyanlar>summary:hover{color:var(--dim)}
 /* Bar: SONLU bölmeler, iki durumlu. Yüzde yok, animasyon yok, kısmi doluluk yok. */
 .bar{display:flex;gap:4px;margin:0 0 14px}
@@ -651,8 +651,8 @@ header.top .goal .k{font-family:var(--mono);font-size:9.5px;letter-spacing:.14em
 .defter{border-top:1px solid var(--line);padding-top:10px;margin-top:4px}
 .defter>summary{cursor:pointer;font-size:12px;color:var(--muted);list-style:none;padding:4px 0}
 .defter>summary::-webkit-details-marker{display:none}
-.defter>summary::after{content:'göster';font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--plan);margin-left:8px}
-.defter[open]>summary::after{content:'gizle'}
+.defter>summary::after{content:'show';font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--plan);margin-left:8px}
+.defter[open]>summary::after{content:'hide'}
 .defter>summary:focus-visible{outline:2px solid var(--teal);outline-offset:2px}
 .plist{list-style:none}
 .pitem{display:flex;align-items:baseline;gap:10px;border-bottom:1px solid var(--line);padding:10px 0;font-size:13px;flex-wrap:wrap}
@@ -677,7 +677,7 @@ function oceanKopyala(btn){
   var t=btn.getAttribute('data-cmd');
   if(!t||!navigator.clipboard){return}
   navigator.clipboard.writeText(t).then(function(){
-    var eski=btn.textContent;btn.textContent='Kopyalandı';
+    var eski=btn.textContent;btn.textContent='Copied';
     setTimeout(function(){btn.textContent=eski},1400);
   }).catch(function(){});
 }
@@ -692,20 +692,20 @@ export function renderPano(state: OceanState, opts: PanoOptions = {}): string {
   const card: Card | undefined = state.card;
   const goal =
     opts.goalText !== undefined && opts.goalText !== null && opts.goalText.trim() !== ''
-      ? `<p class="goal"><span class="k">Hedef</span>${esc(opts.goalText.trim())}</p>`
+      ? `<p class="goal"><span class="k">Goal</span>${esc(opts.goalText.trim())}</p>`
       : '';
   const lastSync =
-    state.lastSyncedAt !== undefined ? fmtTs(state.lastSyncedAt) : 'henüz senkron koşmadı';
+    state.lastSyncedAt !== undefined ? fmtTs(state.lastSyncedAt) : 'sync has not run yet';
 
   const cardHtml =
     card !== undefined
       ? renderCard(card, ledger, state.claims)
-      : `<section class="panel hero"><span class="eyebrow">Sıradaki tek hareket</span>
-         <h2 class="fact">Henüz kart üretilmedi.</h2>
-         <div class="action"><p class="verb">Senkronu çalıştır.</p>${cmdBlock('topbeam sync')}</div></section>`;
+      : `<section class="panel hero"><span class="eyebrow">The single next move</span>
+         <h2 class="fact">No card produced yet.</h2>
+         <div class="action"><p class="verb">Run the sync.</p>${cmdBlock('topbeam sync')}</div></section>`;
 
   return `<!doctype html>
-<html lang="tr">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -716,9 +716,9 @@ export function renderPano(state: OceanState, opts: PanoOptions = {}): string {
 <body>
 <main>
   <header class="top">
-    <span class="eyebrow">Topbeam — dürüst proje panosu</span>
+    <span class="eyebrow">Topbeam — honest project board</span>
     <h1>${esc(state.projectName)}</h1>
-    <p class="meta">son senkron: ${esc(lastSync)} · topbeam v${esc(TOOL_VERSION)} · deterministik özet — LLM yok</p>
+    <p class="meta">last sync: ${esc(lastSync)} · topbeam v${esc(TOOL_VERSION)} · deterministic summary — no LLM</p>
     ${goal}
   </header>
   ${cardHtml}
@@ -726,9 +726,9 @@ export function renderPano(state: OceanState, opts: PanoOptions = {}): string {
   ${renderScope(state.scope)}
   ${renderLog(state.log, ledger, state.scope)}
   ${renderDefter(state.claims, ledger)}
-  <footer>Topbeam yalnız kanıtlı gerçekleri ve açık belirsizlikleri gösterir.<br>
-  kanıt seviyeleri: dosya-kanıtı · test-kanıtı · insan-onayı · doğrulanmadı<br>
-  insan onayı rozeti yalnız <span class="mono">.ocean/passport.jsonl</span> defterindeki terminal imzalı kayda dayanır</footer>
+  <footer>Topbeam shows the facts that carry evidence, and the gaps it knows about.<br>
+  evidence levels: file evidence · test evidence · human approval · not verified<br>
+  the human-approval badge rests on one thing only: a terminal-signed entry in the <span class="mono">.ocean/passport.jsonl</span> ledger</footer>
 </main>
 <script>${COPY_JS}</script>
 </body>

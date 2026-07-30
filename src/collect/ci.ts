@@ -188,24 +188,24 @@ function bilinenShalar(git: GitFacts): Map<string, number> {
   return m;
 }
 
-/** gh stderr'inden tek satırlık, sakin Türkçe sebep. Bilinmeyen hata AYNEN geçer (kısaltılmış). */
+/** gh stderr'inden tek satırlık, sakin İngilizce sebep. Bilinmeyen hata AYNEN geçer (kısaltılmış). */
 export function ghHataSebebi(stderr: string): string {
   const ham = stderr
     .split('\n')
     .map((l) => l.trim())
     .filter((l) => l !== '')[0];
-  if (ham === undefined) return 'gh komutu hata verdi (ayrıntı yok).';
+  if (ham === undefined) return 'the gh command failed (no detail given).';
   if (/no git remotes|failed to determine base repo|not a git repository/i.test(ham)) {
-    return 'bu depo bir GitHub uzak deposuna bağlı değil.';
+    return 'this repository is not connected to a GitHub remote.';
   }
   if (/gh auth login|not logged|authentication|unauthorized|http 401|bad credentials/i.test(ham)) {
-    return 'GitHub oturumu yok (gh ile giriş yapılmamış) — Topbeam giriş istemez, CI opsiyoneldir.';
+    return 'no GitHub session (gh is not logged in) — Topbeam does not ask you to log in, CI is optional.';
   }
   if (/http 404|could not resolve to a repository|not found/i.test(ham)) {
-    return 'GitHub deposu bulunamadı ya da bu hesabın erişimi yok.';
+    return 'the GitHub repository was not found, or this account has no access to it.';
   }
   if (/dial tcp|no such host|network is unreachable|i\/o timeout|connection refused|tls|proxy/i.test(ham)) {
-    return 'ağa ulaşılamadı.';
+    return 'the network could not be reached.';
   }
   return ham.length > MAX_HATA_UZUNLUK ? `${ham.slice(0, MAX_HATA_UZUNLUK)}…` : ham;
 }
@@ -271,7 +271,7 @@ export async function collectCi(
   if (opts.noCi === true || ciKapaliMi(env)) {
     facts.kapali = true;
     facts.notes.push(
-      'CI kaydı okunmadı: CI okuması kapalı (--no-ci / TOPBEAM_NO_CI) — bu pano yalnız lokal gerçekleri anlatıyor.',
+      'CI was not read: CI reading is switched off (--no-ci / TOPBEAM_NO_CI) — this board speaks only about local facts.',
     );
     return facts;
   }
@@ -281,8 +281,8 @@ export async function collectCi(
     // Eşleştirilecek commit yoksa dış çağrı da yapılmaz (boşuna ağ trafiği yok).
     facts.notes.push(
       git.isGit
-        ? 'CI kaydı okunamadı: bu depoda commit yok — CI koşumu bağlanacak bir SHA bulunamadı.'
-        : 'CI kaydı okunamadı: bu dizin git deposu değil — CI koşumu bir commit’e bağlanamaz.',
+        ? 'CI could not be read: this repository has no commits — there is no SHA for a CI run to attach to.'
+        : 'CI could not be read: this directory is not a git repository — a CI run cannot be tied to a commit.',
     );
     return facts;
   }
@@ -306,27 +306,29 @@ export async function collectCi(
 
   if (res.enoent) {
     facts.notes.push(
-      'CI kaydı okunamadı: `gh` komutu kurulu değil — CI opsiyonel bir kaynaktır, Topbeam kurulum istemez.',
+      'CI could not be read: the `gh` command is not installed — CI is an optional source, and Topbeam does not ask you to install anything.',
     );
     return facts;
   }
   if (res.timedOut) {
-    facts.notes.push('CI kaydı okunamadı: gh zaman aşımına uğradı.');
+    facts.notes.push('CI could not be read: gh timed out.');
     return facts;
   }
   if (!res.ok) {
-    facts.notes.push(`CI kaydı okunamadı: ${ghHataSebebi(res.stderr)}`);
+    facts.notes.push(`CI could not be read: ${ghHataSebebi(res.stderr)}`);
     return facts;
   }
 
   const { runs, bozuk, ok } = parseCiRuns(res.stdout);
   if (!ok) {
-    facts.notes.push('CI kaydı okunamadı: gh çıktısı beklenen JSON biçiminde değil.');
+    facts.notes.push('CI could not be read: the gh output was not in the expected JSON shape.');
     return facts;
   }
   facts.okundu = true;
   if (bozuk > 0) {
-    facts.notes.push(`${bozuk} CI koşum kaydı eksik/bozuk alanlar yüzünden okunamadı ve atıldı.`);
+    facts.notes.push(
+      `${bozuk} CI run record${bozuk === 1 ? '' : 's'} had missing or malformed fields and ${bozuk === 1 ? 'was' : 'were'} dropped.`,
+    );
   }
 
   // BİREBİR EŞLEŞME: bilinen SHA listesinde olmayan koşum kapsam dışıdır.
@@ -342,7 +344,7 @@ export async function collectCi(
   }
   if (facts.eslesmeyen > 0) {
     facts.notes.push(
-      `${facts.eslesmeyen} CI koşumu bu projenin bilinen commit’lerine bağlanamadı ve kapsam dışı bırakıldı (uydurma eşleşme yok).`,
+      `${facts.eslesmeyen} CI run${facts.eslesmeyen === 1 ? '' : 's'} could not be tied to a known commit of this project and ${facts.eslesmeyen === 1 ? 'was' : 'were'} left out of scope (no guessed matches).`,
     );
   }
 
@@ -352,8 +354,8 @@ export async function collectCi(
 
   if (facts.eslesme.length === 0) {
     facts.notes.push(
-      `Son ${maxRuns} CI koşumunda bu projenin bilinen ${bilinen.size} commit’inden hiçbiri bulunamadı — ` +
-        'commit henüz push edilmemiş ya da koşum bu pencerenin dışında kalmış olabilir.',
+      `None of this project’s ${bilinen.size} known commits appeared in the last ${maxRuns} CI runs — ` +
+        'the commits may not be pushed yet, or the runs may fall outside this window.',
     );
     return facts;
   }
@@ -365,8 +367,8 @@ export async function collectCi(
     if (diger.length > 0) {
       const suren = diger.filter((r) => r.conclusion === null).length;
       facts.notes.push(
-        `${sha7(yakin.sha)} commit’inde ${diger.length} CI koşumu yeşil ya da kırmızı değil ` +
-          `(${suren > 0 ? `${suren} tanesi henüz sonuçlanmadı; ` : ''}iptal/atlanan sonuçlar yeşil sayılmaz) — sonuç uydurulmaz.`,
+        `At commit ${sha7(yakin.sha)}, ${diger.length} CI run${diger.length === 1 ? ' is' : 's are'} neither green nor red ` +
+          `(${suren > 0 ? `${suren} ${suren === 1 ? 'has' : 'have'} not finished yet; ` : ''}cancelled or skipped results do not count as green) — no result is invented.`,
       );
     }
   }
@@ -378,13 +380,14 @@ export async function collectCi(
 
 /** Koşumun HEAD'e göre yeri — ölçülmüş, tahmin değil. */
 function nerede(m: CiMatch): string {
-  return m.behind === 0 ? ' — HEAD commit’i' : ` — HEAD’den ${m.behind} commit geride`;
+  if (m.behind === 0) return ' — the HEAD commit';
+  return ` — ${m.behind} commit${m.behind === 1 ? '' : 's'} behind HEAD`;
 }
 
 /** Çalışma ağacı kirliyse CI'ın diskteki hâli görmediği AÇIKÇA yazılır. */
 function kirliKuyruk(git: GitFacts): string {
   const n = git.dirtyFiles.length;
-  return n > 0 ? ` · çalışma ağacında ${n} dosya değişik, CI bu değişiklikleri görmedi` : '';
+  return n > 0 ? ` · the working tree has ${n} changed file${n === 1 ? '' : 's'} that CI did not see` : '';
 }
 
 function adlar(runs: readonly CiRun[]): string {
@@ -422,15 +425,15 @@ export function buildCiClaims(ci: CiFacts, git: GitFacts): Claim[] {
   const kuyruk = `${nerede(m)}${kirliKuyruk(git)}`;
 
   if (kirik.length > 0) {
-    const yesilKuyruk = yesil.length > 0 ? ` (${yesil.length} workflow yeşil)` : '';
+    const yesilKuyruk = yesil.length > 0 ? ` (${yesil.length} workflow${yesil.length === 1 ? '' : 's'} green)` : '';
     const evidence: ClaimEvidence[] = kirik.map((r) => ({
       kind: 'test-output',
-      summary: `GitHub Actions: ${kisa} commit’inde “${r.workflowName}” workflow’u 'failure' ile bitti (${r.createdAt}).`,
+      summary: `GitHub Actions: at commit ${kisa} the “${r.workflowName}” workflow ended with 'failure' (${r.createdAt}).`,
     }));
     return [
       {
         id: `ci-kirik-${kisa}`,
-        text: `CI kırmızı: ${adlar(kirik)} workflow’u ${kisa} commit’inde başarısız${yesilKuyruk}${kuyruk}.`,
+        text: `CI red: the ${adlar(kirik)} workflow${kirik.length === 1 ? '' : 's'} failed at commit ${kisa}${yesilKuyruk}${kuyruk}.`,
         level: 'test-kaniti',
         kind: 'test',
         signals: { ciFailed: true },
@@ -443,12 +446,12 @@ export function buildCiClaims(ci: CiFacts, git: GitFacts): Claim[] {
   if (yesil.length > 0) {
     const evidence: ClaimEvidence[] = yesil.map((r) => ({
       kind: 'test-output',
-      summary: `GitHub Actions: ${kisa} commit’inde “${r.workflowName}” workflow’u 'success' ile bitti (${r.createdAt}).`,
+      summary: `GitHub Actions: at commit ${kisa} the “${r.workflowName}” workflow ended with 'success' (${r.createdAt}).`,
     }));
     return [
       {
         id: `ci-yesil-${kisa}`,
-        text: `CI yeşil: ${yesil.length} workflow ${kisa} commit’inde başarılı (${adlar(yesil)})${kuyruk}.`,
+        text: `CI green: ${yesil.length} workflow${yesil.length === 1 ? '' : 's'} passed at commit ${kisa} (${adlar(yesil)})${kuyruk}.`,
         level: 'test-kaniti',
         kind: 'test',
         // Sayı sinyali YOK: CI yeşili "kaç test geçti" demez ve lokalde kayıtlı

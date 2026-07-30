@@ -129,7 +129,7 @@ export async function runSync(cwd: string, opts: SyncOptions = {}): Promise<Sync
   if (state === null) {
     return {
       ok: false,
-      error: "Bu proje Topbeam'e bağlı değil (ya da .ocean/state.json okunamadı). Önce: topbeam init",
+      error: "This project is not connected to Topbeam (or .ocean/state.json could not be read). First run: topbeam init",
       notes: [],
     };
   }
@@ -175,13 +175,13 @@ export async function runSync(cwd: string, opts: SyncOptions = {}): Promise<Sync
    */
   const { kayitlar: gozlemler, atlanan: bozukGozlem } = await gozlemleriOku(cwd);
   if (bozukGozlem > 0) {
-    notes.push(`${bozukGozlem} gözlem satırı okunamadı ve atlandı (bozuk JSON) — sessiz silme yok.`);
+    notes.push(`${bozukGozlem} observation lines could not be read and were skipped (broken JSON) — nothing is deleted silently.`);
   }
   const tazeClaims = [...truth.claims, ...gozlemClaims(gozlemler)];
   const { merged, droppedStale } = mergeClaims(state.claims, tazeClaims);
   if (droppedStale > 0) {
     notes.push(
-      `${droppedStale} eski doğrulanmamış claim bu senkronda yeniden üretilmedi ve düşürüldü (transcript değişmiş olabilir); pasaport maddeleri iz olarak korunur.`,
+      `${droppedStale} older unverified claims were not reproduced by this sync and were dropped (the transcript may have changed); the passport items are kept as a trace.`,
     );
   }
   const keptHuman = state.log.filter((e) => e.source === 'insan' || e.source === 'ocean');
@@ -268,11 +268,11 @@ export async function runSync(cwd: string, opts: SyncOptions = {}): Promise<Sync
   const ledger = await readLedger(cwd);
   await writePano(cwd, renderPano(next, { goalText, ledger }));
 
-  if (hits > 0) notes.push(`${hits} parça olası gizli bilgi maskelendi (state/pano).`);
+  if (hits > 0) notes.push(`${hits} pieces of possible secret data were masked (state/board).`);
   if (goalItems.length === 0) {
     notes.push(
-      'goal.md içinde `- [ ]` teslim sözü yok — bar gösterilmiyor (boş bar sahte affordance olurdu). ' +
-        'Teslim sözlerini .ocean/goal.md dosyasına yaz, bar orada dolsun.',
+      'No `- [ ]` delivery promise in goal.md — the bar is not shown (an empty bar would be a false ' +
+        'affordance). Write your delivery promises in .ocean/goal.md and the bar fills from there.',
     );
   }
   // Dayanağı düşmüş onay iddiası SESSİZ kalmaz — sayıyla söylenir.
@@ -281,8 +281,9 @@ export async function runSync(cwd: string, opts: SyncOptions = {}): Promise<Sync
   ).length;
   if (kaynaksizMadde > 0) {
     notes.push(
-      `${kaynaksizMadde} teslim sözü kendini insan onaylı sayıyor ama passport.jsonl defterinde ` +
-        `terminal imzalı bir doğrulama kaydına bağlanamadı — panoda "kanal kaydı yok" diye işaretlendi (silinmedi).`,
+      `${kaynaksizMadde} delivery promises call themselves human-approved but could not be bound to a ` +
+        'terminal-signed verification entry in the passport.jsonl ledger — marked "no ledger entry" on the ' +
+        'board (nothing was deleted).',
     );
   }
 

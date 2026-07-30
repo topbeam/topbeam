@@ -358,7 +358,10 @@ test('collectClaude: hiç kaydı olmayan proje → 0 transcript + dürüst not',
   assert.equal(res.transcriptsFound, 0);
   assert.equal(res.sessions.length, 0);
   assert.ok(res.notes.length >= 1);
-  assert.ok(res.notes[0]?.includes('doğrulanamadı'));
+  // Dürüstlük kaydı: not, kesin konuşmaz — "doğrulanamadı" hedge'i İngilizcede
+  // '(not confirmed)' olarak geçiyor (claude.ts: 'There is no transcript
+  // directory for this project — … or the records were cleared (not confirmed).').
+  assert.ok(res.notes[0]?.includes('not confirmed'));
 });
 
 test('collectClaude: slug dizini var ama .jsonl yok → retention notu', async () => {
@@ -452,7 +455,9 @@ test('SAKLAMA UYARISI: 25 günden eski transcript varsa kullanıcı uyarılır',
     res.notes.some((n) => n.includes('cleanupPeriodDays')),
     `saklama uyarısı verilmeli — notlar: ${JSON.stringify(res.notes)}`,
   );
-  assert.ok(res.notes.some((n) => n.includes('27 günlük')), 'gerçek yaş yazılmalı');
+  // Gerçek yaş yazılmalı — sabit/yuvarlanmış bir cümle değil.
+  // claude.ts: `The oldest transcript is ${gun} days old. …`
+  assert.ok(res.notes.some((n) => n.includes('27 days old')), 'gerçek yaş yazılmalı');
 });
 
 test('SAKLAMA UYARISI: taze kayıtta uyarı VERİLMEZ (gereksiz korku yok)', async () => {

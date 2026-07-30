@@ -68,9 +68,9 @@ test('hiç claim yok → sakin boş kart, aksiyon topbeam sync', () => {
   assert.deepEqual(card.evidence, { gitDiff: null, testOutput: null, humanApproval: null });
   assert.equal(card.action.command, 'topbeam sync');
   assert.equal(card.updatedAt, NOW.toISOString());
-  // Sakin dil: alarm/motivasyon/yüzde yok.
+  // Sakin dil: alarm/motivasyon/yüzde yok. (Çıktı İngilizce → nöbetçi kelimeler de İngilizce.)
   const all = `${card.fact} ${card.unknown} ${card.why} ${card.doneWhen}`;
-  assert.ok(!/[!%]|ACİL|hemen/i.test(all));
+  assert.ok(!/[!%]|urgent|immediately/i.test(all));
 });
 
 test('her şey insan onaylı → tam kart, bekleyen iş yok', () => {
@@ -100,7 +100,7 @@ test('en son dokunulan doğrulanmamış claim seçilir (createdAt desc)', () => 
   assert.equal(card.id, 'dosya-transcript-s2');
   assert.equal(card.fact, yeni.text);
   assert.equal(card.factLevel, 'dogrulanmadi');
-  assert.equal(card.why, 'En son dokunulan ve henüz doğrulanmamış iş bu.');
+  assert.equal(card.why, 'This is the most recently touched work that nobody has verified yet.');
 });
 
 test('eşit createdAt → id sırası (deterministik seçim)', () => {
@@ -124,7 +124,7 @@ test('doğrulanmamış yoksa: kanıtlı-ama-onaysız en yenisi → topbeam verif
   assert.equal(card.factLevel, 'test-kaniti'); // seviye AYNEN — yükseltme yok
   assert.equal(card.action.command, verifyCommand('test-s1-0'));
   assert.ok(card.doneWhen.includes('topbeam verify test-s1-0'));
-  assert.ok(card.doneWhen.includes('insan-onayı'));
+  assert.ok(card.doneWhen.includes('human approval'));
 });
 
 // ── komut önerisi (package.json scripts) ─────────────────────────────────────
@@ -148,10 +148,10 @@ test('GİT YOK: "git status" ÖNERİLMEZ — hareket insan onayına döner (saht
   const card = buildCard([c], { now: NOW, isGitRepo: false });
   assert.notEqual(card.action.command, 'git status');
   assert.equal(card.action.command, verifyCommand('dosya-transcript-s1'));
-  assert.ok(card.action.verb.includes('git deposu değil'));
+  assert.ok(card.action.verb.includes('not a git repo'));
   // Bitiş koşulu da ERİŞİLEBİLİR olmalı: kapalı yol (dosya-kanıtı) vaat edilmez.
-  assert.equal(card.doneWhen.includes('git kaydında göründüğünde'), false);
-  assert.ok(card.doneWhen.includes('insan-onayı'));
+  assert.equal(card.doneWhen.includes('shows up in the git record'), false);
+  assert.ok(card.doneWhen.includes('human approval'));
   // Kanıt seviyesi GEVŞEMEZ: git yok diye iddia yükselmez.
   assert.equal(card.factLevel, 'dogrulanmadi');
 });
@@ -213,9 +213,9 @@ test('GPT spec: 6 alan dolu + tek bilinmeyen + açık bitiş koşulu', () => {
   assert.ok(card.unknown.length > 0 && !card.unknown.includes('\n')); // (c) TEK bilinmeyen
   assert.ok(card.action.verb.length > 0); // (d)
   assert.ok(card.why.length > 0 && !card.why.includes('\n')); // (e) tek cümle
-  assert.ok(card.doneWhen.includes('kanıt') || card.doneWhen.includes('onay')); // (f) kanıt-yükseltme koşulu
+  assert.ok(card.doneWhen.includes('evidence') || card.doneWhen.includes('approval')); // (f) kanıt-yükseltme koşulu
   assert.ok(card.doneWhen.includes(`topbeam verify ${card.id}`)); // buton komutla uyumlu
-  assert.equal(CARD_PRIMARY_BUTTON_TR, 'Doğrulamayı başlat');
+  assert.equal(CARD_PRIMARY_BUTTON_TR, 'Start verifying');
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -234,10 +234,10 @@ test('kural kirik-test: başarısız test, DAHA YENİ doğrulanmamış işin ön
   assert.equal(card.id, 'test-s1-0');
   assert.equal(card.factLevel, 'test-kaniti'); // seviye AYNEN — kural yükseltmez/düşürmez
   assert.equal(card.fact, kirik.text);
-  assert.ok(card.why.includes('2 başarısız'));
+  assert.ok(card.why.includes('2 failing'));
   assert.equal(card.action.command, 'npm test'); // kayıtlı komutla AYNI koşum
   assert.equal(card.evidence.testOutput, 'ℹ fail 2');
-  assert.ok(card.doneWhen.includes('test-kanıtı'));
+  assert.ok(card.doneWhen.includes('test evidence'));
 });
 
 test('kural kirik-test: sıfır-dışı exit de kırık sayılır — seviye doğrulanmadı KALIR', () => {
@@ -279,7 +279,7 @@ test('kirik-test: kayıtlı sayı varsa exit koduna bakılmaz (143 olsa da kır�
   const c = testClaim('test-s1-0', { signals: { failedTests: 3, passedTests: 10, nonZeroExit: 143 } });
   const card = buildCard([c], { now: NOW });
   assert.equal(card.rule, 'kirik-test');
-  assert.ok(card.why.includes('3 başarısız'));
+  assert.ok(card.why.includes('3 failing'));
 });
 
 test('hareket komutu SAHTE AFFORDANCE olamaz: uzun kabuk zinciri butona konmaz', () => {
@@ -497,8 +497,8 @@ test('BAYAT kırık kayıt manşette KALIR ama tarihini + yaşını AÇIKÇA yaz
   // Yeşile döndüğü kayıt YOK → gizlenmez (yaşlandırarak susmak dürüstlüğü deler).
   assert.equal(card.rule, 'kirik-test');
   assert.ok(card.why.includes('2026-07-11'), 'gerekçe kaydın tarihini yazmalı');
-  assert.ok(card.why.includes('17 gün'), 'gerekçe kaydın yaşını yazmalı');
-  assert.ok(card.why.includes('bugünün ölçümü değil'));
+  assert.ok(card.why.includes('17 days'), 'gerekçe kaydın yaşını yazmalı');
+  assert.ok(card.why.includes("not today's measurement"));
   assert.ok(card.unknown.includes('2026-07-11'), 'bilinmeyen satırı da tarihi taşımalı');
   assert.ok(!card.why.includes('\n') && !card.unknown.includes('\n')); // tek cümle korunur
 });
@@ -514,7 +514,7 @@ test('BAYAT etiketi sıfır-dışı exit dalında da çalışır', () => {
   const card = buildCard([eskiExit], { now: NOW });
   assert.equal(card.rule, 'kirik-test');
   assert.ok(card.why.includes('exit 1'));
-  assert.ok(card.why.includes('2026-07-11') && card.why.includes('17 gün'));
+  assert.ok(card.why.includes('2026-07-11') && card.why.includes('17 days'));
 });
 
 test('TAZE kırık kayıt tarih etiketi ALMAZ (gereksiz gürültü yok)', () => {
@@ -522,15 +522,15 @@ test('TAZE kırık kayıt tarih etiketi ALMAZ (gereksiz gürültü yok)', () => 
   const card = buildCard([taze], { now: NOW });
   assert.equal(card.rule, 'kirik-test');
   assert.equal(card.why.includes('2026-07-26'), false);
-  assert.ok(card.why.includes('her şeyin önünde'));
+  assert.ok(card.why.includes('comes before everything else'));
 });
 
 test('BAYAT eşiği: HEURISTIC.bayatKirikGun sınırı kilitli (6 gün etiketsiz, 7 gün etiketli)', () => {
   assert.equal(HEURISTIC.bayatKirikGun, 7);
   const alti = testClaim('test-a', { createdAt: '2026-07-22T11:00:00.000Z' }); // 6 gün 1 saat
   const yedi = testClaim('test-b', { createdAt: '2026-07-21T11:00:00.000Z' }); // 7 gün 1 saat
-  assert.equal(buildCard([alti], { now: NOW }).why.includes('gün önceki koşum'), false);
-  assert.ok(buildCard([yedi], { now: NOW }).why.includes('7 gün önceki koşum'));
+  assert.equal(buildCard([alti], { now: NOW }).why.includes('days ago'), false);
+  assert.ok(buildCard([yedi], { now: NOW }).why.includes('a run from 7 days ago'));
 });
 
 test('BAYAT: komut kaydı yoksa "yeşile dönmedi" İDDİA EDİLMEZ (kanıtsız cümle yok)', () => {
@@ -540,7 +540,7 @@ test('BAYAT: komut kaydı yoksa "yeşile dönmedi" İDDİA EDİLMEZ (kanıtsız 
   });
   const why = buildCard([komutsuz], { now: NOW }).why;
   assert.ok(why.includes('2026-07-11')); // tarih yine yazılır
-  assert.equal(why.includes('yeşile döndüğü'), false); // ama kanıtsız iddia edilmez
+  assert.equal(why.includes('going green'), false); // ama kanıtsız iddia edilmez
 });
 
 // ── kartın gösterdiği gerçeğin TARİHİ ────────────────────────────────────────
@@ -578,7 +578,7 @@ test('test sayısı ATIFLI: gerekçe hangi komutun sonucu olduğunu söyler', ()
   const kirik = testClaim('test-s1-0');
   const why = buildCard([kirik], { now: NOW }).why;
   assert.ok(why.includes('npm test'), 'gerekçe komutu adıyla anmalı');
-  assert.ok(why.includes('2 başarısız'));
+  assert.ok(why.includes('2 failing'));
 
   // Mutlak yol taşıyan komut atıf olarak VERİLMEZ (kapsam sızıntısı yok).
   const yolsuz = testClaim('test-s1-1', {
@@ -588,7 +588,7 @@ test('test sayısı ATIFLI: gerekçe hangi komutun sonucu olduğunu söyler', ()
   });
   const why2 = buildCard([yolsuz], { now: NOW }).why;
   assert.equal(why2.includes('/Users/'), false);
-  assert.ok(why2.includes('2 başarısız'));
+  assert.ok(why2.includes('2 failing'));
 });
 
 test('kirik-test: insan onaylı kırık test kartı ele geçirmez (karar verilmiş iş)', () => {
@@ -620,7 +620,7 @@ test('kural kritik-dosya: kimlik dosyası, daha yeni sıradan işin önüne geç
 
   assert.equal(card.rule, 'kritik-dosya');
   assert.equal(card.id, 'dosya-transcript-s1');
-  assert.ok(card.why.includes('kimlik/oturum'));
+  assert.ok(card.why.includes('auth/session'));
   assert.ok(card.why.includes('src/auth/login.ts')); // gerekçe kayıttaki dosyayı ADIYLA söyler
   assert.equal(card.factLevel, 'dogrulanmadi');
 });
@@ -635,17 +635,17 @@ test('kritik-dosya önem sırası: ödeme, kimliğin önünde', () => {
   });
   const card = buildCard([kimlik, odeme], { now: NOW });
   assert.equal(card.id, 'dosya-transcript-s2');
-  assert.ok(card.why.includes('ödeme'));
+  assert.ok(card.why.includes('payments'));
 });
 
 test('kritik-dosya: şema ve yapılandırma da yakalanır (migration, .env)', () => {
   const sema = buildCard([dosyaClaim('c1', ['db/migrations/003_add_users.sql'])], { now: NOW });
   assert.equal(sema.rule, 'kritik-dosya');
-  assert.ok(sema.why.includes('veri şeması'));
+  assert.ok(sema.why.includes('data schema'));
 
   const conf = buildCard([dosyaClaim('c2', ['.env.local'])], { now: NOW });
   assert.equal(conf.rule, 'kritik-dosya');
-  assert.ok(conf.why.includes('yapılandırma'));
+  assert.ok(conf.why.includes('config'));
 });
 
 test('kritik-dosya YANLIŞ POZİTİF üretmez: author.ts / tokens.css kritik değil', () => {
@@ -689,7 +689,7 @@ test('kural kayip-riski: git izi olmayan büyük küme + hareket = commit kontro
 
   assert.equal(card.rule, 'kayip-riski');
   assert.equal(card.id, 'dosya-transcript-s1');
-  assert.ok(card.why.includes('5 dosya'));
+  assert.ok(card.why.includes('5 files'));
   // git status bu kümeyi zaten göstermez (tanımı bu) → asıl soru commit'lendi mi.
   assert.equal(card.action.command, 'git log --oneline -5');
 });
@@ -719,8 +719,8 @@ test('kural bayat: doğrulanmamış işlerin HEPSİ eskiyse en uzun bekleyen se�
 
   assert.equal(card.rule, 'bayat');
   assert.equal(card.id, 'dosya-transcript-s1'); // en yeni DEĞİL, en uzun bekleyen
-  assert.ok(card.why.includes('8 gün'));
-  assert.ok(card.why.includes('4 gün'));
+  assert.ok(card.why.includes('8 days'));
+  assert.ok(card.why.includes('4 days'));
 });
 
 test('bayat: tek taze iş varsa kural kapanır (aktif çalışma bölünmez)', () => {
@@ -751,8 +751,8 @@ test('kural kume: aynı oturumun en kapsamlı kaydı, daha yeni tek-dosyalık do
 
   assert.equal(card.rule, 'kume');
   assert.equal(card.id, 'dosya-transcript-s1');
-  assert.ok(card.why.includes('2 doğrulanmamış kayıt'));
-  assert.ok(card.why.includes('3 dosya'));
+  assert.ok(card.why.includes('2 unverified records'));
+  assert.ok(card.why.includes('3 files'));
 });
 
 test('kume: dosya sayısı ölçülmemişse kural susar (en kapsamlısı denemez)', () => {
@@ -848,7 +848,7 @@ test('onay bekleyenler arasında da risk sırası: kritik dosya öne geçer', ()
   assert.equal(card.rule, 'insan-onayi-bekliyor');
   assert.equal(card.id, 'dosya-git-s1');
   assert.equal(card.factLevel, 'dosya-kaniti'); // AYNEN
-  assert.ok(card.why.includes('ödeme'));
+  assert.ok(card.why.includes('payments'));
   assert.equal(card.action.command, verifyCommand('dosya-git-s1'));
 });
 
@@ -911,7 +911,8 @@ test('İNVARYANT: her kuralın gerekçesi AYRI ve sakin (alarm/yüzde/motivasyon
 
     const metin = `${card.why} ${card.unknown} ${card.action.verb} ${card.doneWhen}`;
     assert.ok(!/[!%]/.test(metin), `${senaryo.ad}: alarm/yüzde dili`);
-    assert.ok(!/ACİL|hemen|harika|tebrikler|başardın/i.test(metin), `${senaryo.ad}: motivasyon dili`);
+    // Nöbetçi kelimeler çıktı diliyle AYNI olmalı — İngilizce çıktıda Türkçe liste ölü nöbetçidir.
+    assert.ok(!/urgent|immediately|awesome|congrat|you did it/i.test(metin), `${senaryo.ad}: motivasyon dili`);
     assert.ok(!card.why.includes('\n') && !card.unknown.includes('\n'), `${senaryo.ad}: tek cümle`);
   }
   assert.equal(gerekceler.size, SENARYOLAR.length);

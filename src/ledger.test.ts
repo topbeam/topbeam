@@ -88,7 +88,7 @@ test('INVARYANT: source "terminal" DEĞİLSE insan rozeti YOK', () => {
       `source=${String(source)} rozet kazanmamalı`,
     );
     assert.ok(
-      (d.gecersiz.get('test-abc-0') ?? '').includes('kanal'),
+      (d.gecersiz.get('test-abc-0') ?? '').includes('no ledger entry'),
       'gerekçe kanal eksikliğini söylemeli',
     );
   }
@@ -137,12 +137,12 @@ test('kayitGecerliMi: her şart ayrı ayrı kapıdır', () => {
     return c.ok === false ? c.neden : '';
   };
   assert.ok(red({ claimId: undefined }).includes('claimId'));
-  assert.ok(red({ at: '' }).includes('zaman'));
-  assert.ok(red({ by: 'bilinmiyor' }).includes('imza'));
-  assert.ok(red({ by: '   ' }).includes('imza'));
-  assert.ok(red({ source: undefined }).includes('kanal'));
+  assert.ok(red({ at: '' }).includes('timestamp'));
+  assert.ok(red({ by: 'bilinmiyor' }).includes('signature'));
+  assert.ok(red({ by: '   ' }).includes('signature'));
+  assert.ok(red({ source: undefined }).includes('no ledger entry'));
   assert.ok(red({ decision: 'corrected' }).includes('approved'));
-  assert.ok(red({ levelAfter: 'test-kaniti' }).includes('insan-onayı'));
+  assert.ok(red({ levelAfter: 'test-kaniti' }).includes('human approval'));
 });
 
 test('kayitGecerliMi: dosyadan gelen ŞEKİL varsayılmaz (çöp satır patlatmaz)', () => {
@@ -168,7 +168,7 @@ test('SESSİZ SİLME YOK: geçersiz kayıt gerekçesiyle sayılır ve işaretlen
   assert.equal(d.okunanSatir, 2);
   assert.equal(d.reddedilenSatir, 2);
   assert.equal(d.gecerli.size, 0);
-  assert.ok(d.gecersiz.get('kanalsiz-1')?.includes('kanal'), 'gerekçe insan-okur olmalı');
+  assert.ok(d.gecersiz.get('kanalsiz-1')?.includes('no ledger entry'), 'gerekçe insan-okur olmalı');
 });
 
 test('bozuk satır, AYNI claim için var olan gerçek onayı GÖLGELEMEZ', () => {

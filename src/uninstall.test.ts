@@ -56,14 +56,16 @@ test('CLAUDE.md: bölüm yoksa dosyaya DOKUNULMAZ', () => {
 });
 
 test('.gitignore: yalnız bizim satır gider, kullanıcının kuralları kalır', () => {
-  const metin = 'node_modules/\ndist/\n\n# Topbeam çalışma verisi — komut metinleri ve onay defteri içerir.\n.ocean/\n\n*.log\n';
+  const metin = 'node_modules/\ndist/\n\n# Topbeam working data — contains command text and the approval ledger.\n.ocean/\n\n*.log\n';
   const { text, bulundu } = gitignoreSatiriniCikar(metin);
   assert.equal(bulundu, true);
   assert.ok(text.includes('node_modules/'));
   assert.ok(text.includes('dist/'));
   assert.ok(text.includes('*.log'));
   assert.equal(text.includes('.ocean/'), false);
-  assert.equal(text.includes('Topbeam çalışma verisi'), false);
+  // Nöbetçi: bizim yorum satırımız da gitmeli. Fixture (ve init) artık İngilizce
+  // yazıyor — Türkçe dizeyi aramak sessizce hep "false" döner, hiçbir şey ölçmez.
+  assert.equal(text.includes('Topbeam working data'), false);
 });
 
 test('VERİ KORUMASI: uninstall .ocean/ dizinini SİLMEZ (defter yeniden üretilemez)', async () => {
@@ -79,7 +81,7 @@ test('VERİ KORUMASI: uninstall .ocean/ dizinini SİLMEZ (defter yeniden üretil
   const log = await readFile(passportLogPath(dir), 'utf8');
   assert.ok(log.includes('approved'), 'onay defteri silinmemeli');
   assert.ok(
-    res.dokunulmayan.some((d) => d.includes('imzalı onay')),
+    res.dokunulmayan.some((d) => d.includes('signed approval')),
     'neyin neden kaldığı SÖYLENMELİ',
   );
   // İzler gitmiş
@@ -95,8 +97,8 @@ test('--purge: siler AMA ne kaybedildiğini SAYIYLA söyler', async () => {
   const res = await runUninstall(dir, { purge: true });
   await assert.rejects(() => readFile(passportLogPath(dir), 'utf8'), 'purge gerçekten silmeli');
   assert.ok(
-    res.uyarilar.some((u) => u.includes('2 imzalı onay kaydı')),
+    res.uyarilar.some((u) => u.includes('2 signed approval entries')),
     'kaç kayıt gittiği sessiz kalamaz',
   );
-  assert.ok(res.uyarilar.some((u) => u.includes('GERİ GETİRİLEMEZ')));
+  assert.ok(res.uyarilar.some((u) => u.includes('NO WAY BACK')));
 });

@@ -60,8 +60,8 @@ async function oceanDiziniGuvenliMi(cwd: string): Promise<void> {
     throw new GuvenliYazmaHatasi(
       dizin,
       'disari-cikiyor',
-      `Güvenlik: .ocean dizini proje kökünün DIŞINA çıkıyor (${dizin}). ` +
-        'Topbeam proje kökü dışına yazmaz. Symlink ise kaldır, sonra tekrar dene.',
+      `Security: the .ocean directory resolves OUTSIDE the project root (${dizin}). ` +
+        'Topbeam does not write outside the project root. If it is a symlink, remove it and try again.',
     );
   }
 }
@@ -93,8 +93,8 @@ async function guvenliYaz(
       throw new GuvenliYazmaHatasi(
         yol,
         'symlink',
-        `Güvenlik: ${yol} bir symlink — Topbeam symlink üzerinden YAZMAZ ` +
-          '(hedefteki dosyayı ezerdi). Bağlantıyı kaldır, sonra tekrar dene.',
+        `Security: ${yol} is a symlink — Topbeam does NOT write through symlinks ` +
+          '(it would overwrite the file at the other end). Remove the link, then try again.',
       );
     }
     throw e;

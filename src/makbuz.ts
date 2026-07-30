@@ -69,10 +69,10 @@ export const COMMIT_MAX = 8;
 export const DOGRULAMA_COMMIT_MAX = 5;
 
 const SEVIYE_ADI: Record<EvidenceLevel, string> = {
-  'dosya-kaniti': 'dosya-kanıtı',
-  'test-kaniti': 'test-kanıtı',
-  'insan-onayi': 'insan-onayı',
-  dogrulanmadi: 'doğrulanmadı',
+  'dosya-kaniti': 'file evidence',
+  'test-kaniti': 'test evidence',
+  'insan-onayi': 'human approval',
+  dogrulanmadi: 'not verified',
 };
 
 /** ISO ts → "2026-07-29 14:03" (deterministik dilimleme, locale yok). */
@@ -185,8 +185,8 @@ function seviyeDokumu(item: PassportItem, byId: ReadonlyMap<string, Claim>): str
   const parcalar = [...sayac.entries()]
     .sort((a, b) => a[0].localeCompare(b[0]))
     .map(([lvl, n]) => `${n} ${SEVIYE_ADI[lvl]}`);
-  if (bilinmeyen > 0) parcalar.push(`${bilinmeyen} kaydın karşılığı state'te yok`);
-  return parcalar.length > 0 ? parcalar.join(' · ') : 'kayıt bulunamadı';
+  if (bilinmeyen > 0) parcalar.push(`${bilinmeyen} records have no counterpart in state`);
+  return parcalar.length > 0 ? parcalar.join(' · ') : 'no records found';
 }
 
 /** En son TEST-KANITI kaydı (sayı çıktıdan okunmuş olan) — yoksa null. */
@@ -240,20 +240,20 @@ export function sozSatirlari(
     let durum: string;
     if (onayli) {
       durum =
-        `İNSAN ONAYLI — ${kimler === '' ? 'imza kaydı yok' : kimler}` +
-        `${enSon !== null ? ` · ${fmtTs(enSon)}` : ''} (terminal imzası · .ocean/${PASSPORT_LOG_FILE})`;
+        `HUMAN APPROVED — ${kimler === '' ? 'no signature on record' : kimler}` +
+        `${enSon !== null ? ` · ${fmtTs(enSon)}` : ''} (terminal signature · .ocean/${PASSPORT_LOG_FILE})`;
     } else if (item.level === 'insan-onayi') {
       // En tehlikeli hâl: kayıt kendini onaylı sanıyor. Makbuz tik VERMEZ.
-      durum = `insan onayı DOĞRULANAMADI — ${ROZETSIZ_NOT} (.ocean/${PASSPORT_LOG_FILE} içinde terminal imzalı kayıt yok)`;
+      durum = `human approval NOT CONFIRMED — ${ROZETSIZ_NOT} (no terminal-signed entry in .ocean/${PASSPORT_LOG_FILE})`;
     } else {
       const seviye = EVIDENCE_LEVEL_LABELS_TR[item.level].split(' — ')[0] ?? SEVIYE_ADI[item.level];
-      durum = `insan onayı YOK — en yüksek kanıt: ${seviye.toLocaleLowerCase('tr-TR')}`;
+      durum = `no human approval — highest evidence: ${seviye.toLocaleLowerCase('en-US')}`;
     }
 
     const kanit =
       item.claimIds.length === 0
-        ? 'kayıt yok'
-        : `${item.claimIds.length} kayıt (${seviyeDokumu(item, byId)})`;
+        ? 'no records'
+        : `${item.claimIds.length} records (${seviyeDokumu(item, byId)})`;
 
     return {
       no: i + 1,
@@ -322,23 +322,23 @@ export interface MakbuzGirdi {
 function sozsuzMetin(goalSozSayisi: number | undefined): string {
   if (goalSozSayisi !== undefined && goalSozSayisi > 0) {
     return (
-      `\`.ocean/goal.md\` dosyasında ${goalSozSayisi} teslim sözü yazılı, ama bu makbuzun dayandığı ` +
-      'durum kaydında (`state.json`) henüz yok — büyük olasılıkla `topbeam sync` koşulmadı. ' +
-      'Makbuz sözleri uydurmaz: aşağıda yalnız ölçülmüş kayıtlar var.'
+      `${goalSozSayisi} delivery promises are written in \`.ocean/goal.md\`, but they are not yet in the ` +
+      'state record this receipt is built from (`state.json`) — most likely `topbeam sync` has not run. ' +
+      'The receipt does not invent promises: below are only the records that were measured.'
     );
   }
   return (
-    'Bu projede teslim sözü yazılmamış (`.ocean/goal.md` içinde `- [ ]` satırı yok) — ' +
-    'onaylanacak madde olmadığı için bu makbuz bir teslim beyanı değil, yalnız bir kanıt dökümüdür.'
+    'No delivery promise has been written in this project (no `- [ ]` line in `.ocean/goal.md`) — ' +
+    'with nothing to approve, this receipt is not a delivery statement, only an inventory of evidence.'
   );
 }
 
 const NE_DEMEK_DEGIL = [
-  '"Ürün hatasız" demek değildir — makbuz yalnız yukarıdaki sözlerin ve ölçülen kayıtların kapsamı kadardır.',
-  'Kanıt seviyesi kalite ölçüsü değildir: testin geçmesi, testin doğru şeyi ölçtüğünü göstermez.',
-  'İnsan onayı, onaylayan kişinin kendi gözüyle gördüğü kadardır — Topbeam yalnız kaydı tutar.',
-  'Kapsam dışında kalan iş burada görünmez: makbuz, ölçülmemiş bir şeyi "yok" saymaz, "bilmiyorum" der.',
-  'Bu bir kayıttır, reklam değildir: sayılar ölçülmüştür, yüzde ve ilerleme iddiası yoktur.',
+  'It does not say the product is free of defects — the receipt reaches exactly as far as the promises above and the records measured.',
+  'An evidence level is not a measure of quality: a passing test does not show that the test measures the right thing.',
+  'A human approval reaches only as far as what that person saw with their own eyes — Topbeam just keeps the record.',
+  'Work outside the scope does not appear here: for anything it did not measure, this receipt says "I do not know" — not "it is not there".',
+  'This is a record, not an advertisement: the numbers were measured, and no percentage or progress is claimed.',
 ];
 
 /** "Kendin doğrula" adımları — kopyalanabilir, salt-okunur, sıralı. */
@@ -353,7 +353,7 @@ function dogrulamaBlogu(g: MakbuzGirdi, commitler: readonly CommitKaydi[]): Dogr
   const satirlar: string[] = [];
   const notlar: string[] = [];
 
-  satirlar.push('# 1) Commit\'leri kendi gözünle gör — SHA\'lar bu depodan okundu');
+  satirlar.push('# 1) See the commits with your own eyes — the SHAs were read from this repo');
   if (commitler.length > 0) {
     for (const c of commitler.slice(0, DOGRULAMA_COMMIT_MAX)) satirlar.push(`git show ${c.sha} --stat`);
   } else {
@@ -361,36 +361,36 @@ function dogrulamaBlogu(g: MakbuzGirdi, commitler: readonly CommitKaydi[]): Dogr
     if (headler.length > 0) {
       for (const sha of headler.slice(0, DOGRULAMA_COMMIT_MAX)) satirlar.push(`git show ${sha} --stat`);
       notlar.push(
-        'Commit özeti kaydı yok; yukarıdaki kimlikler kayıtların ölçüldüğü andaki HEAD\'dir (state.json).',
+        'No commit summary on record; the ids above are the HEAD at the moment the records were measured (state.json).',
       );
     } else {
-      satirlar.push('# (bu makbuzda commit kaydı yok — aşağıdaki "bilmedikleri" bölümüne bak)');
+      satirlar.push('# (no commit record in this receipt — see the "what it does not know" section below)');
     }
   }
 
   satirlar.push('');
-  satirlar.push('# 2) Testleri kendin koş — sayıyı makbuz değil, komut söyler');
+  satirlar.push('# 2) Run the tests yourself — the number comes from the command, not from this receipt');
   if (g.testKomutu !== undefined && g.testKomutu !== null && g.testKomutu !== '') {
     satirlar.push(g.testKomutu);
   } else {
-    satirlar.push('# (test komutu kaydı yok: package.json içinde "test" script\'i tanımlı değil)');
+    satirlar.push('# (no test command on record: package.json defines no "test" script)');
   }
 
   satirlar.push('');
-  satirlar.push('# 3) İnsan onaylarının değişmez kaydını oku (append-only defter)');
+  satirlar.push('# 3) Read the immutable record of human approvals (append-only ledger)');
   satirlar.push(`cat .ocean/${PASSPORT_LOG_FILE}`);
 
   satirlar.push('');
-  satirlar.push('# 4) Bu makbuzu sıfırdan yeniden üret — aynı girdi, aynı çıktı');
+  satirlar.push('# 4) Rebuild this receipt from scratch — same input, same output');
   satirlar.push('topbeam sync && topbeam makbuz');
 
   const ciClaims = ciKayitlari(g.claims);
   if (ciClaims.length > 0) {
     notlar.push(
-      'CI kayıtları GitHub Actions\'tan okundu; koşum bağlantısı saklanmadığı için depodaki Actions sekmesinden kendin bakabilirsin.',
+      'The CI records were read from GitHub Actions; the run link is not stored, so check the Actions tab of the repo yourself.',
     );
   } else if ((g.ci ?? []).length === 0) {
-    notlar.push('Bu makbuzda CI kaydı yok — doğrulama yalnız yerel kanıtlar üzerinden yapılır.');
+    notlar.push('This receipt holds no CI record — verification runs on local evidence only.');
   }
   return { satirlar, notlar };
 }
@@ -399,39 +399,39 @@ function dogrulamaBlogu(g: MakbuzGirdi, commitler: readonly CommitKaydi[]): Dogr
 function kapsamSatirlari(scope: ScopeNotes | undefined): string[] {
   if (scope === undefined) {
     return [
-      'Kapsam kaydı yok — bu makbuz, kapsam ölçümü eklenmeden önce yazılmış bir durumdan üretildi. `topbeam sync` koşunca neyin elendiği buraya yazılır.',
+      'No scope record — this receipt was produced from a state written before scope was measured. Run `topbeam sync` and what was filtered out gets written here.',
     ];
   }
   const c = scope.log;
   const rows: string[] = [];
   if (scope.disKapsamDuzenleme > 0) {
     rows.push(
-      `Proje dışı düzenleme: ${scope.disKapsamDuzenleme} düzenleme bu proje kökünün dışındaydı — kayıtlara alınmadı.`,
+      `Edits outside the project: ${scope.disKapsamDuzenleme} edits were outside this project root — not recorded.`,
     );
   }
   if (c.ilgisizBeyan > 0) {
-    rows.push(`İlişkilendirilemeyen beyan: ${c.ilgisizBeyan} satır bu projeye bağlanamadı — log'a alınmadı.`);
+    rows.push(`Statements that could not be linked: ${c.ilgisizBeyan} lines could not be tied to this project — left out of the log.`);
   }
   if (scope.kontrolKomutu > 0) {
     rows.push(
-      `Kayıt üretmeyen kontrol komutu: ${scope.kontrolKomutu} komut (tsc/eslint gibi) geçti/kaldı sayısı üretmez — sonuç uydurulmadı.`,
+      `Check commands that produce no record: ${scope.kontrolKomutu} commands (tsc, eslint and the like) report no pass/fail count — no result was invented.`,
     );
   }
   if (scope.atlananOturum > 0) {
-    rows.push(`Atlanan oturum: ${scope.atlananOturum} Claude Code oturumu başka bir dizinde kaydedilmiş.`);
+    rows.push(`Skipped sessions: ${scope.atlananOturum} Claude Code sessions were recorded in another directory.`);
   }
   if (scope.kisaltilanYol > 0) {
-    rows.push(`Kısaltılan yol: ${scope.kisaltilanYol} yerde proje dışı mutlak yol "~/…" diye kısaltıldı.`);
+    rows.push(`Shortened paths: in ${scope.kisaltilanYol} places an absolute path outside the project was shortened to "~/…".`);
   }
   if (scope.gitYok) {
     rows.push(
-      'Git: bu dizin bir git deposu değil — commit kanıtı ve `git show` doğrulaması bu projede kapalı.',
+      'Git: this directory is not a git repository — commit evidence and `git show` verification are closed for this project.',
     );
   }
   rows.push(
-    `Log satır zinciri: ham ${c.hamToplam} satır (${c.hamKanit} kanıt · ${c.hamBeyan} beyan) → ` +
-      `${c.ilgisizBeyan} ilişkisiz beyan elendi → ${c.tekillestirilen} tekrar tekilleşti → ` +
-      `${c.kirpilan} satır sınırda kırpıldı → kayıtta ${c.tutulan} satır.`,
+    `Log line chain: raw ${c.hamToplam} lines (${c.hamKanit} evidence · ${c.hamBeyan} statements) → ` +
+      `${c.ilgisizBeyan} unlinked statements dropped → ${c.tekillestirilen} duplicates merged → ` +
+      `${c.kirpilan} lines cut at the limit → ${c.tutulan} lines in the record.`,
   );
   return rows;
 }
@@ -450,28 +450,28 @@ export function makbuzMetni(g: MakbuzGirdi): string {
   const sonTest = sonTestKaydi(g.claims);
 
   // ── başlık ──
-  s.push(`# Teslim Makbuzu — ${g.projectName}`);
+  s.push(`# Delivery Receipt — ${g.projectName}`);
   s.push('');
-  s.push(`Tarih : ${fmtTs(g.at)}  (${g.at})`);
+  s.push(`Date  : ${fmtTs(g.at)}  (${g.at})`);
   s.push(
-    `Araç  : topbeam v${g.toolVersion} — deterministik özet: LLM yok; bu makbuz üretilirken ağa çıkılmadı (yalnız yerel kayıtlar okundu).`,
+    `Tool  : topbeam v${g.toolVersion} — deterministic summary: no LLM; nothing left this machine while the receipt was produced (local records only).`,
   );
-  s.push(`Kaynak: .ocean/state.json (Claude Code transcript + git gerçekleri) · onaylar: .ocean/${PASSPORT_LOG_FILE}`);
+  s.push(`Source: .ocean/state.json (Claude Code transcript + git facts) · approvals: .ocean/${PASSPORT_LOG_FILE}`);
   if (g.goalText !== undefined && g.goalText !== null && g.goalText.trim() !== '') {
-    s.push(`Hedef : ${g.goalText.trim()}  (beyan — kanıt değil)`);
+    s.push(`Goal  : ${g.goalText.trim()}  (a statement — not evidence)`);
   }
   s.push('');
   s.push(
-    'Bu makbuz kanıtları özetler, sonuç iddia etmez. Hiçbir satırına güvenmek zorunda değilsin: ' +
-      '"Kendin doğrula" bölümündeki komutlar salt-okunurdur, kendi makinende çalıştır.',
+    'This receipt summarises evidence; it does not claim a result. You do not have to take a single line on trust: ' +
+      'the commands under "Check it yourself" are read-only — run them on your own machine.',
   );
   s.push('');
 
   // ── teslim sözleri ──
   s.push(
     toplam > 0
-      ? `## Teslim sözleri — ${onayli} / ${toplam} madde insan onaylı`
-      : '## Teslim sözleri',
+      ? `## Delivery promises — ${onayli} / ${toplam} human-approved`
+      : '## Delivery promises',
   );
   s.push('');
   if (toplam === 0) {
@@ -479,50 +479,50 @@ export function makbuzMetni(g: MakbuzGirdi): string {
   } else {
     if (onayli === 0) {
       s.push(
-        '**Hiçbir madde henüz insan onaylı değil.** Bu makbuz bir teslim onayı DEĞİLDİR; ' +
-          'aşağıdaki kayıtların ne olduğunu ve nasıl doğrulanacağını gösterir.',
+        '**No item is human-approved yet.** This receipt is NOT a delivery approval; ' +
+          'it shows what the records below are and how to check them.',
       );
       s.push('');
     }
-    s.push('Tik yalnız terminal imzalı insan onayıyla gelir — kaydın kendi iddiası tik getirmez.');
+    s.push('A tick comes only from a terminal-signed human approval — a record vouching for itself earns nothing.');
     s.push('');
     for (const r of sozSatirlari(g.items, g.claims, g.ledger)) {
       s.push(`- [${r.onayli ? 'x' : ' '}] **${r.no}. ${r.title}**`);
-      s.push(`      Durum  : ${r.durum}`);
-      if (r.gerekce !== undefined) s.push(`      Gerekçe: ${r.gerekce}`);
+      s.push(`      Status  : ${r.durum}`);
+      if (r.gerekce !== undefined) s.push(`      Reason  : ${r.gerekce}`);
       s.push(
-        `      Kanıt  : ${r.kanit}${r.headler.length > 0 ? ` · ölçüm HEAD: ${r.headler.join(', ')}` : ''}`,
+        `      Evidence: ${r.kanit}${r.headler.length > 0 ? ` · measured at HEAD: ${r.headler.join(', ')}` : ''}`,
       );
     }
   }
   s.push('');
 
   // ── kanıt özeti ──
-  s.push('## Kanıt özeti');
+  s.push('## Evidence summary');
   s.push('');
-  s.push(`- Kayıt (claim): ${ozet.toplam} toplam`);
-  s.push(`  - dosya-kanıtı : ${ozet.dosya} — git diff ile transcript uyuşuyor`);
-  s.push(`  - test-kanıtı  : ${ozet.test} — sayı test çıktısından okundu`);
-  s.push(`  - insan onayı  : ${ozet.insanOnayi} — .ocean/${PASSPORT_LOG_FILE} defterinde terminal imzalı`);
-  s.push(`  - doğrulanmadı : ${ozet.dogrulanmadi} — uygulandı görünüyor, doğrulanmadı`);
+  s.push(`- Records (claims): ${ozet.toplam} in total`);
+  s.push(`  - file evidence : ${ozet.dosya} — the git diff and the transcript agree`);
+  s.push(`  - test evidence : ${ozet.test} — the number was read from test output`);
+  s.push(`  - human approval: ${ozet.insanOnayi} — terminal-signed in the .ocean/${PASSPORT_LOG_FILE} ledger`);
+  s.push(`  - not verified  : ${ozet.dogrulanmadi} — looks applied, nobody has confirmed it`);
   if (ozet.kaynaksiz > 0) {
     s.push(
-      `  - kanal kaydı yok: ${ozet.kaynaksiz} — kendini insan onaylı sayıyor ama defterde karşılığı yok (onay sayılmadı, kayıt silinmedi)`,
+      `  - no channel record: ${ozet.kaynaksiz} — calls itself human-approved but has no counterpart in the ledger (not counted as approval, not deleted)`,
     );
   }
   s.push(
     g.ledger.dosyaVar
-      ? `- Onay defteri: ${g.ledger.okunanSatir} satır okundu · ${g.ledger.gecerli.size} geçerli onay · ${g.ledger.reddedilenSatir} satır rozet hakkı vermedi`
-      : `- Onay defteri: .ocean/${PASSPORT_LOG_FILE} yok — hiçbir kayıt insan onaylı sayılmadı`,
+      ? `- Approval ledger: ${g.ledger.okunanSatir} lines read · ${g.ledger.gecerli.size} valid approvals · ${g.ledger.reddedilenSatir} lines earned no badge`
+      : `- Approval ledger: .ocean/${PASSPORT_LOG_FILE} is missing — no record counted as human-approved`,
   );
   s.push(
     sonTest !== null
-      ? `- Son test ölçümü: ${sonTest.text} — ${fmtTs(sonTest.createdAt)}`
-      : '- Son test ölçümü: kayıt yok — bu makbuzda sayı okunmuş bir test koşumu bulunmuyor',
+      ? `- Last test measurement: ${sonTest.text} — ${fmtTs(sonTest.createdAt)}`
+      : '- Last test measurement: no record — this receipt holds no test run with a number read from it',
   );
   if (commitler.length > 0) {
     s.push(
-      `- Commit: ${Math.min(commitler.length, COMMIT_MAX)} kayıt gösteriliyor (state'te ${commitler.length})`,
+      `- Commits: showing ${Math.min(commitler.length, COMMIT_MAX)} records (${commitler.length} in state)`,
     );
     for (const c of commitler.slice(0, COMMIT_MAX)) {
       s.push(`  - \`${c.sha}\`  ${gun(c.ts)}  ${c.ozet}`);
@@ -531,26 +531,26 @@ export function makbuzMetni(g: MakbuzGirdi): string {
     const headler = headKimlikleri(g.claims);
     s.push(
       headler.length > 0
-        ? `- Commit: özet kaydı yok; kayıtların ölçüldüğü HEAD kimlikleri: ${headler.map((h) => `\`${h}\``).join(', ')}`
-        : '- Commit: kayıt yok — bu makbuzda hiçbir commit kimliği ölçülmedi (SHA uydurulmaz)',
+        ? `- Commits: no summary on record; the HEAD ids the records were measured at: ${headler.map((h) => `\`${h}\``).join(', ')}`
+        : '- Commits: no record — no commit id was measured for this receipt (a SHA is never invented)',
     );
   }
   const ci = g.ci ?? [];
   const ciClaims = ciKayitlari(g.claims);
   if (ci.length > 0) {
-    s.push('- CI koşumu:');
+    s.push('- CI runs:');
     for (const k of ci) s.push(`  - ${k.ad}${k.durum !== undefined ? ` (${k.durum})` : ''}: ${k.url}`);
   } else if (ciClaims.length > 0) {
-    s.push(`- CI koşumu: ${ciClaims.length} kayıt (koşum bağlantısı saklanmaz — depodaki Actions sekmesinden bak)`);
+    s.push(`- CI runs: ${ciClaims.length} records (the run link is not stored — look at the Actions tab of the repo)`);
     for (const c of ciClaims) s.push(`  - ${c.text}`);
   } else {
-    s.push('- CI koşumu: bu makbuzda CI kaydı yok — makbuz yalnız yerel kanıtlara dayanıyor');
+    s.push('- CI runs: no CI record in this receipt — it rests on local evidence only');
   }
   s.push('');
 
   // ── kendin doğrula ──
   const d = dogrulamaBlogu(g, commitler);
-  s.push('## Kendin doğrula (üçüncü kişi için)');
+  s.push('## Check it yourself (for a third party)');
   s.push('');
   s.push('```sh');
   for (const l of d.satirlar) s.push(l);
@@ -562,19 +562,19 @@ export function makbuzMetni(g: MakbuzGirdi): string {
   s.push('');
 
   // ── bilmedikleri ──
-  s.push('## Bu makbuzun bilmedikleri (kapsam)');
+  s.push('## What this receipt does not know (scope)');
   s.push('');
-  s.push('Gürültü kesildi, ama iz bırakılarak — aşağıdakiler bilerek kapsam dışında tutuldu:');
+  s.push('The noise was cut, but a trace was left — the items below were deliberately kept out of scope:');
   s.push('');
   for (const r of kapsamSatirlari(g.scope)) s.push(`- ${r}`);
   s.push('');
 
   // ── ne demek DEĞİL ──
-  s.push('## Bu makbuz ne demek DEĞİL');
+  s.push('## What this receipt does NOT mean');
   s.push('');
   for (const r of NE_DEMEK_DEGIL) s.push(`- ${r}`);
   s.push('');
-  s.push(`_Topbeam v${g.toolVersion} · ${MAKBUZ_FILE} · deterministik · LLM yok · üretimi ağa çıkmaz._`);
+  s.push(`_Topbeam v${g.toolVersion} · ${MAKBUZ_FILE} · deterministic · no LLM · produced without touching the network._`);
   s.push('');
 
   return s.join('\n');
@@ -630,7 +630,7 @@ export function makbuzHtml(g: MakbuzGirdi): string {
 
   const hedef =
     g.goalText !== undefined && g.goalText !== null && g.goalText.trim() !== ''
-      ? `<p class="meta">Hedef : ${esc(g.goalText.trim())} (beyan — kanıt değil)</p>`
+      ? `<p class="meta">Goal  : ${esc(g.goalText.trim())} (a statement — not evidence)</p>`
       : '';
 
   const sozBlok =
@@ -638,26 +638,26 @@ export function makbuzHtml(g: MakbuzGirdi): string {
       ? `<p class="lead">${esc(sozsuzMetin(g.goalSozSayisi))}</p>`
       : `${
           onayli === 0
-            ? '<p class="lead"><strong>Hiçbir madde henüz insan onaylı değil.</strong> Bu makbuz bir teslim onayı DEĞİLDİR; aşağıdaki kayıtların ne olduğunu ve nasıl doğrulanacağını gösterir.</p>'
+            ? '<p class="lead"><strong>No item is human-approved yet.</strong> This receipt is NOT a delivery approval; it shows what the records below are and how to check them.</p>'
             : ''
         }
-      <p class="lead">Tik yalnız terminal imzalı insan onayıyla gelir — kaydın kendi iddiası tik getirmez.</p>
+      <p class="lead">A tick comes only from a terminal-signed human approval — a record vouching for itself earns nothing.</p>
       <ul class="soz">${sozSatirlari(g.items, g.claims, g.ledger)
         .map(
           (r) => `<li class="${r.onayli ? 'on' : ''}"><span class="tick${r.onayli ? ' on' : ''}">${
             r.onayli ? '[x]' : '[ ]'
           }</span><span class="stitle">${r.no}. ${esc(r.title)}</span>
-        <span class="srow durum"><b>Durum</b> · ${esc(r.durum)}</span>
-        ${r.gerekce !== undefined ? `<span class="srow"><b>Gerekçe</b> · ${esc(r.gerekce)}</span>` : ''}
-        <span class="srow"><b>Kanıt</b> · ${esc(r.kanit)}${
-          r.headler.length > 0 ? ` · ölçüm HEAD: ${esc(r.headler.join(', '))}` : ''
+        <span class="srow durum"><b>Status</b> · ${esc(r.durum)}</span>
+        ${r.gerekce !== undefined ? `<span class="srow"><b>Reason</b> · ${esc(r.gerekce)}</span>` : ''}
+        <span class="srow"><b>Evidence</b> · ${esc(r.kanit)}${
+          r.headler.length > 0 ? ` · measured at HEAD: ${esc(r.headler.join(', '))}` : ''
         }</span></li>`,
         )
         .join('\n')}</ul>`;
 
   const commitBlok =
     commitler.length > 0
-      ? `<li>Commit: ${Math.min(commitler.length, COMMIT_MAX)} kayıt gösteriliyor (state'te ${commitler.length})
+      ? `<li>Commits: showing ${Math.min(commitler.length, COMMIT_MAX)} records (${commitler.length} in state)
         <ul>${commitler
           .slice(0, COMMIT_MAX)
           .map((c) => `<li><span class="mono">${esc(c.sha)}</span> · ${esc(gun(c.ts))} · ${esc(c.ozet)}</li>`)
@@ -665,17 +665,17 @@ export function makbuzHtml(g: MakbuzGirdi): string {
       : (() => {
           const h = headKimlikleri(g.claims);
           return h.length > 0
-            ? `<li>Commit: özet kaydı yok; kayıtların ölçüldüğü HEAD kimlikleri: <span class="mono">${esc(
+            ? `<li>Commits: no summary on record; the HEAD ids the records were measured at: <span class="mono">${esc(
                 h.join(', '),
               )}</span></li>`
-            : '<li>Commit: kayıt yok — bu makbuzda hiçbir commit kimliği ölçülmedi (SHA uydurulmaz)</li>';
+            : '<li>Commits: no record — no commit id was measured for this receipt (a SHA is never invented)</li>';
         })();
 
   const ci = g.ci ?? [];
   const ciClaims = ciKayitlari(g.claims);
   const ciBlok =
     ci.length > 0
-      ? `<li>CI koşumu:<ul>${ci
+      ? `<li>CI runs:<ul>${ci
           .map(
             (k) =>
               `<li>${esc(k.ad)}${k.durum !== undefined ? ` (${esc(k.durum)})` : ''}: <a href="${esc(
@@ -684,64 +684,64 @@ export function makbuzHtml(g: MakbuzGirdi): string {
           )
           .join('\n')}</ul></li>`
       : ciClaims.length > 0
-        ? `<li>CI koşumu: ${ciClaims.length} kayıt (koşum bağlantısı saklanmaz — depodaki Actions sekmesinden bak)<ul>${ciClaims
+        ? `<li>CI runs: ${ciClaims.length} records (the run link is not stored — look at the Actions tab of the repo)<ul>${ciClaims
             .map((c) => `<li>${esc(c.text)}</li>`)
             .join('\n')}</ul></li>`
-        : '<li>CI koşumu: bu makbuzda CI kaydı yok — makbuz yalnız yerel kanıtlara dayanıyor</li>';
+        : '<li>CI runs: no CI record in this receipt — it rests on local evidence only</li>';
 
   return `<!doctype html>
-<html lang="tr">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#04060d">
-<title>Teslim Makbuzu — ${esc(g.projectName)}</title>
+<title>Delivery Receipt — ${esc(g.projectName)}</title>
 <style>${HTML_CSS}</style>
 </head>
 <body>
 <main>
   <header>
-    <span class="eyebrow">Topbeam — teslim makbuzu</span>
+    <span class="eyebrow">Topbeam — delivery receipt</span>
     <h1>${esc(g.projectName)}</h1>
-    <p class="meta">Tarih : ${esc(fmtTs(g.at))} (${esc(g.at)})</p>
-    <p class="meta">Araç  : topbeam v${esc(g.toolVersion)} — deterministik özet: LLM yok; bu makbuz üretilirken ağa çıkılmadı (yalnız yerel kayıtlar okundu).</p>
-    <p class="meta">Kaynak: .ocean/state.json (Claude Code transcript + git gerçekleri) · onaylar: .ocean/${esc(
+    <p class="meta">Date  : ${esc(fmtTs(g.at))} (${esc(g.at)})</p>
+    <p class="meta">Tool  : topbeam v${esc(g.toolVersion)} — deterministic summary: no LLM; nothing left this machine while the receipt was produced (local records only).</p>
+    <p class="meta">Source: .ocean/state.json (Claude Code transcript + git facts) · approvals: .ocean/${esc(
       PASSPORT_LOG_FILE,
     )}</p>
     ${hedef}
-    <p class="lead">Bu makbuz kanıtları özetler, sonuç iddia etmez. Hiçbir satırına güvenmek zorunda değilsin: aşağıdaki doğrulama komutları salt-okunurdur, kendi makinende çalıştır.</p>
+    <p class="lead">This receipt summarises evidence; it does not claim a result. You do not have to take a single line on trust: the verification commands below are read-only — run them on your own machine.</p>
   </header>
 
   <section class="panel">
-    <h2>Teslim sözleri${toplam > 0 ? ` — ${onayli} / ${toplam} madde insan onaylı` : ''}</h2>
+    <h2>Delivery promises${toplam > 0 ? ` — ${onayli} / ${toplam} human-approved` : ''}</h2>
     ${sozBlok}
   </section>
 
   <section class="panel">
-    <h2>Kanıt özeti</h2>
+    <h2>Evidence summary</h2>
     <ul>
-      <li>Kayıt (claim): ${ozet.toplam} toplam
+      <li>Records (claims): ${ozet.toplam} in total
         <ul>
-          <li>dosya-kanıtı : ${ozet.dosya} — git diff ile transcript uyuşuyor</li>
-          <li>test-kanıtı  : ${ozet.test} — sayı test çıktısından okundu</li>
-          <li>insan onayı  : ${ozet.insanOnayi} — .ocean/${esc(PASSPORT_LOG_FILE)} defterinde terminal imzalı</li>
-          <li>doğrulanmadı : ${ozet.dogrulanmadi} — uygulandı görünüyor, doğrulanmadı</li>
+          <li>file evidence : ${ozet.dosya} — the git diff and the transcript agree</li>
+          <li>test evidence : ${ozet.test} — the number was read from test output</li>
+          <li>human approval: ${ozet.insanOnayi} — terminal-signed in the .ocean/${esc(PASSPORT_LOG_FILE)} ledger</li>
+          <li>not verified  : ${ozet.dogrulanmadi} — looks applied, nobody has confirmed it</li>
           ${
             ozet.kaynaksiz > 0
-              ? `<li>kanal kaydı yok: ${ozet.kaynaksiz} — kendini insan onaylı sayıyor ama defterde karşılığı yok (onay sayılmadı, kayıt silinmedi)</li>`
+              ? `<li>no channel record: ${ozet.kaynaksiz} — calls itself human-approved but has no counterpart in the ledger (not counted as approval, not deleted)</li>`
               : ''
           }
         </ul>
       </li>
       <li>${
         g.ledger.dosyaVar
-          ? `Onay defteri: ${g.ledger.okunanSatir} satır okundu · ${g.ledger.gecerli.size} geçerli onay · ${g.ledger.reddedilenSatir} satır rozet hakkı vermedi`
-          : `Onay defteri: .ocean/${esc(PASSPORT_LOG_FILE)} yok — hiçbir kayıt insan onaylı sayılmadı`
+          ? `Approval ledger: ${g.ledger.okunanSatir} lines read · ${g.ledger.gecerli.size} valid approvals · ${g.ledger.reddedilenSatir} lines earned no badge`
+          : `Approval ledger: .ocean/${esc(PASSPORT_LOG_FILE)} is missing — no record counted as human-approved`
       }</li>
       <li>${
         sonTest !== null
-          ? `Son test ölçümü: ${esc(sonTest.text)} — ${esc(fmtTs(sonTest.createdAt))}`
-          : 'Son test ölçümü: kayıt yok — bu makbuzda sayı okunmuş bir test koşumu bulunmuyor'
+          ? `Last test measurement: ${esc(sonTest.text)} — ${esc(fmtTs(sonTest.createdAt))}`
+          : 'Last test measurement: no record — this receipt holds no test run with a number read from it'
       }</li>
       ${commitBlok}
       ${ciBlok}
@@ -749,26 +749,26 @@ export function makbuzHtml(g: MakbuzGirdi): string {
   </section>
 
   <section class="panel">
-    <h2>Kendin doğrula (üçüncü kişi için)</h2>
+    <h2>Check it yourself (for a third party)</h2>
     <pre><code>${esc(d.satirlar.join('\n'))}</code></pre>
     ${d.notlar.length > 0 ? `<ul>${d.notlar.map((n) => `<li>${esc(n)}</li>`).join('\n')}</ul>` : ''}
   </section>
 
   <section class="panel">
-    <h2>Bu makbuzun bilmedikleri (kapsam)</h2>
-    <p class="lead">Gürültü kesildi, ama iz bırakılarak — aşağıdakiler bilerek kapsam dışında tutuldu:</p>
+    <h2>What this receipt does not know (scope)</h2>
+    <p class="lead">The noise was cut, but a trace was left — the items below were deliberately kept out of scope:</p>
     <ul>${kapsamSatirlari(g.scope)
       .map((r) => `<li>${esc(r)}</li>`)
       .join('\n')}</ul>
   </section>
 
   <section class="panel">
-    <h2>Bu makbuz ne demek DEĞİL</h2>
+    <h2>What this receipt does NOT mean</h2>
     <ul>${NE_DEMEK_DEGIL.map((r) => `<li>${esc(r)}</li>`).join('\n')}</ul>
   </section>
 
-  <footer>Topbeam v${esc(g.toolVersion)} · ${esc(MAKBUZ_HTML_FILE)} · deterministik · LLM yok · üretimi ağa çıkmaz<br>
-  insan onayı yalnız .ocean/${esc(PASSPORT_LOG_FILE)} defterindeki terminal imzalı kayda dayanır</footer>
+  <footer>Topbeam v${esc(g.toolVersion)} · ${esc(MAKBUZ_HTML_FILE)} · deterministic · no LLM · produced without touching the network<br>
+  human approval rests on one thing only: a terminal-signed entry in the .ocean/${esc(PASSPORT_LOG_FILE)} ledger</footer>
 </main>
 </body>
 </html>
@@ -801,7 +801,7 @@ export async function runMakbuz(
     return {
       ok: false,
       error:
-        "Bu proje Topbeam'e bağlı değil (ya da .ocean/state.json okunamadı). Önce: topbeam init, sonra: topbeam sync",
+        "This project is not connected to Topbeam (or .ocean/state.json could not be read). First: topbeam init, then: topbeam sync",
     };
   }
   const ledger = await readLedger(cwd);

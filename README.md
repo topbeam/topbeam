@@ -1,5 +1,13 @@
 # Topbeam
 
+> **Folder ↔ package map (added 2026-07-30):** this directory is named `ocean-cli/` for historical
+> reasons — the product was renamed Ocean → **Topbeam** on 2026-07-28. **`ocean-cli/` IS topbeam**:
+> npm package [`topbeam`](https://www.npmjs.com/package/topbeam) · CLI command `topbeam` · repo
+> [`github.com/topbeam/topbeam`](https://github.com/topbeam/topbeam). The working directory the tool
+> writes on disk stays `.ocean/` **on purpose** (`src/state.ts`: no data-migration risk).
+> *Verified 2026-07-30: registry latest `0.1.1`; local `package.json` `0.1.2` (not yet published).*
+> If you are looking for "where is topbeam" six months from now — it is here.
+
 An honest project board for vibe coders. Topbeam doesn't narrate your project;
 it tells you **what is true right now, and the one move that gets you forward.**
 

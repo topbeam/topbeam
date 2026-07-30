@@ -26,7 +26,7 @@
  * aynı ilke — orada onay YAZILMAZ, burada GÖSTERİLMEZ).
  *
  * SESSİZ SİLME YOK: kaynağı olmayan kayıt yok edilmez; rozet yerine
- * "kanal kaydı yok" işaretiyle durur (bkz. ROZETSIZ_ETIKET). Denetçi neyin
+ * "no ledger entry" işaretiyle durur (bkz. ROZETSIZ_ETIKET). Denetçi neyin
  * dayanaksız olduğunu görebilsin.
  */
 import type { PassportItem, PassportLogRecord } from './types.ts';
@@ -73,16 +73,20 @@ export type LedgerCheck =
  */
 export function kayitGecerliMi(raw: unknown): LedgerCheck {
   if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
-    return { ok: false, claimId: null, neden: 'satır bir kayıt nesnesi değil' };
+    return { ok: false, claimId: null, neden: 'the line is not a record object' };
   }
   const r = raw as Partial<PassportLogRecord>;
   const claimId = typeof r.claimId === 'string' && r.claimId !== '' ? r.claimId : null;
-  if (claimId === null) return { ok: false, claimId: null, neden: 'claimId yok' };
+  if (claimId === null) return { ok: false, claimId: null, neden: 'no claimId' };
   if (typeof r.at !== 'string' || r.at === '') {
-    return { ok: false, claimId, neden: 'zaman damgası yok' };
+    return { ok: false, claimId, neden: 'no timestamp' };
   }
   if (typeof r.by !== 'string' || !kimlikGecerliMi(r.by)) {
-    return { ok: false, claimId, neden: 'imza okunamıyor — imzası bilinmeyen onay, onay değildir' };
+    return {
+      ok: false,
+      claimId,
+      neden: 'the signature cannot be read — an approval nobody signed is not an approval',
+    };
   }
   if (r.source !== 'terminal') {
     // En ağır şart: kanal. Kazara/otomatik onayı keser — ama pty ile bile isteye
@@ -90,14 +94,14 @@ export function kayitGecerliMi(raw: unknown): LedgerCheck {
     return {
       ok: false,
       claimId,
-      neden: 'kanal kaydı yok — onayın gerçek bir terminalden geldiği kayıtlı değil',
+      neden: 'no ledger entry — nothing records that this approval came from a real terminal',
     };
   }
   if (r.decision !== 'approved') {
-    return { ok: false, claimId, neden: `karar 'approved' değil (${String(r.decision)})` };
+    return { ok: false, claimId, neden: `the decision is not 'approved' (${String(r.decision)})` };
   }
   if (r.levelAfter !== 'insan-onayi') {
-    return { ok: false, claimId, neden: `kayıt insan-onayı seviyesine yükseltmemiş` };
+    return { ok: false, claimId, neden: 'the entry did not raise the level to human approval' };
   }
   return { ok: true, entry: { claimId, at: r.at, by: r.by.trim() } };
 }
@@ -165,11 +169,12 @@ export function buildLedger(
 // ── rozet kapıları (pano ve raporlar YALNIZ bunları kullanır) ────────────────
 
 /** Rozet verilmeyen kaydın YERİNE geçen dürüst işaret. */
-export const ROZETSIZ_ETIKET = 'kanal kaydı yok';
-export const ROZETSIZ_NOT = 'doğrulama kaydı bulunamadı';
+export const ROZETSIZ_ETIKET = 'no ledger entry';
+export const ROZETSIZ_NOT = 'no verification entry found';
 export const ROZETSIZ_BASLIK =
-  'Bu kayıt kendini insan onaylı sayıyor, ama .ocean/passport.jsonl dosyasında ' +
-  'terminal imzalı bir doğrulama kaydına bağlanamadı. Kayıt silinmedi — yalnız rozeti yok.';
+  'This record calls itself human-approved, but it could not be tied to a ' +
+  'terminal-signed verification entry in .ocean/passport.jsonl. The record was not ' +
+  'deleted — it just carries no badge.';
 
 /** Tek claim insan onaylı sayılabilir mi? */
 export function claimOnayli(ledger: VerificationLedger, claimId: string): boolean {

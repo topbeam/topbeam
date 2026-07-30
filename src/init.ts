@@ -19,18 +19,20 @@ export const CLAUDE_MD_MARKER = '## Topbeam';
 export const CLAUDE_MD_SECTION = `
 ## Topbeam
 
-Bu proje Topbeam ile izleniyor — dürüst proje panosu (\`.ocean/pano.html\`).
+This project is tracked with Topbeam — an honest project board (\`.ocean/pano.html\`).
 
-Claude, bu projede çalışırken şu alışkanlıkları uygula:
-1. **Hedef:** Proje hedefi değiştiğinde \`.ocean/goal.md\` dosyasının "Proje Hedefi"
-   paragrafını güncel tut (kısa, tek paragraf). Aynı dosyadaki \`- [ ]\` **teslim
-   sözleri kullanıcınındır — ekleme, silme, yeniden yazma.** Bar o satırlardan kurulur;
-   sözü yazan da onaylayan da insandır.
-2. **Not:** Önemli her adımda \`.ocean/notes.md\` dosyasına 1 satırlık Türkçe not EKLE (append, eskiyi silme):
-   \`- YYYY-MM-DD HH:MM — ne yapıldı\` biçiminde.
-3. **Dürüstlük:** Kanıt görmeden "çalışıyor / bitti" deme; "uygulandı görünüyor, doğrulanmadı" de.
-   Doğrulama kullanıcıya aittir: \`topbeam verify <id>\`.
-4. **Senkron:** Anlamlı bir iş bitince \`topbeam sync\` çalıştır — pano ve kart güncellensin.
+Claude, while working in this project, keep these habits:
+1. **Goal:** When the project goal changes, keep the "Project Goal" paragraph in
+   \`.ocean/goal.md\` current (short, one paragraph).
+   The \`- [ ]\` **delivery promises in that file belong to the user — do not add, delete
+   or rewrite them.** The bar is built from those lines; the person who writes a promise
+   is the person who approves it.
+2. **Note:** At every meaningful step APPEND a one-line note to \`.ocean/notes.md\`
+   (append; do not erase what is already there): \`- YYYY-MM-DD HH:MM — what was done\`.
+3. **Honesty:** Without evidence, do not say "it works / it's done";
+   say "looks applied, not verified". Verification belongs to the user: \`topbeam verify <id>\`.
+4. **Sync:** When a meaningful piece of work is finished, run \`topbeam sync\` — the board
+   and the card update.
 `;
 
 /**
@@ -42,33 +44,34 @@ Claude, bu projede çalışırken şu alışkanlıkları uygula:
  * şablon panonun hedef satırına sızmaz. Örnek sözler bilinçli olarak EVRENSEL
  * teslim kapılarıdır — kullanıcı siler, kendi cümlelerini yazar.
  */
-const GOAL_TEMPLATE = `# Proje Hedefi
+const GOAL_TEMPLATE = `# Project Goal
 
-> (Buraya tek paragraf yaz: bu proje şu an neyi hedefliyor. Panonun başlığında görünür.)
+> (Write one paragraph here: what this project is aiming at right now. It appears in the board's header.)
 
-## Teslim sözleri
+## Delivery promises
 
-> Her \`- [ ]\` satırı bir teslim kapısıdır — barın bir bölmesi.
-> Bar sonludur: kaç satır yazarsan o kadar bölme olur, oturum sayısı barı BÜYÜTMEZ.
-> Bölme yalnız kendi terminalinden verdiğin insan onayıyla dolar: \`topbeam verify <söz-id>\`.
+> Every \`- [ ]\` line is a delivery gate — one segment of the bar.
+> The bar is finite: as many lines as you write, that many segments. Sessions do NOT grow it.
+> A segment fills only with human approval given from your own terminal: \`topbeam verify <promise-id>\` (ids look like \`soz-…\`).
 >
-> Buraya HİÇBİR söz yazılmadı — bilerek. Söz senindir; araç senin adına söz veremez.
-> Kendi sözlerini yaz: kısa, tek cümle, teslim edilebilir. Örnek biçim (kopyalama, kendin yaz):
->   \`- [ ] Kurulum tek komutla çalışıyor\`
->   \`- [ ] test: testler yeşil\`
+> NO promise has been written here — on purpose.
+> The promise is yours; the tool cannot make a promise on your behalf.
+> Write your own promises: short, one sentence, deliverable. Example shape (don't copy it, write yours):
+>   \`- [ ] Setup works with a single command\`
+>   \`- [ ] test: the tests are green\`
 >
-> Sen yazana kadar bar çizilmez — dolduracak bir söz yoktur.
+> Until you write one, no bar is drawn — there is nothing to fill.
 
-> Eşleme ipuçları (isteğe bağlı — kayıtları bir söze bağlamak için):
->   yol      \`src/auth\` ya da \`src/cli.ts\` → o yola dokunan kayıtlar
->   test     satır \`test:\` ile başlarsa → yalnız test koşumu kayıtları
->   etiket   \`#odeme\` → kaydın metninde ya da yolunda geçen etiket
-> İpucu yoksa madde "kanıt yok" durur — Topbeam eşleşme uydurmaz.
+> Matching hints (optional — to tie records to a promise):
+>   path   \`src/auth\` or \`src/cli.ts\` → records that touch that path
+>   test   a line starting with \`test:\` → test-run records only
+>   tag    \`#payments\` → a tag that appears in the record's text or its path
+> With no hint the item stays at "no evidence" — Topbeam does not invent a match.
 `;
 
-const NOTES_TEMPLATE = `# Topbeam Notları
+const NOTES_TEMPLATE = `# Topbeam Notes
 
-(Claude: önemli adımlarda buraya 1 satır Türkçe not ekle — \`- YYYY-MM-DD HH:MM — not\`. Eskiyi silme.)
+(Claude: at each meaningful step add a one-line note here — \`- YYYY-MM-DD HH:MM — note\`. Don't erase the old ones.)
 `;
 
 export interface InitResult {
@@ -124,7 +127,7 @@ export async function runInit(cwd: string, opts: InitOptions = {}): Promise<Init
     const state = newOceanState(projectName, now);
     const entry: LogEntry = {
       ts: now.toISOString(),
-      text: 'Topbeam bu projeye bağlandı (topbeam init).',
+      text: 'Topbeam was connected to this project (topbeam init).',
       // NOT: 'ocean' = LogSource enum DEĞERİ (veri şeması, panoda etiketi
       // "topbeam" olarak gösterilir). Değeri değiştirmek eski state.json'ları
       // bozardı — bilinçli olarak sabit bırakıldı.
@@ -181,12 +184,12 @@ export async function runInit(cwd: string, opts: InitOptions = {}): Promise<Init
     await guvenliYazDisa(
       cwd,
       gitignorePath,
-      `${ayrac}\n# Topbeam çalışma verisi — komut metinleri ve onay defteri içerir.\n${oceanKurali}\n`,
+      `${ayrac}\n# Topbeam working data — contains command text and the approval ledger.\n${oceanKurali}\n`,
       'ekle',
     );
-    created.push(`.gitignore → "${oceanKurali}" eklendi (komut metinleri depoya girmesin)`);
+    created.push(`.gitignore → "${oceanKurali}" added (so command text stays out of the repo)`);
   } else {
-    skipped.push(`.gitignore (${oceanKurali} zaten var)`);
+    skipped.push(`.gitignore (${oceanKurali} was already there)`);
   }
 
   // CLAUDE.md — "## Topbeam" bölümü yoksa APPEND; varsa dokunma.
@@ -199,25 +202,27 @@ export async function runInit(cwd: string, opts: InitOptions = {}): Promise<Init
     claudeMd = '';
   }
   if (claudeMd.includes(CLAUDE_MD_MARKER)) {
-    skipped.push(`CLAUDE.md (${CLAUDE_MD_MARKER} bölümü zaten var)`);
+    skipped.push(`CLAUDE.md (the ${CLAUDE_MD_MARKER} section was already there)`);
   } else {
     let ekle = opts.claudeMd;
     if (ekle === undefined && opts.sor !== undefined) {
       // Ne yazacağımızı ÖNCE göster — kör onay istemiyoruz.
       opts.yaz?.('');
-      opts.yaz?.(`CLAUDE.md'ye şu bölüm eklenebilir (Claude'un bu projedeki alışkanlıkları):`);
+      opts.yaz?.(`This section can be added to CLAUDE.md (Claude's habits in this project):`);
       for (const l of CLAUDE_MD_SECTION.trim().split('\n')) opts.yaz?.(`  │ ${l}`);
       opts.yaz?.('');
-      const cevap = (await opts.sor('Eklensin mi? [e/H] ')).trim().toLocaleLowerCase('tr-TR');
-      ekle = cevap === 'e' || cevap === 'evet';
+      // Soru İngilizce ([y/N]) ama eski Türkçe cevap da kabul edilir — kullanıcı
+      // alışkanlığı kırılmasın (verify.ts'teki YES kümesiyle aynı davranış).
+      const cevap = (await opts.sor('Add it? [y/N] ')).trim().toLocaleLowerCase('en-US');
+      ekle = cevap === 'y' || cevap === 'yes' || cevap === 'e' || cevap === 'evet';
     }
     if (ekle === true) {
       const sep = claudeMd === '' || claudeMd.endsWith('\n') ? '' : '\n';
       await guvenliYazDisa(cwd, claudeMdPath, `${sep}${CLAUDE_MD_SECTION}`, 'ekle');
       claudeMdUpdated = true;
-      created.push(`CLAUDE.md → "${CLAUDE_MD_MARKER}" bölümü eklendi`);
+      created.push(`CLAUDE.md → "${CLAUDE_MD_MARKER}" section added`);
     } else {
-      skipped.push('CLAUDE.md (dokunulmadı — istersen: topbeam init --claude-md)');
+      skipped.push('CLAUDE.md (left alone — if you want it: topbeam init --claude-md)');
     }
   }
 

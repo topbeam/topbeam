@@ -44,10 +44,16 @@ test('BP seviye haritası — Keşif/BP raporu §2 ile birebir', () => {
 });
 
 test('dogrulanmadi etiketi dürüstlük cümlesini taşır', () => {
-  assert.match(EVIDENCE_LEVEL_LABELS_TR['dogrulanmadi'], /doğrulanmadı/i);
-  // "ÇALIŞIYOR" iddiası hiçbir etikette otomatik yer almaz.
+  // Etiketler İngilizceye taşındı: "doğrulanmadı" → "Not verified".
+  assert.match(EVIDENCE_LEVEL_LABELS_TR['dogrulanmadi'], /not verified/i);
+  // Dürüstlük cümlesi: "uygulandı görünüyor, kimse doğrulamadı".
+  assert.match(
+    EVIDENCE_LEVEL_LABELS_TR['dogrulanmadi'],
+    /looks applied, nobody has confirmed it/i,
+  );
+  // "ÇALIŞIYOR" iddiası hiçbir etikette otomatik yer almaz (TR + EN karşılığı).
   for (const level of EVIDENCE_LEVELS) {
-    assert.doesNotMatch(EVIDENCE_LEVEL_LABELS_TR[level], /çalışıyor/i);
+    assert.doesNotMatch(EVIDENCE_LEVEL_LABELS_TR[level], /çalışıyor|\bworks?\b|\bworking\b/i);
   }
 });
 
@@ -104,7 +110,9 @@ test('Card şekli — GPT spec alanları derlenir ve taşınır', () => {
     updatedAt: new Date().toISOString(),
   };
   assert.equal(card.evidence.testOutput, null); // null = "kayıt yok", sakin gösterim
-  assert.equal(CARD_PRIMARY_BUTTON_TR, 'Doğrulamayı başlat');
+  // Ana buton metni İngilizceye taşındı: "Doğrulamayı başlat" → "Start verifying".
+  // (Sabitin ADI `…_TR` kalıyor — kaynaktaki export adı değişmedi.)
+  assert.equal(CARD_PRIMARY_BUTTON_TR, 'Start verifying');
 });
 
 test('Claim ve LogEntry şekilleri — beyan kanıt değildir', () => {

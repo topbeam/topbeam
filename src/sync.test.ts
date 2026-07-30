@@ -145,7 +145,7 @@ test('tam boru hattı: collect → truth → card → state + pano', async () =>
   assert.deepEqual(st.passport[0]?.claimIds, [`dosya-git-${S1}`]);
   assert.deepEqual(st.passport[1]?.claimIds, [`test-${S1}-0`]);
   assert.deepEqual(st.passport[2]?.claimIds, [], 'ipucusuz söz kanıt yok kalmalı');
-  assert.ok(st.passport[2]?.reason?.startsWith('Kanıt yok'));
+  assert.ok(st.passport[2]?.reason?.startsWith('No evidence'));
   assert.ok(st.passport.every((p) => p.status === 'not_verified'));
 
   // kart: doğrulanmamış yok → kanıtlı-en-yeni için insan onayı istenir
@@ -154,14 +154,15 @@ test('tam boru hattı: collect → truth → card → state + pano', async () =>
   assert.equal(st.card.action.command, `topbeam verify ${st.card.id}`);
 
   // log: kanıtlı gerçekler + beyan (rozetli) — init izi de korunur
-  assert.ok(st.log.some((e) => e.source === 'claude-beyan' && e.text.startsWith('Beyan:')));
+  // beyan öneki kaynakta 'Beyan: ' → 'Statement: ' oldu (truth.ts beyanLog).
+  assert.ok(st.log.some((e) => e.source === 'claude-beyan' && e.text.startsWith('Statement:')));
   assert.ok(st.log.some((e) => e.source === 'ocean' && e.text.includes('init')));
 
   // pano dosyası yazıldı ve kartı içeriyor
   assert.ok(res.panoPath);
   const { readFile } = await import('node:fs/promises');
   const html = await readFile(res.panoPath, 'utf8');
-  assert.ok(html.includes('Sıradaki tek hareket'));
+  assert.ok(html.includes('The single next move'));
   assert.ok(html.includes(`topbeam verify ${st.card.id}`));
 });
 
@@ -290,11 +291,11 @@ test('goal.md\'de teslim sözü YOKSA: pasaport boş + dürüst yönerge (bar yo
   const res = await withClaudeDir(claudeDir, () => runSync(proj, { now: NOW }));
   assert.equal(res.sozToplam, 0);
   assert.equal(res.state?.passport.length, 0);
-  assert.ok(res.notes.some((n) => n.includes('bar orada dolsun')));
+  assert.ok(res.notes.some((n) => n.includes('the bar fills from there')));
 
   const html = await readFile(join(proj, '.ocean', 'pano.html'), 'utf8');
   assert.equal(html.includes('<div class="bar"'), false, 'boş bar çizilmemeli');
-  assert.ok(html.includes('bar orada dolsun'));
+  assert.ok(html.includes('that is where the bar fills'));
   // hedef satırı hâlâ okunur (liste satırı değil, düz paragraf)
   assert.ok(html.includes('MVP dikey dilimini bitir.'));
 });
@@ -310,8 +311,11 @@ test('init şablonu SÖZ YAZMAZ: bar çizilmez, dürüst yönerge çıkar', asyn
   assert.equal(res.state?.passport.length ?? 0, 0, 'söz yoksa bar bölmesi de yok');
 
   // şablonun yönerge satırları hedef cümlesi sanılmaz
+  // ÖLÜ NÖBETÇİ CANLANDIRMA: init.ts GOAL_TEMPLATE artık İngilizce —
+  // eski 'Her `- [ ]` satırı' dizesi hiçbir çıktıda geçemezdi, test sessizce
+  // ölmüştü. Kaynaktaki karşılığı: '> Every `- [ ]` line is a delivery gate…'
   const html = await readFile(join(proj, '.ocean', 'pano.html'), 'utf8');
-  assert.equal(html.includes('Her `- [ ]` satırı'), false);
+  assert.equal(html.includes('Every `- [ ]` line'), false);
 });
 
 test('kullanıcı KENDİ sözünü yazınca bar kurulur ve `test:` eşleşmesi çalışır', async () => {
@@ -365,8 +369,10 @@ test('git deposu OLMAYAN proje: kart "git status" ÖNERMEZ', async () => {
   assert.ok(card);
   assert.notEqual(card.action.command, 'git status', 'çalışmayacak komut önerilemez');
   assert.equal(card.action.command, `topbeam verify ${card.id}`);
-  assert.ok(card.action.verb.includes('git deposu değil'));
-  assert.ok(card.fact.includes('git deposu değil'));
+  // card.ts upgradeAction git-yok dalı: '…is not a git repo — open the change yourself…'
+  assert.ok(card.action.verb.includes('not a git repo'));
+  // truth.ts fileClaims gitsiz metni: '…this directory is not a git repository — …'
+  assert.ok(card.fact.includes('not a git repository'));
 });
 
 test('kapsam state\'e KALICI yazılır: sayı zinciri kimliği + panoda blok', async () => {
@@ -388,8 +394,8 @@ test('kapsam state\'e KALICI yazılır: sayı zinciri kimliği + panoda blok', a
   assert.deepEqual(back?.scope?.log, c);
 
   const html = await readFile(join(proj, '.ocean', 'pano.html'), 'utf8');
-  assert.ok(html.includes('Bu panonun kapsamı'));
-  assert.ok(html.includes(`panoda ${c.tutulan} satır.`));
+  assert.ok(html.includes('What this board covers — and what it does not know'));
+  assert.ok(html.includes(`${c.tutulan} lines on the board.`));
 });
 
 test('kapsam: proje DIŞI düzenleme sayılır ve panoda görünür (iz bırakarak eleme)', async () => {
@@ -418,7 +424,7 @@ test('kapsam: proje DIŞI düzenleme sayılır ve panoda görünür (iz bırakar
   assert.equal(res.state?.scope?.disKapsamDuzenleme, 1);
 
   const html = await readFile(join(proj, '.ocean', 'pano.html'), 'utf8');
-  assert.ok(html.includes('1 düzenleme bu proje kökünün dışındaki'));
+  assert.ok(html.includes('1 edits touched files outside this project root'));
   assert.equal(html.includes('gizli.ts'), false, 'proje dışı dosya adı panoya girmez');
 });
 
@@ -454,14 +460,15 @@ test('DEFTERSİZ "insan onayı" iddiası: sync sonrası panoda rozet YOK, sayıy
   assert.equal(res.sozOnayli, 0, 'defter desteklemeyen madde onaylandı sayılmaz');
   assert.equal(res.kaynaksizClaim, 2, 'dayanaksız iddia sayısı dürüstçe raporlanır');
   assert.equal(res.onayliClaim, 0);
-  assert.ok(res.notes.some((n) => n.includes('kanal kaydı yok')));
+  // sync.ts bu notu artık İngilizce yazıyor: eski "kanal kaydı yok" = 'no ledger entry'.
+  assert.ok(res.notes.some((n) => n.includes('no ledger entry')));
 
   assert.ok(res.panoPath);
   const html = await readFile(res.panoPath, 'utf8');
-  assert.equal(html.includes('>insan<'), false, 'bot imzalı log satırı insan rozeti alamaz');
-  assert.equal(html.includes('>insan-onayı<'), false, 'dayanaksız seviye rozeti çıkamaz');
-  assert.ok(html.includes('kanal kaydı yok'));
-  assert.ok(html.includes('0 / 3 madde onaylandı'));
+  assert.equal(html.includes('>human<'), false, 'bot imzalı log satırı insan rozeti alamaz');
+  assert.equal(html.includes('>human approval<'), false, 'dayanaksız seviye rozeti çıkamaz');
+  assert.ok(html.includes('no ledger entry'));
+  assert.ok(html.includes('0 / 3 approved'));
   // sessiz silme yok: satır panoda duruyor
   assert.ok(html.includes('Doğrulandı: her şey çalışıyor'));
   // state'in kendi iddiası korunur (veri yok edilmez) — yalnız gösterim gerçeğe bağlı
@@ -496,9 +503,9 @@ test('GERÇEK terminal kaydı defterdeyse aynı state rozeti ALIR (kapı çift y
   assert.equal(res.kaynaksizClaim, 0);
   assert.equal(res.onayliClaim, 2);
   const html = await readFile(res.panoPath ?? '', 'utf8');
-  assert.ok(html.includes('>insan-onayı<'));
-  assert.ok(html.includes('2 / 3 madde onaylandı'));
-  assert.equal(html.includes('kanal kaydı yok'), false);
+  assert.ok(html.includes('>human approval<'));
+  assert.ok(html.includes('2 / 3 approved'));
+  assert.equal(html.includes('no ledger entry'), false);
 });
 
 /**

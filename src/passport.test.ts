@@ -107,8 +107,8 @@ test('İNVARYANT: birim seviyesi EN ZAYIF claim — gruplama kanıt yükseltmez'
 test('başlık ÖLÇÜLMÜŞ sayılardan kurulur: tarih · dosya · test koşumu (+örnek dosya)', () => {
   const t = buildDefter(oturum('sb', 7))[0]?.title ?? '';
   assert.ok(t.startsWith('2026-07-28 · '), `başlık tarihle başlamalı: ${t}`);
-  assert.ok(t.includes('7 dosya'));
-  assert.ok(t.includes('3 test koşumu'));
+  assert.ok(t.includes('7 files'));
+  assert.ok(t.includes('3 test runs'));
   assert.ok(t.includes('src/a.ts'));
   // uydurma yok: sayılar claim sinyallerinden gelir
   assert.equal(t.includes('%'), false);

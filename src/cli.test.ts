@@ -51,19 +51,19 @@ test('help komutları ve dürüstlük ilkesini listeler, exit 0', () => {
   for (const cmd of ['init', 'sync', 'verify', 'open', 'makbuz']) {
     assert.ok(r.stdout.includes(cmd), `help '${cmd}' içermeli`);
   }
-  assert.ok(r.stdout.includes('kanıtsız hiçbir iddia'), 'ilke help içinde olmalı');
+  assert.ok(r.stdout.includes('no claim is shown without evidence'), 'ilke help içinde olmalı');
 });
 
 test('bilinmeyen komut exit 1 + yardım', () => {
   const r = run(['floo']);
   assert.equal(r.code, 1);
-  assert.match(r.stderr, /Bilinmeyen komut: floo/);
+  assert.match(r.stderr, /Unknown command: floo/);
 });
 
 test('verify id ister: idsiz exit 1', () => {
   const r = run(['verify']);
   assert.equal(r.code, 1);
-  assert.match(r.stderr, /Kullanım: topbeam verify/);
+  assert.match(r.stderr, /Usage: topbeam verify/);
 });
 
 test('sync init olmadan dürüstçe reddeder, exit 1', async () => {
@@ -85,7 +85,7 @@ test('tam akış: init → sync → open (izole dizin, transcript yok senaryosu)
 
   const init = run(['init', '--claude-md'], { cwd: dir });
   assert.equal(init.code, 0, init.stderr);
-  assert.ok(init.stdout.includes('Topbeam bağlandı'));
+  assert.ok(init.stdout.includes('Topbeam connected'));
   assert.ok(init.stdout.includes('.ocean/state.json'));
   await access(join(dir, '.ocean', 'state.json'));
   await access(join(dir, '.ocean', 'goal.md'));
@@ -95,28 +95,28 @@ test('tam akış: init → sync → open (izole dizin, transcript yok senaryosu)
   // ikinci init: idempotent
   const init2 = run(['init', '--claude-md'], { cwd: dir });
   assert.equal(init2.code, 0);
-  assert.ok(init2.stdout.includes('dokunulmadı'));
+  assert.ok(init2.stdout.includes('already there, left alone'));
 
   const sync = run(['sync'], { cwd: dir });
   assert.equal(sync.code, 0, sync.stderr);
-  assert.ok(sync.stdout.includes('Topbeam senkron tamam'));
-  assert.ok(sync.stdout.includes('Pano'));
+  assert.ok(sync.stdout.includes('Topbeam sync done'));
+  assert.ok(sync.stdout.includes('Board'));
   // İlerleme dili YALNIZ teslim sözlerinde; defter nötr sayılır.
   // Şablon HİÇ söz yazmaz (söz insanındır) → dürüst yönerge çıkar, bar çizilmez.
-  assert.ok(sync.stdout.includes('Teslim sözü: yok'));
+  assert.ok(sync.stdout.includes('Promises   : none'));
   assert.ok(sync.stdout.includes('goal.md'), 'kullanıcıya nereye yazacağı söylenir');
-  assert.ok(sync.stdout.includes('Defter     : 0 oturum kaydı (ilerleme ölçüsü değil)'));
-  assert.equal(/\d+\/\d+ doğrulandı/.test(sync.stdout), false, 'eski ilerleme dili kalkmalı');
+  assert.ok(sync.stdout.includes('Ledger     : 0 session entries (not a measure of progress)'));
+  assert.equal(/\d+ ?\/ ?\d+ approved/.test(sync.stdout), false, 'eski ilerleme dili kalkmalı');
   await access(join(dir, '.ocean', 'pano.html'));
 
   const open = run(['open'], { cwd: dir });
   assert.equal(open.code, 0);
   assert.ok(open.stdout.includes('pano.html'));
-  assert.ok(open.stdout.includes('otomatik açmaz') || open.stdout.includes('otomatik AÇMAZ'));
+  assert.ok(open.stdout.includes('will not open it for you'));
 
   // pano dürüst boş kart göstermeli (transcript yok — iddia uydurulmadı)
   const html = await readFile(join(dir, '.ocean', 'pano.html'), 'utf8');
-  assert.ok(html.includes('Henüz kanıtlı iş kaydı yok'));
+  assert.ok(html.includes('No evidenced work has been recorded yet.'));
 });
 
 test('verify: olmayan id ile exit 1 + dürüst mesaj (subprocess)', async () => {
@@ -124,7 +124,7 @@ test('verify: olmayan id ile exit 1 + dürüst mesaj (subprocess)', async () => 
   run(['init', '--claude-md'], { cwd: dir });
   const r = run(['verify', 'gorev-3'], { cwd: dir, input: 'h\n' });
   assert.equal(r.code, 1);
-  assert.match(r.stderr, /Kayıt bulunamadı: gorev-3/);
+  assert.match(r.stderr, /No record found: gorev-3/);
 });
 
 /**
@@ -150,7 +150,7 @@ test('verify subprocess: piped "e" onay VERMEZ (kazayla onay oluşamaz)', async 
 
   const r = run(['verify', 'dosya-git-s9'], { cwd: dir, input: 'e\n' });
   assert.equal(r.code, 0, r.stderr);
-  assert.equal(r.stdout.includes('Onay kaydedildi'), false, 'pipe onayı kaydedilmemeli');
+  assert.equal(r.stdout.includes('Approval recorded'), false, 'pipe onayı kaydedilmemeli');
   assert.ok(r.stdout.includes('terminal'), 'neden söylenmeli');
 
   const back = await readState(dir);
@@ -177,15 +177,18 @@ test('makbuz: init sonrası dosyayı yazar, yolu söyler, otomatik AÇMAZ', asyn
   const r = run(['makbuz'], { cwd: dir });
   assert.equal(r.code, 0, r.stderr);
   assert.ok(r.stdout.includes('makbuz.md'));
-  assert.ok(r.stdout.includes('Makbuz yazıldı'));
+  assert.ok(r.stdout.includes('Receipt written'));
   assert.equal(r.stdout.includes('makbuz.html'), false, '--html verilmedi');
 
   const md = await readFile(join(dir, '.ocean', 'makbuz.md'), 'utf8');
-  assert.ok(md.startsWith('# Teslim Makbuzu'));
-  assert.ok(md.includes('## Kendin doğrula (üçüncü kişi için)'));
-  assert.ok(md.includes('## Bu makbuz ne demek DEĞİL'));
+  assert.ok(md.startsWith('# Delivery Receipt'));
+  assert.ok(md.includes('## Check it yourself (for a third party)'));
+  assert.ok(md.includes('## What this receipt does NOT mean'));
   // Şablon söz yazmaz → makbuz yine üretilir ama durumu DÜRÜSTÇE söyler.
-  assert.ok(/teslim sözü.*yok|söz.*yazılmadı|goal\.md/i.test(md), 'söz yoksa dürüstçe yazar');
+  assert.ok(
+    /no delivery promise has been written|promises?.*not written|goal\.md/i.test(md),
+    'söz yoksa dürüstçe yazar',
+  );
 });
 
 test('makbuz --html: ikinci dosya da üretilir; onaysız madde ONAYLI görünmez', async () => {
@@ -200,11 +203,11 @@ test('makbuz --html: ikinci dosya da üretilir; onaysız madde ONAYLI görünmez
   const r = run(['makbuz', '--html'], { cwd: dir });
   assert.equal(r.code, 0, r.stderr);
   assert.ok(r.stdout.includes('makbuz.html'));
-  assert.ok(r.stdout.includes('0 / 2 madde insan onaylı'), 'onaysız madde onaylı görünmez');
+  assert.ok(r.stdout.includes('0 / 2 human-approved'), 'onaysız madde onaylı görünmez');
 
   const md = await readFile(join(dir, '.ocean', 'makbuz.md'), 'utf8');
   assert.equal(md.includes('- [x]'), false, 'passport.jsonl yokken tik olamaz');
-  assert.ok(md.includes('Hiçbir madde henüz insan onaylı değil'));
+  assert.ok(md.includes('No item is human-approved yet.'));
   const html = await readFile(join(dir, '.ocean', 'makbuz.html'), 'utf8');
   assert.ok(html.startsWith('<!doctype html>'));
   assert.equal(html.includes('<script'), false, 'makbuz HTML JS içermez');
@@ -235,7 +238,7 @@ test('verify subprocess: girdi kapalıysa (cevapsız) onay YOK — dürüst vars
 
   const r = run(['verify', 'test-s9-0'], { cwd: dir, input: '' });
   assert.equal(r.code, 0, r.stderr);
-  assert.ok(r.stdout.includes('Onay kaydedilmedi'));
+  assert.ok(r.stdout.includes('No approval recorded'));
   const back = await readState(dir);
   assert.equal(back?.claims[0]?.level, 'test-kaniti'); // seviye değişmedi
 });

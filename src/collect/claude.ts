@@ -874,7 +874,9 @@ export async function collectClaude(
       matchedDirs,
       transcriptsFound: 0,
       sessions: [],
-      notes: [`Claude Code proje dizini bulunamadı: ${projectsDir} — transcript kaydı yok (doğrulanamadı).`],
+      notes: [
+        `The Claude Code projects directory was not found: ${projectsDir} — there is no transcript record (not confirmed).`,
+      ],
     };
   }
 
@@ -922,8 +924,8 @@ export async function collectClaude(
     // olabilir. Bu bilgi ata-oturuma düşerken kaybolmamalı.
     if (matchedDirs.length > 0) {
       notes.push(
-        'Bu projenin transcript dizini var ama içinde .jsonl yok — Claude Code retention ' +
-          '(varsayılan 30 gün) temizlemiş olabilir (doğrulanamadı).',
+        'This project has a transcript directory but no .jsonl inside — Claude Code retention ' +
+          '(30 days by default) may have cleared it (not confirmed).',
       );
     }
     matchedDirs.length = 0;
@@ -949,14 +951,14 @@ export async function collectClaude(
 
   if (matchedDirs.length === 0) {
     notes.push(
-      'Bu proje için transcript dizini yok — Claude Code bu cwd ile hiç kayıt üretmemiş ya da kayıtlar temizlenmiş (doğrulanamadı).',
+      'There is no transcript directory for this project — Claude Code never recorded anything from this working directory, or the records were cleared (not confirmed).',
     );
     return { projectCwd, claudeProjectsDir: projectsDir, slug, matchedDirs, transcriptsFound: 0, sessions: [], notes };
   }
   if (ancestorCwd !== null) {
     notes.push(
-      `Bu dizinin kendi transcript kaydı yok; kayıtlar ÜST dizin oturumundan okundu (${ancestorCwd}). ` +
-        'Yalnız bu projenin altındaki dosyalar sayıldı — üst oturumdaki başka işler kapsam dışı bırakıldı.',
+      `This directory has no transcript record of its own; the records were read from a session in a parent directory (${ancestorCwd}). ` +
+        'Only files under this project were counted — other work in that session was left out of scope.',
     );
   }
 
@@ -972,7 +974,7 @@ export async function collectClaude(
     try {
       files = await readdir(dir, { withFileTypes: true });
     } catch {
-      notes.push(`Dizin okunamadı: ${dir}`);
+      notes.push(`This directory could not be read: ${dir}`);
       continue;
     }
     for (const f of files) {
@@ -1019,17 +1021,17 @@ export async function collectClaude(
     const gun = Math.floor((Date.now() - enEskiMs) / 86_400_000);
     if (gun >= RETENTION_UYARI_GUN) {
       notes.push(
-        `En eski transcript ${gun} günlük. Claude Code kayıtları varsayılan olarak ` +
-          '30 günde siler (cleanupPeriodDays); silinince bu iddiaların kanıtı ' +
-          'YENİDEN ÜRETİLEMEZ. Kalıcı olan tek şey .ocean/passport.jsonl defterindeki ' +
-          'insan onaylarındır — bitmiş işi onaylamayı geciktirme, ya da ' +
-          '~/.claude/settings.json içinde "cleanupPeriodDays" değerini yükselt.',
+        `The oldest transcript is ${gun} days old. Claude Code deletes its records after ` +
+          '30 days by default (cleanupPeriodDays); once they are gone, the evidence behind ' +
+          'these claims cannot be reproduced. The only lasting record is the human approvals ' +
+          'in the .ocean/passport.jsonl ledger — do not put off approving work that is ' +
+          'finished, or raise "cleanupPeriodDays" in ~/.claude/settings.json.',
       );
     }
   }
 
   if (transcriptsFound === 0) {
-    notes.push('Transcript dizini var ama .jsonl yok — retention temizlemiş olabilir (doğrulanamadı).');
+    notes.push('There is a transcript directory but no .jsonl — retention may have cleared it (not confirmed).');
   }
 
   sessions.sort((a, b) => {

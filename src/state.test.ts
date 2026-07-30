@@ -175,7 +175,7 @@ test('readLedger: gerçek satırlar rozet verir, kanalsız/bozuk satırlar VERME
   assert.equal(d.dosyaVar, true);
   assert.equal(claimOnayli(d, 'gercek-1'), true);
   assert.equal(claimOnayli(d, 'kanalsiz-1'), false);
-  assert.ok(d.gecersiz.get('kanalsiz-1')?.includes('kanal'), 'dürüst gerekçe kalmalı');
+  assert.ok(d.gecersiz.get('kanalsiz-1')?.includes('no ledger entry'), 'dürüst gerekçe kalmalı');
   assert.equal(d.reddedilenSatir, 1, 'bozuk satır sayılır (sessizce yok sayılmaz)');
   assert.equal(d.okunanSatir, 2, 'ayrıştırılabilen satır sayısı');
 });

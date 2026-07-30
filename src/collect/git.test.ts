@@ -26,7 +26,7 @@ test('collectGit: git olmayan dizin → isGit=false, zarif boş', async () => {
   assert.equal(res.dirtyFiles.length, 0);
   assert.equal(res.recentCommits.length, 0);
   assert.equal(res.diffStat, null);
-  assert.ok(res.notes.some((n) => n.includes('git çalışma ağacı değil')));
+  assert.ok(res.notes.some((n) => n.includes('not a git working tree')));
 });
 
 test('collectGit: commit + kirli dosyalar + numstat diff', async () => {
@@ -90,7 +90,7 @@ test('collectGit: git binary\'si yoksa gitAvailable=false, fırlatmaz', async ()
   const res = await collectGit(dir, { gitBin: 'topbeam-olmayan-git-binari-xyz' });
   assert.equal(res.gitAvailable, false);
   assert.equal(res.isGit, false);
-  assert.ok(res.notes.some((n) => n.includes('git bulunamadı')));
+  assert.ok(res.notes.some((n) => n.includes('git was not found')));
 });
 
 test('collectGit: binary dosya numstat\'ta null added/removed', async () => {

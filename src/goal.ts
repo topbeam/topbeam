@@ -245,11 +245,11 @@ export function buildTeslim(
       status = 'not_verified';
       reason =
         item.hints.paths.length === 0 && item.hints.tags.length === 0 && !item.hints.testOnly
-          ? 'Kanıt yok — bu söze bağlanacak ipucu yazılmamış (yol, `test:` ya da #etiket).'
-          : 'Kanıt yok — ipucuyla eşleşen kayıt bulunamadı.';
+          ? 'No evidence — this promise carries no hint to bind records to it (a path, a `test:` prefix or a #tag).'
+          : 'No evidence — no record matched the hint.';
     } else if (onayliSayi === n) {
       status = 'completed';
-      reason = n > 1 ? `${n} kaydın hepsi insan onaylı.` : '1 kayıt insan onaylı.';
+      reason = n > 1 ? `All ${n} records are human-approved.` : '1 record is human-approved.';
     } else if (verification !== undefined) {
       /**
        * ⚠️ ONAY GERİ ALINMAZ (2026-07-30, canlı ölçümle bulundu).
@@ -281,27 +281,27 @@ export function buildTeslim(
         status = 'completed';
         reason =
           yeni > 0
-            ? `İnsan onaylı (${verification.at.slice(0, 10)}). Onaydan SONRA bu alanda ${yeni} yeni ` +
-              'doğrulanmamış kayıt oluştu — onay geri alınmaz, ama yeni iş ayrı bir iştir.'
-            : `${onayliSayi}/${n} kayıt insan onaylı.`;
+            ? `Human-approved (${verification.at.slice(0, 10)}). Since that approval, ${yeni} new ` +
+              'unverified records appeared in this area — an approval is not taken back, but new work is separate work.'
+            : `${onayliSayi}/${n} records human-approved.`;
       } else {
         status = 'partial';
         reason =
-          `İmza defterde duruyor (${verification.at.slice(0, 10)}) ama onayladığın kayıt artık ` +
-          'yeniden üretilemiyor (transcript değişmiş ya da saklama süresi silmiş olabilir) — ' +
-          'söz "tamam" diye gösterilemez.';
+          `The signature is still in the ledger (${verification.at.slice(0, 10)}) but the record you ` +
+          'approved can no longer be reproduced (the transcript may have changed, or retention may have ' +
+          'deleted it) — the promise cannot be shown as kept.';
       }
     } else if (onayliSayi > 0) {
       status = 'partial';
-      reason = `${onayliSayi}/${n} kayıt insan onaylı — söz henüz tamam değil.`;
+      reason = `${onayliSayi}/${n} records human-approved — the promise is not kept yet.`;
     } else {
       status = 'not_verified';
-      reason = `${n} kayıt eşleşti — insan onayı yok.`;
+      reason = `${n} records matched — no human approval.`;
     }
 
     // Elle atılan `[x]` tik BEYANDIR: sayıya girmez, ama sessizce de yutulmaz.
     if (item.checked && status !== 'completed') {
-      reason = `goal.md'de elle işaretli — bu bir beyandır, kanıt değil. ${reason}`;
+      reason = `Ticked by hand in goal.md — that is a statement, not evidence. ${reason}`;
     }
 
     out.push({

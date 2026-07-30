@@ -99,7 +99,7 @@ import {
 export function approveClaim(claim: Claim, verification: Verification): Claim {
   const humanEvidence: ClaimEvidence = {
     kind: 'human',
-    summary: `${verification.by} ${verification.at} tarihinde doğruladı${
+    summary: `${verification.by} verified this on ${verification.at}${
       verification.note !== undefined ? `: ${verification.note}` : '.'
     }`,
   };
@@ -166,10 +166,10 @@ export function insanKapisi(deps: {
       ok: false,
       gate: 'etkilesimsiz',
       message:
-        'Onay kaydedilmedi: cevap bir terminalden gelmedi (pipe/otomasyon girdisi).\n' +
-        'Bu kapı düz pipe/yönlendirmeyi durdurur — yani onay KAZAYLA verilemez.\n' +
-        'Ama bir duvar değil: sahte terminal (pty) kuran biri bunu bile isteye geçebilir.\n' +
-        'Bu komutu kendi terminalinde, elinle çalıştır: topbeam verify <id>',
+        'No approval recorded: the answer did not come from a terminal (piped or automated input).\n' +
+        'This gate stops plain pipes and redirection — an approval cannot be given by accident.\n' +
+        'It is not a wall, though: someone who sets up a fake terminal (a pty) can pass it deliberately.\n' +
+        'Run this command in your own terminal, by hand: topbeam verify <id>',
     };
   }
   // Kimlik listesi ledger.ts'te: onayı YAZAN kapı ile onayı GÖSTEREN kapı
@@ -180,8 +180,8 @@ export function insanKapisi(deps: {
       ok: false,
       gate: 'kimlik-yok',
       message:
-        'Onay kaydedilmedi: onaylayan kullanıcı adı okunamadı.\n' +
-        'İmzası bilinmeyen bir onay, onay değildir — kayıt yazılmadı.',
+        'No approval recorded: the username of the approver could not be read.\n' +
+        'An approval with an unknown signature is not an approval — nothing was written.',
     };
   }
   return { ok: true, by };
@@ -198,7 +198,7 @@ function osKullanici(): string | null {
 }
 
 function evidenceLines(claim: Claim): string[] {
-  if (claim.evidence.length === 0) return ['  (kanıt kaydı yok)'];
+  if (claim.evidence.length === 0) return ['  (no evidence on record)'];
   return claim.evidence.map((e) => `  - [${e.kind}] ${e.summary}`);
 }
 
@@ -208,7 +208,7 @@ export async function runVerify(cwd: string, id: string, deps: VerifyDeps): Prom
 
   const state = await readState(cwd);
   if (state === null) {
-    return { ok: false, error: "Bu proje Topbeam'e bağlı değil. Önce: topbeam init" };
+    return { ok: false, error: "This project is not connected to Topbeam. First run: topbeam init" };
   }
 
   // ── hedefi çöz: tek claim mi, teslim sözü mü? ──
@@ -233,25 +233,25 @@ export async function runVerify(cwd: string, id: string, deps: VerifyDeps): Prom
     return {
       ok: false,
       error:
-        `Bu teslim sözüne bağlanan kayıt yok: ${unit.title}\n` +
-        'Onay bir KAYDI doğrular; kayıt yoksa onaylanacak bir şey de yok.\n' +
-        'Söze bir ipucu ekle (yol: `src/auth` · `test:` öneki · #etiket), sonra: topbeam sync',
+        `No record is bound to this delivery promise: ${unit.title}\n` +
+        'An approval verifies a RECORD; with no record there is nothing to approve.\n' +
+        'Add a hint to the promise (a path: `src/auth` · a `test:` prefix · a #tag), then run: topbeam sync',
     };
   }
 
   if (hedefIdx.length === 0) {
-    const sozler = state.passport.slice(0, 3).map((p) => `  - ${p.id}  (${p.claimIds.length} kayıt)  ${p.title}`);
+    const sozler = state.passport.slice(0, 3).map((p) => `  - ${p.id}  (${p.claimIds.length} records)  ${p.title}`);
     const known = state.claims.slice(-5).map((c) => `  - ${c.id}`);
     return {
       ok: false,
       error:
-        `Kayıt bulunamadı: ${id}\n` +
+        `No record found: ${id}\n` +
         (known.length > 0
-          ? `Kayıtlı son claim id'leri:\n${known.join('\n')}` +
+          ? `Last claim ids on record:\n${known.join('\n')}` +
             (sozler.length > 0
-              ? `\nTeslim sözleri (sözün tüm kayıtları tek onayla geçer):\n${sozler.join('\n')}`
+              ? `\nDelivery promises (one approval covers every record of a promise):\n${sozler.join('\n')}`
               : '')
-          : "Henüz hiç claim yok — önce: topbeam sync"),
+          : 'No claims yet — first run: topbeam sync'),
     };
   }
 
@@ -268,20 +268,20 @@ export async function runVerify(cwd: string, id: string, deps: VerifyDeps): Prom
   const hedefler = hedefIdx.map((i) => state.claims[i] as Claim);
   if (unit !== undefined && hedefler.length > 1) {
     deps.out('');
-    deps.out(`Teslim sözü: ${hedefAdi}`);
-    deps.out(`Kayıt      : ${hedefler.length} adet — hepsi aşağıda`);
+    deps.out(`Promise : ${hedefAdi}`);
+    deps.out(`Records : ${hedefler.length} — all of them listed below`);
   }
   for (const c of hedefler) {
     deps.out('');
-    deps.out(`İddia   : ${c.text}`);
+    deps.out(`Claim   : ${c.text}`);
     // Seviye satırı defterle kesişir: dayanaksız "insan onayı" olduğu gibi yazılmaz.
     const kaynaksiz = c.level === 'insan-onayi' && !onayliMi(c);
     deps.out(
-      `Seviye  : ${EVIDENCE_LEVEL_LABELS_TR[c.level]}${
+      `Level   : ${EVIDENCE_LEVEL_LABELS_TR[c.level]}${
         kaynaksiz ? ` — ${ROZETSIZ_ETIKET} (${ROZETSIZ_NOT}: passport.jsonl)` : ''
       }`,
     );
-    deps.out('Kanıtlar:');
+    deps.out('Evidence:');
     for (const line of evidenceLines(c)) deps.out(line);
   }
   deps.out('');
@@ -295,8 +295,8 @@ export async function runVerify(cwd: string, id: string, deps: VerifyDeps): Prom
   if (bekleyenIdx.length === 0) {
     deps.out(
       hedefler.length > 1
-        ? 'Bu birimdeki tüm kayıtlar zaten insan onaylı — yeniden onay gerekmiyor.'
-        : 'Bu iddia zaten insan onaylı — yeniden onay gerekmiyor.',
+        ? 'Every record here is already human-approved — nothing left to approve.'
+        : 'This claim is already human-approved — nothing left to approve.',
     );
     return { ok: true, approved: false };
   }
@@ -316,19 +316,19 @@ export async function runVerify(cwd: string, id: string, deps: VerifyDeps): Prom
   // Geniş söz uyarısı — tek "e" ile lastik damga vurulmasın diye.
   if (bekleyenIdx.length > KALABALIK_ESIK) {
     deps.out(
-      `Dikkat: bu söz ${bekleyenIdx.length} kaydı kapsıyor. Hepsini gerçekten kendi gözünle\n` +
-        'görmediysen H de — sözü daraltacak bir ipucu ekle (yol · `test:` · #etiket).\n' +
-        'Tek "evet" ile geçilen geniş bir onay, onay olmaktan çıkar.',
+      `Careful: this promise covers ${bekleyenIdx.length} records. If you have not really seen all of\n` +
+        'them with your own eyes, answer N — then add a hint to narrow the promise (path · `test:` · #tag).\n' +
+        'A broad approval passed with a single "yes" stops being an approval.',
     );
   }
 
   const soru =
     bekleyenIdx.length > 1
-      ? `Bu ${bekleyenIdx.length} kaydın hepsini kendi gözünle doğruladın mı? [e/H] `
-      : 'Bu işi kendi gözünle doğruladın mı? [e/H] ';
+      ? `Have you checked all ${bekleyenIdx.length} of these records with your own eyes? [y/N] `
+      : 'Have you checked this work with your own eyes? [y/N] ';
   const answer = (await deps.ask(soru)).trim().toLowerCase();
   if (!YES.has(answer)) {
-    deps.out('Onay kaydedilmedi — seviye değişmedi. (Doğrulamadan onay yok: dürüstlük böyle çalışır.)');
+    deps.out('Nothing recorded — the level did not change. (No approval without checking: that is how honesty works.)');
     return { ok: true, approved: false };
   }
 
@@ -383,8 +383,8 @@ export async function runVerify(cwd: string, id: string, deps: VerifyDeps): Prom
       ts: verification.at,
       text:
         onaylananlar.length > 1
-          ? `Doğrulandı: ${title} — ${onaylananlar.length} kayıt (${by})`
-          : `Doğrulandı: ${title} (${by})`,
+          ? `Verified: ${title} — ${onaylananlar.length} records (${by})`
+          : `Verified: ${title} (${by})`,
       source: 'insan' as const,
     },
   ];
@@ -415,11 +415,11 @@ export async function runVerify(cwd: string, id: string, deps: VerifyDeps): Prom
         toolVersion: state.tool_version,
       }),
     );
-    notified = await notify('Topbeam', 'Ürün geliştirildi 🎉 — teslim sözlerinin hepsi insan onaylı.');
+    notified = await notify('Topbeam', 'Every delivery promise is now human-approved 🎉');
     fullTickNotifiedAt = verification.at;
     log.push({
       ts: verification.at,
-      text: `Bar doldu: ${passport.length} teslim sözünün hepsi insan onaylı — mühür yazıldı (.ocean/muhur.md).`,
+      text: `The bar is full: all ${passport.length} delivery promises are human-approved — the seal was written (.ocean/muhur.md).`,
       // 'ocean' = LogSource enum DEĞERİ (şema uyumu; panoda etiket "topbeam").
       source: 'ocean' as const,
     });
@@ -450,16 +450,16 @@ export async function runVerify(cwd: string, id: string, deps: VerifyDeps): Prom
   deps.out('');
   deps.out(
     onaylananlar.length > 1
-      ? `Onay kaydedildi: ${onaylananlar.length} kayıt → insan-onayı (${by}).`
-      : `Onay kaydedildi: ${(onaylananlar[0] as Claim).id} → insan-onayı (${by}).`,
+      ? `Approval recorded: ${onaylananlar.length} records → human approval (${by}).`
+      : `Approval recorded: ${(onaylananlar[0] as Claim).id} → human approval (${by}).`,
   );
   // Rapor da panoyla aynı kapıdan: sayı defterden gelir (passport.jsonl).
   if (passport.length > 0) {
-    deps.out(`Teslim sözü: ${dogrulananSayisi(passport, ledger)} / ${passport.length} madde onaylandı.`);
+    deps.out(`Delivery promises: ${dogrulananSayisi(passport, ledger)} / ${passport.length} approved.`);
   }
   if (fullTick) {
-    deps.out('Bar doldu — ürün geliştirildi 🎉');
-    deps.out(`Mühür yazıldı: ${muhurPath(cwd)}`);
+    deps.out('The bar is full — every promise is kept 🎉');
+    deps.out(`Seal written: ${muhurPath(cwd)}`);
   }
 
   return { ok: true, approved: true, fullTick, notified, panoPath: panoPath(cwd) };

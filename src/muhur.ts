@@ -19,10 +19,10 @@ import type { VerificationLedger } from './ledger.ts';
 export const MUHUR_FILE = 'muhur.md';
 
 const SEVIYE_ADI: Record<EvidenceLevel, string> = {
-  'dosya-kaniti': 'dosya-kanıtı',
-  'test-kaniti': 'test-kanıtı',
-  'insan-onayi': 'insan-onayı',
-  dogrulanmadi: 'doğrulanmadı',
+  'dosya-kaniti': 'file evidence',
+  'test-kaniti': 'test evidence',
+  'insan-onayi': 'human approval',
+  dogrulanmadi: 'not verified',
 };
 
 export interface MuhurGirdi {
@@ -48,7 +48,7 @@ function kanitDokumu(item: PassportItem, byId: ReadonlyMap<string, Claim>): stri
   const parcalar = [...sayac.entries()]
     .sort((a, b) => a[0].localeCompare(b[0]))
     .map(([lvl, n]) => `${n} ${SEVIYE_ADI[lvl]}`);
-  return parcalar.length > 0 ? parcalar.join(' · ') : 'kayıt bulunamadı';
+  return parcalar.length > 0 ? parcalar.join(' · ') : 'no records found';
 }
 
 /** ISO ts → "2026-07-29 14:03" (deterministik dilimleme, locale yok). */
@@ -62,18 +62,18 @@ export function muhurMetni(g: MuhurGirdi): string {
   const byId = new Map(g.claims.map((c) => [c.id, c]));
   const satirlar: string[] = [];
 
-  satirlar.push(`# Mühür — ${g.projectName}`);
+  satirlar.push(`# Seal — ${g.projectName}`);
   satirlar.push('');
-  satirlar.push(`Kilitlendi: ${fmtTs(g.at)}  (${g.at})`);
-  satirlar.push(`Kapsam    : ${g.items.length} teslim sözü — hepsi insan onaylı.`);
-  satirlar.push(`Son imza  : ${g.by} (terminal onayı, .ocean/passport.jsonl)`);
+  satirlar.push(`Locked   : ${fmtTs(g.at)}  (${g.at})`);
+  satirlar.push(`Scope    : ${g.items.length} delivery promises — every one human-approved.`);
+  satirlar.push(`Signed by: ${g.by} (terminal approval, .ocean/passport.jsonl)`);
   // "ağ yok" KOŞULSUZ yazılamaz: sync varsayılanda `gh run list` çağırabilir.
   // Koşulu söylemek, koşulu yutmaktan iyidir (2026-07-29 düzeltmesi).
   satirlar.push(
-    `Araç      : topbeam v${g.toolVersion} — deterministik, LLM yok; tek dış çağrı opsiyonel CI okuması (--no-ci ile kapalı).`,
+    `Tool     : topbeam v${g.toolVersion} — deterministic, no LLM; the one outbound call is the optional CI read (off with --no-ci).`,
   );
   satirlar.push('');
-  satirlar.push('## Sözler ve dayanakları');
+  satirlar.push('## The promises, and what they rest on');
   satirlar.push('');
 
   for (const item of g.items) {
@@ -84,19 +84,19 @@ export function muhurMetni(g: MuhurGirdi): string {
     const enSon = imzalar.reduce<string | null>((acc, e) => (acc === null || e.at > acc ? e.at : acc), null);
     const kimler = [...new Set(imzalar.map((e) => e.by))].sort().join(', ');
     satirlar.push(
-      `  - onay: ${kimler === '' ? 'imza kaydı yok' : kimler}` +
+      `  - approved by: ${kimler === '' ? 'no signature on record' : kimler}` +
         `${enSon !== null ? ` — ${fmtTs(enSon)}` : ''}`,
     );
-    satirlar.push(`  - dayanak: ${item.claimIds.length} kayıt (${kanitDokumu(item, byId)})`);
+    satirlar.push(`  - rests on: ${item.claimIds.length} records (${kanitDokumu(item, byId)})`);
   }
 
   satirlar.push('');
-  satirlar.push('## Bu mühür ne demek DEĞİL');
+  satirlar.push('## What this seal does NOT mean');
   satirlar.push('');
-  satirlar.push('- "Ürün hatasız" demek değildir: yalnız yukarıdaki sözlerin kapsamı kadardır.');
-  satirlar.push('- Sözleri insan yazdı, onayı insan verdi; Topbeam yalnız kaydı tuttu.');
-  satirlar.push('- Kapsam dışında kalan iş bu mühre girmez — goal.md neyi yazdıysa o.');
-  satirlar.push('- Bu dosya bir kayıttır, bir reklam değildir; sayılar ölçülmüştür, tahmin yoktur.');
+  satirlar.push('- It does not say the product is free of defects: it reaches exactly as far as the promises above.');
+  satirlar.push('- A person wrote the promises and a person approved them; Topbeam only kept the record.');
+  satirlar.push('- Work outside that scope is not in this seal — it covers what goal.md says, nothing more.');
+  satirlar.push('- This is a record, not an advertisement: the numbers were measured, none were guessed.');
   satirlar.push('');
 
   return `${satirlar.join('\n')}`;

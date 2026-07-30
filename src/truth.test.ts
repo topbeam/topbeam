@@ -146,7 +146,7 @@ test('transcript ∩ git kesişimi → dosya-kaniti; salt-transcript → dogrula
   assert.ok(verified);
   assert.equal(verified.level, 'dosya-kaniti');
   assert.equal(verified.kind, 'dosya');
-  assert.equal(verified.text, '2 dosya değişti: src/a.ts, src/b.ts');
+  assert.equal(verified.text, '2 files changed: src/a.ts, src/b.ts');
   // İKİ kanıt: transcript + git — dosya-kaniti tanımı gereği.
   assert.ok(verified.evidence.some((e) => e.kind === 'transcript-tool-use'));
   assert.ok(verified.evidence.some((e) => e.kind === 'git-diff'));
@@ -154,7 +154,7 @@ test('transcript ∩ git kesişimi → dosya-kaniti; salt-transcript → dogrula
   const unverified = claims.find((c) => c.id === 'dosya-transcript-s1');
   assert.ok(unverified);
   assert.equal(unverified.level, 'dogrulanmadi');
-  assert.ok(unverified.text.includes('uygulandı görünüyor, doğrulanmadı'));
+  assert.ok(unverified.text.includes('looks applied, not verified'));
   assert.ok(unverified.text.includes('hayalet.ts'));
   assert.ok(unverified.evidence.every((e) => e.kind === 'transcript-tool-use'));
 });
@@ -187,7 +187,7 @@ test('sonucu görülmeyen denemeler ayrı claim — başarıya katılmaz', () =>
   const c = claims.find((x) => x.id === 'dosya-belirsiz-s1');
   assert.ok(c);
   assert.equal(c.level, 'dogrulanmadi');
-  assert.ok(c.text.includes("sonucu transcript'te görünmüyor"));
+  assert.ok(c.text.includes('the result does not appear in the transcript'));
   assert.equal(claims.filter((x) => x.kind === 'dosya').length, 1); // değişti-claim'i YOK
 });
 
@@ -203,7 +203,7 @@ test('çıktıdan okunan geçti sayısı → test-kaniti', () => {
   const t = claims.find((c) => c.kind === 'test');
   assert.ok(t);
   assert.equal(t.level, 'test-kaniti');
-  assert.equal(t.text, '19 test geçti, 0 başarısız (npm test).');
+  assert.equal(t.text, '19 tests passed, 0 failed (npm test).');
   assert.equal(t.evidence[0]?.kind, 'test-output');
   assert.equal(t.evidence[0]?.summary, '# pass 19');
   // exit 0 varsayım olabilir → metinde exit iddiası YOK.
@@ -220,8 +220,8 @@ test('başarısız test sayısı da test-kaniti (kanıtlı gerçek, süslenmez)'
   const t = claims.find((c) => c.kind === 'test');
   assert.ok(t);
   assert.equal(t.level, 'test-kaniti');
-  assert.ok(t.text.includes('2 test başarısız'));
-  assert.ok(t.text.includes('17 test geçti'));
+  assert.ok(t.text.includes('2 failing tests'));
+  assert.ok(t.text.includes('17 passing'));
 });
 
 test('sayı okunamayan test koşumu → dogrulanmadi, sayı uydurulmaz', () => {
@@ -230,8 +230,8 @@ test('sayı okunamayan test koşumu → dogrulanmadi, sayı uydurulmaz', () => {
   const t = claims.find((c) => c.kind === 'test');
   assert.ok(t);
   assert.equal(t.level, 'dogrulanmadi');
-  assert.ok(t.text.includes('sonuç çıktıdan okunamadı — doğrulanmadı'));
-  assert.ok(!/\d+ test geçti/.test(t.text));
+  assert.ok(t.text.includes('its result could not be read from the output — not verified'));
+  assert.ok(!/\d+ tests? passed/.test(t.text));
 });
 
 test('aynı komutun tekrar koşumları → yalnız SON koşum claim olur', () => {
@@ -246,7 +246,7 @@ test('aynı komutun tekrar koşumları → yalnız SON koşum claim olur', () =>
   const { claims } = buildTruth(claude, gitFacts(), { now: NOW });
   const tests = claims.filter((c) => c.kind === 'test');
   assert.equal(tests.length, 1);
-  assert.ok(tests[0]?.text.includes('8 test geçti'));
+  assert.ok(tests[0]?.text.includes('8 tests passed'));
   assert.equal(tests[0]?.createdAt, '2026-07-28T10:45:00.000Z');
 });
 
@@ -330,8 +330,10 @@ test('İNVARYANT: kanıtsız claim yok — her seviyenin kanıt türü yerinde',
     assert.ok(c.evidence.length > 0, `kanıtsız claim: ${c.id}`);
     // 2) Motor ASLA insan-onayi üretmez.
     assert.notEqual(c.level, 'insan-onayi', `motor insan-onayi üretti: ${c.id}`);
-    // 3) "çalışıyor" ifadesi motor çıktısında YASAK.
-    assert.ok(!c.text.toLowerCase().includes('çalışıyor'), `motor 'çalışıyor' dedi: ${c.id}`);
+    // 3) "works" ifadesi (eski Türkçe çıktıdaki "çalışıyor") motor çıktısında YASAK.
+    //    Nöbetçi çeviriyle ölmesin diye kaynaktaki İngilizce karşılığa taşındı:
+    //    buildCalisiyorClaim "<konu> works — the user confirmed it" der; motor ASLA.
+    assert.ok(!/\bworks\b/i.test(c.text), `motor 'works' dedi: ${c.id}`);
     // 4) Seviye ↔ kanıt türü tutarlılığı.
     if (c.level === 'dosya-kaniti') {
       assert.ok(c.evidence.some((e) => e.kind === 'git-diff'), `dosya-kaniti git kanıtı yok: ${c.id}`);
@@ -341,7 +343,10 @@ test('İNVARYANT: kanıtsız claim yok — her seviyenin kanıt türü yerinde',
       assert.ok(c.evidence.some((e) => e.kind === 'test-output'), `test-kaniti çıktı kanıtı yok: ${c.id}`);
     }
     if (c.level === 'dogrulanmadi') {
-      assert.ok(c.text.includes('doğrulanmadı') || c.text.includes('görünmüyor'), `dogrulanmadi etiketi eksik: ${c.id}`);
+      assert.ok(
+        c.text.includes('not verified') || c.text.includes('does not appear'),
+        `dogrulanmadi etiketi eksik: ${c.id}`,
+      );
     }
   }
 });
@@ -379,14 +384,14 @@ test('log varsayılanı SADECE kanıtlı gerçekler — beyan girmez', () => {
   assert.ok(log.length > 0);
   assert.ok(log.every((l) => l.source !== 'claude-beyan'));
   assert.ok(log.some((l) => l.source === 'git' && l.text.startsWith('Commit: ilk commit')));
-  assert.ok(log.some((l) => l.source === 'git' && l.text === '1 dosya değişti: src/a.ts'));
-  assert.ok(log.some((l) => l.source === 'test' && l.text.includes('4 test geçti')));
+  assert.ok(log.some((l) => l.source === 'git' && l.text === '1 files changed: src/a.ts'));
+  assert.ok(log.some((l) => l.source === 'test' && l.text.includes('4 tests passed')));
   // dogrulanmadi claim'ler log'a girmez (bu fixture'da yok ama kural kilitli).
   const ts = log.map((l) => l.ts);
   assert.deepEqual(ts, [...ts].sort()); // kronolojik
 });
 
-test('includeBeyan=true → "Beyan:" öneki + claude-beyan kaynağı + komut ref\'i YOK', () => {
+test('includeBeyan=true → "Statement:" öneki + claude-beyan kaynağı + komut ref\'i YOK', () => {
   const claude = collect([
     session('s1', {
       // npm = anlamlı araç → beyan tutulur (komut metni yine log'a girmez)
@@ -396,7 +401,7 @@ test('includeBeyan=true → "Beyan:" öneki + claude-beyan kaynağı + komut ref
   const { log } = buildTruth(claude, gitFacts(), { now: NOW, includeBeyan: true });
   const beyan = log.find((l) => l.source === 'claude-beyan');
   assert.ok(beyan);
-  assert.equal(beyan.text, 'Beyan: Bağımlılığı indir');
+  assert.equal(beyan.text, 'Statement: Bağımlılığı indir');
   assert.equal(beyan.ref, undefined); // komut metni (secret riski) log'a sızmaz
 });
 
@@ -423,7 +428,7 @@ test('proje DIŞI dosyalar claim/log dışında kalır + sayısı not olarak sö
   assert.equal(dosya.signals?.fileCount, 1);
   assert.deepEqual(dosya.signals?.paths, ['src/a.ts']);
   // Kapsam daralması SESSİZ olamaz.
-  assert.ok(notes.some((n) => n.includes('proje kökü dışındaki')));
+  assert.ok(notes.some((n) => n.includes('outside the project root')));
 });
 
 test('proje dışı yol signals.paths\'e de girmez (kart kritik-dosya taraması temiz kalır)', () => {
@@ -461,7 +466,7 @@ test('kontrol komutu (tsc/eslint) claim ÜRETMEZ; gerçek test claim\'i durur', 
   const testler = claims.filter((c) => c.kind === 'test');
   assert.equal(testler.length, 1, 'yalnız gerçek test koşumu claim üretmeli');
   assert.equal(testler[0]?.level, 'test-kaniti');
-  assert.ok(notes.some((n) => n.includes('kontrol komutu')));
+  assert.ok(notes.some((n) => n.includes('check commands')));
 });
 
 test('beyan seyreltme: projeyle ilişkisiz beyan düşer, ilişkili olan durur', () => {
@@ -482,7 +487,7 @@ test('beyan seyreltme: projeyle ilişkisiz beyan düşer, ilişkili olan durur',
   assert.equal(beyanlar.some((t) => t.includes('Sesli bildirim')), false);
   assert.ok(beyanlar.some((t) => t.includes("commit'le")));
   assert.ok(beyanlar.some((t) => t.includes('Login dosyasını oku')));
-  assert.ok(notes.some((n) => n.includes('beyan satırı projeyle ilişkilendirilemedi')));
+  assert.ok(notes.some((n) => n.includes('statement lines could not be tied to this project')));
 });
 
 test('ardışık aynı beyan tek satıra iner: ×N', () => {
@@ -498,7 +503,7 @@ test('ardışık aynı beyan tek satıra iner: ×N', () => {
   const { log } = buildTruth(claude, gitFacts(), { now: NOW, includeBeyan: true });
   const beyanlar = log.filter((l) => l.source === 'claude-beyan');
   assert.equal(beyanlar.length, 1);
-  assert.equal(beyanlar[0]?.text, 'Beyan: Durumu kontrol et ×3');
+  assert.equal(beyanlar[0]?.text, 'Statement: Durumu kontrol et ×3');
   assert.equal(beyanlar[0]?.ts, '2026-07-28T10:00:00.000Z'); // ilk görülme zamanı
 });
 
@@ -508,13 +513,13 @@ test('collapseRepeats: sayaç toplanır (idempotent), ayrık tekrarlar birleşme
     text,
     source,
   });
-  const bir = collapseRepeats([e('1', 'Beyan: X'), e('2', 'Beyan: x'), e('3', 'Beyan: X')]);
+  const bir = collapseRepeats([e('1', 'Statement: X'), e('2', 'Statement: x'), e('3', 'Statement: X')]);
   assert.equal(bir.length, 1);
-  assert.equal(bir[0]?.text, 'Beyan: X ×3');
+  assert.equal(bir[0]?.text, 'Statement: X ×3');
   // ikinci geçiş sayıyı BOZMAZ (×3 ×2 olmaz)
   assert.deepEqual(collapseRepeats(bir), bir);
   // araya kanıt satırı girerse ayrı olaylardır → birleşmez
-  const ayrik = collapseRepeats([e('1', 'Beyan: X'), e('2', 'Commit: y', 'git'), e('3', 'Beyan: X')]);
+  const ayrik = collapseRepeats([e('1', 'Statement: X'), e('2', 'Commit: y', 'git'), e('3', 'Statement: X')]);
   assert.equal(ayrik.length, 3);
 });
 
@@ -536,7 +541,7 @@ test('log sınırı KANIT ÖNCELİKLİ: beyanlar düşer, kanıt satırları kal
   });
   assert.equal(log.length, 500);
   assert.equal(log.filter((l) => l.source === 'claude-beyan').length, 0, 'sınırda önce beyan düşer');
-  assert.ok(notes.some((n) => n.includes('kanıt taşıyan satırlar önce tutuldu')));
+  assert.ok(notes.some((n) => n.includes('lines carrying evidence were kept first')));
 });
 
 // ── git-yok senaryosu ────────────────────────────────────────────────────────
@@ -549,14 +554,15 @@ test('git deposu olmayan dizin: "git\'te izi yok" DEMEZ, noGitTrace sinyali YAZM
     headHash: null,
     headShort: null,
     recentCommits: [],
-    notes: ['Bu dizin bir git çalışma ağacı değil — git kanıtı yok.'],
+    notes: ['This directory is not a git working tree — there is no git evidence.'],
   });
   const { claims } = buildTruth(claude, git, { now: NOW });
   const c = claims.find((x) => x.kind === 'dosya');
   assert.ok(c);
   assert.equal(c.level, 'dogrulanmadi');
-  assert.ok(c.text.includes('git deposu değil'));
-  assert.equal(c.text.includes("git'te izi yok"), false); // ölçüm yapılmadı ≠ ölçüm başarısız
+  assert.ok(c.text.includes('not a git repository'));
+  // Yasak ifade (eski: "git'te izi yok") — kaynaktaki İngilizce karşılığı:
+  assert.equal(c.text.includes('no trace in git'), false); // ölçüm yapılmadı ≠ ölçüm başarısız
   assert.equal(c.signals?.noGitTrace, undefined); // bilinmiyor → sinyal yazılmaz
 });
 
@@ -573,16 +579,23 @@ test('baştan sona farklı cwd\'li oturum atlanır + dürüst not düşülür', 
   ]);
   const { claims, notes } = buildTruth(claude, gitFacts(), { now: NOW });
   assert.equal(claims.length, 0);
-  assert.ok(notes.some((n) => n.includes('farklı bir cwd')));
+  assert.ok(notes.some((n) => n.includes('under a different cwd')));
 });
 
 test('toplayıcı notları sonuca taşınır (kapsam sessiz daralmaz)', () => {
   const claude = collect([]);
-  claude.notes.push('Bu proje için transcript dizini yok — (doğrulanamadı).');
-  const git = gitFacts({ isGit: false, headHash: null, recentCommits: [], notes: ['Bu dizin bir git çalışma ağacı değil — git kanıtı yok.'] });
+  claude.notes.push(
+    'There is no transcript directory for this project — Claude Code never recorded anything from this working directory, or the records were cleared (not confirmed).',
+  );
+  const git = gitFacts({
+    isGit: false,
+    headHash: null,
+    recentCommits: [],
+    notes: ['This directory is not a git working tree — there is no git evidence.'],
+  });
   const { notes } = buildTruth(claude, git, { now: NOW });
-  assert.ok(notes.some((n) => n.includes('transcript dizini yok')));
-  assert.ok(notes.some((n) => n.includes('git kanıtı yok')));
+  assert.ok(notes.some((n) => n.includes('no transcript directory for this project')));
+  assert.ok(notes.some((n) => n.includes('there is no git evidence')));
 });
 
 // ── çalışıyor claim'i (tek meşru yol) ────────────────────────────────────────
@@ -596,8 +609,8 @@ test('buildCalisiyorClaim: yalnız Verification ile, insan-onayi + human kanıt�
   });
   assert.equal(c.level, 'insan-onayi');
   assert.equal(c.kind, 'durum');
-  assert.ok(c.text.includes('çalışıyor'));
-  assert.ok(c.text.includes('kullanıcı doğruladı'));
+  assert.ok(c.text.includes('works'));
+  assert.ok(c.text.includes('the user confirmed it'));
   assert.equal(c.evidence[0]?.kind, 'human');
   assert.ok(c.evidence[0]?.summary.includes('Ekin'));
 });
@@ -736,15 +749,15 @@ test('CI eşleşmesi claim + kanıtlı log satırı üretir; notu kapsama düşe
         ],
       },
     ],
-    notes: ['1 CI koşumu bu projenin bilinen commit’lerine bağlanamadı ve kapsam dışı bırakıldı (uydurma eşleşme yok).'],
+    notes: ['1 CI run could not be tied to a known commit of this project and was left out of scope (no guessed matches).'],
   });
   const { claims, log, notes } = buildTruth(claude, gitFacts(), { now: NOW, ci });
   const ciClaim = claims.find((c) => c.id.startsWith('ci-'));
   assert.ok(ciClaim);
   assert.equal(ciClaim.level, 'test-kaniti');
   // test-kanıtı → log'a 'test' kaynağıyla girer (kanıtlı gerçek).
-  assert.ok(log.some((l) => l.source === 'test' && l.text.includes('CI yeşil')));
-  assert.ok(notes.some((n) => n.includes('kapsam dışı bırakıldı')));
+  assert.ok(log.some((l) => l.source === 'test' && l.text.includes('CI green')));
+  assert.ok(notes.some((n) => n.includes('left out of scope')));
 });
 
 test('CI kapalıysa (--no-ci) claim üretilmez, kapsam notu yine yazılır', () => {
@@ -752,11 +765,13 @@ test('CI kapalıysa (--no-ci) claim üretilmez, kapsam notu yine yazılır', () 
   const ci = ciFacts({
     kapali: true,
     okundu: false,
-    notes: ['CI kaydı okunmadı: CI okuması kapalı (--no-ci / TOPBEAM_NO_CI) — bu pano yalnız lokal gerçekleri anlatıyor.'],
+    notes: [
+      'CI was not read: CI reading is switched off (--no-ci / TOPBEAM_NO_CI) — this board speaks only about local facts.',
+    ],
   });
   const { claims, notes } = buildTruth(claude, gitFacts(), { now: NOW, ci });
   assert.equal(claims.filter((c) => c.id.startsWith('ci-')).length, 0);
-  assert.ok(notes.some((n) => n.includes('CI okuması kapalı')));
+  assert.ok(notes.some((n) => n.includes('CI reading is switched off')));
 });
 
 // ── COMMIT KANITI: "işini commit'lemek barını boşaltıyordu" kusuru ───────────
@@ -799,7 +814,7 @@ test('COMMIT KANITI: ağaç temiz ama iş commit\'lenmiş → dosya-kanıtı KOR
   );
   // Kanıt satırı SHA'yı taşımalı: üçüncü kişi `git show` ile bakabilsin.
   const gitKanit = dosya?.evidence.find((e) => e.kind === 'git-diff');
-  assert.match(String(gitKanit?.summary), /commit'lenmiş/);
+  assert.match(String(gitKanit?.summary), /are committed/);
   assert.equal(gitKanit?.ref, 'def5678');
 });
 

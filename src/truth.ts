@@ -280,7 +280,7 @@ function makeYazim(projectCwd: string, home: string): Yazim {
 function nameList(names: readonly string[]): string {
   if (names.length <= LIMITS.nameList) return names.join(', ');
   const shown = names.slice(0, LIMITS.nameList).join(', ');
-  return `${shown} +${names.length - LIMITS.nameList} dosya daha`;
+  return `${shown} +${names.length - LIMITS.nameList} more files`;
 }
 
 function shortCmd(command: string): string {
@@ -433,16 +433,16 @@ function gitOzet(n: number, b: FileBuckets): string {
   const commitli = b.verified.filter((f) => b.commitRefs.has(f.path)).length;
   const agacta = n - commitli;
   if (commitli === 0) {
-    return `git: ${n} dosyanın çalışma ağacında kaydı var (diff --numstat / status).`;
+    return `git: ${n} files have a record in the working tree (diff --numstat / status).`;
   }
   if (agacta === 0) {
     const shalar = [...new Set([...b.commitRefs.values()].map((c) => c.hash))];
     return (
-      `git: ${n} dosya commit'lenmiş — düzenlemeden sonra atılan commit kayda geçirdi ` +
+      `git: ${n} files are committed — a commit made after the edit put them on record ` +
       `(${shalar.slice(0, 3).join(', ')}${shalar.length > 3 ? `, +${shalar.length - 3}` : ''}).`
     );
   }
-  return `git: ${agacta} dosyanın çalışma ağacında kaydı var, ${commitli} dosya commit'lenmiş.`;
+  return `git: ${agacta} files have a record in the working tree, ${commitli} files are committed.`;
 }
 
 /** Kanıt referansı: commit kanıtı varsa onu kayda geçiren commit, yoksa HEAD. */
@@ -495,7 +495,7 @@ function fileClaims(
     const evidence: ClaimEvidence[] = [
       {
         kind: 'transcript-tool-use',
-        summary: `Transcript: ${n} dosyada Edit/Write sonucu hatasız görüldü (+${a}/−${r} satır).`,
+        summary: `Transcript: Edit/Write finished without error on ${n} files (+${a}/−${r} lines).`,
         ref: session.sessionId,
       },
       {
@@ -506,7 +506,7 @@ function fileClaims(
     ];
     claims.push({
       id: `dosya-git-${session.sessionId}`,
-      text: `${n} dosya değişti: ${nameList(names(buckets.verified))}`,
+      text: `${n} files changed: ${nameList(names(buckets.verified))}`,
       level: 'dosya-kaniti',
       kind: 'dosya',
       signals: fileSignals(buckets.verified, false), // git kaydı VAR (kesişim)
@@ -528,10 +528,10 @@ function fileClaims(
     claims.push({
       id: `dosya-transcript-${session.sessionId}`,
       text: gitsiz
-        ? `${n} dosya düzenlendi ama bu dizin git deposu değil — değişiklik git ile karşılaştırılamadı, ` +
-          `uygulandı görünüyor, doğrulanmadı: ${nameList(names(buckets.transcriptOnly))}`
-        : `${n} dosya için düzenleme kaydı var ama git'te izi yok ` +
-          `(commit'lenmiş ya da geri alınmış olabilir) — uygulandı görünüyor, doğrulanmadı: ` +
+        ? `${n} files were edited but this directory is not a git repository — the change could not be ` +
+          `compared against git; looks applied, not verified: ${nameList(names(buckets.transcriptOnly))}`
+        : `${n} files have an edit record but no trace in git ` +
+          `(they may have been committed or reverted) — looks applied, not verified: ` +
           nameList(names(buckets.transcriptOnly)),
       level: 'dogrulanmadi',
       kind: 'dosya',
@@ -541,8 +541,8 @@ function fileClaims(
         {
           kind: 'transcript-tool-use',
           summary: gitsiz
-            ? `Transcript: ${n} dosyada Edit/Write sonucu hatasız görüldü; dizin git deposu olmadığı için karşılaştırma yapılamadı.`
-            : `Transcript: ${n} dosyada Edit/Write sonucu hatasız görüldü; git diff/status kaydı yok.`,
+            ? `Transcript: Edit/Write finished without error on ${n} files; the directory is not a git repository, so no comparison was possible.`
+            : `Transcript: Edit/Write finished without error on ${n} files; no git diff/status record.`,
           ref: session.sessionId,
         },
       ],
@@ -556,8 +556,8 @@ function fileClaims(
     claims.push({
       id: `dosya-belirsiz-${session.sessionId}`,
       text:
-        `${n} dosyada düzenleme denendi, sonucu transcript'te görünmüyor — ` +
-        `başarı sayılmaz, doğrulanmadı: ${nameList(names(buckets.unknownOnly))}`,
+        `${n} files had an edit attempted, the result does not appear in the transcript — ` +
+        `not counted as success, not verified: ${nameList(names(buckets.unknownOnly))}`,
       level: 'dogrulanmadi',
       kind: 'dosya',
       // noGitTrace YAZILMAZ: bu kovada git kesişimi hiç sorulmadı — bilinmiyor.
@@ -565,7 +565,7 @@ function fileClaims(
       evidence: [
         {
           kind: 'transcript-tool-use',
-          summary: `Transcript: ${n} dosyada tool_use var ama tool_result hiç görülmedi.`,
+          summary: `Transcript: ${n} files have a tool_use but no tool_result was ever seen.`,
           ref: session.sessionId,
         },
       ],
@@ -661,23 +661,23 @@ function testClaims(
       if (sig.failed !== null && sig.failed > 0) {
         text =
           sig.passed !== null
-            ? `Test koşumunda ${sig.failed} test başarısız, ${sig.passed} test geçti (${cmd}).`
-            : `Test koşumunda ${sig.failed} test başarısız (${cmd}).`;
+            ? `The test run reported ${sig.failed} failing tests and ${sig.passed} passing (${cmd}).`
+            : `The test run reported ${sig.failed} failing tests (${cmd}).`;
       } else if (sig.passed !== null && sig.passed > 0) {
-        text = `${sig.passed} test geçti${sig.failed === 0 ? ', 0 başarısız' : ''} (${cmd}).`;
+        text = `${sig.passed} tests passed${sig.failed === 0 ? ', 0 failed' : ''} (${cmd}).`;
       } else {
-        text = `Test komutu koştu, çıktıda 0 test sayıldı (${cmd}).`;
+        text = `The test command ran, 0 tests were counted in its output (${cmd}).`;
       }
       const evidence: ClaimEvidence[] = [
         {
           kind: 'test-output',
-          summary: sig.summaryLine ?? 'Test çıktısından geçti/kaldı sayısı okundu.',
+          summary: sig.summaryLine ?? 'The pass/fail count was read from the test output.',
           ref: komut,
         },
       ];
       if (sig.exitCode !== null && sig.exitCode !== 0) {
         // Sıfır-dışı exit yalnız string sonuçtan gelir → gerçek, varsayım değil.
-        evidence.push({ kind: 'test-output', summary: `Komut exit ${sig.exitCode} ile bitti.` });
+        evidence.push({ kind: 'test-output', summary: `The command ended with exit ${sig.exitCode}.` });
       }
       claims.push({
         id,
@@ -692,17 +692,17 @@ function testClaims(
     } else {
       // Sayı okunamadı → sayı uydurulmaz, seviye yükselmez.
       const suffix =
-        sig.exitCode !== null && sig.exitCode !== 0 ? ` Komut exit ${sig.exitCode} ile bitti.` : '';
+        sig.exitCode !== null && sig.exitCode !== 0 ? ` The command ended with exit ${sig.exitCode}.` : '';
       claims.push({
         id,
-        text: `Test komutu koşuldu (${cmd}) ama sonuç çıktıdan okunamadı — doğrulanmadı.${suffix}`,
+        text: `A test command ran (${cmd}) but its result could not be read from the output — not verified.${suffix}`,
         level: 'dogrulanmadi',
         kind: 'test',
         signals,
         evidence: [
           {
             kind: 'transcript-tool-use',
-            summary: 'Transcript: test-benzeri komut koştu; çıktıdan geçti/kaldı sayısı çekilemedi.',
+            summary: 'Transcript: a test-like command ran; no pass/fail count could be read from its output.',
             ref: komut,
           },
         ],
@@ -725,7 +725,7 @@ function gitLog(git: GitFacts, nowIso: string): LogEntry[] {
     const d = git.diffStat;
     entries.push({
       ts: nowIso,
-      text: `Çalışma ağacında ${d.filesChanged} dosya değişik (+${d.insertions}/−${d.deletions}) — henüz commit'lenmedi.`,
+      text: `${d.filesChanged} files are modified in the working tree (+${d.insertions}/−${d.deletions}) — not committed yet.`,
       source: 'git',
     });
   }
@@ -807,7 +807,7 @@ function beyanLog(
     }
     entries.push({
       ts: run.ts ?? session.lastTs ?? fallbackTs,
-      text: `Beyan: ${yaz.komut(run.description)}`,
+      text: `Statement: ${yaz.komut(run.description)}`,
       source: 'claude-beyan',
       sessionId: session.sessionId,
       // ref BİLEREK yok: komut metni secret içerebilir (redact persist katmanında).
@@ -874,8 +874,8 @@ function capLog(log: readonly LogEntry[], notes: string[]): LogEntry[] {
   // "toplam" DEMİYORUZ: buraya gelen sayı zaten süzülmüş+tekilleşmiş bir sayı.
   // Ham sayı kapsam bloğunda (ScopeNotes.log) durur.
   notes.push(
-    `Log ${LIMITS.logMax} satırla sınırlandı (bu adıma ${log.length} satır girmişti): kanıt taşıyan satırlar önce tutuldu, ` +
-      `${beyan.length - keptBeyan.length} beyan ve ${kanit.length - keptKanit.length} kanıt satırı listeden düştü.`,
+    `The log was capped at ${LIMITS.logMax} lines (${log.length} lines reached this step): lines carrying evidence were kept first, ` +
+      `${beyan.length - keptBeyan.length} statement lines and ${kanit.length - keptKanit.length} evidence lines dropped off the list.`,
   );
   return sortLog([...keptKanit, ...keptBeyan]);
 }
@@ -927,7 +927,7 @@ export function buildTruth(
       // Baştan sona başka cwd — büyük olasılıkla başka projenin işi.
       atlananOturum++;
       notes.push(
-        `Oturum ${sessionLabel(session)} (${session.sessionId.slice(0, 8)}…) farklı bir cwd ile kaydedilmiş — claim üretilmedi.`,
+        `Session ${sessionLabel(session)} (${session.sessionId.slice(0, 8)}…) was recorded under a different cwd — no claim was produced.`,
       );
       continue;
     }
@@ -955,25 +955,25 @@ export function buildTruth(
   // Kapsam daralması SESSİZ kalmaz — neyin dışarıda tutulduğu sayıyla söylenir.
   if (disKapsam > 0) {
     notes.push(
-      `${disKapsam} düzenleme proje kökü dışındaki dosyalarda — claim ve log dışında tutuldu (bu pano yalnız bu projeyi anlatır).`,
+      `${disKapsam} edits touched files outside the project root — kept out of claims and the log (this board speaks only about this project).`,
     );
   }
   if (testKapsamDisi > 0) {
     // Sessiz eleme YOK: kaçırdığımızı da sayıyla söyleriz.
     notes.push(
-      `${testKapsamDisi} test koşumu bu projeye atfedilemedi ve kanıt SAYILMADI — ` +
-        'koşum bu projenin dizininde yapılmamış (ya da üst dizin oturumundan geliyor, ' +
-        'hangi alt projede koştuğu ölçülemiyor). Kaçırmak, yanlış suçlamaktan iyidir.',
+      `${testKapsamDisi} test runs could not be attributed to this project and were NOT counted as evidence — ` +
+        'the run did not happen inside this project directory (or it comes from a parent-directory session, ' +
+        'where which sub-project it ran in cannot be measured). Missing something is better than accusing wrongly.',
     );
   }
   if (kontrolAtlanan > 0) {
     notes.push(
-      `${kontrolAtlanan} kontrol komutu (tsc/eslint gibi) claim üretmedi — bu komutlar geçti/kaldı sayısı üretmez.`,
+      `${kontrolAtlanan} check commands (tsc, eslint and the like) produced no claim — these commands report no pass/fail count.`,
     );
   }
   if (beyanDusen > 0) {
     notes.push(
-      `${beyanDusen} beyan satırı projeyle ilişkilendirilemedi ve log'a alınmadı (beyan zaten kanıt değildir).`,
+      `${beyanDusen} statement lines could not be tied to this project and were left out of the log (a statement is not evidence anyway).`,
     );
   }
 
@@ -1021,13 +1021,13 @@ export function buildTruth(
 export function buildCalisiyorClaim(subject: string, verification: Verification): Claim {
   return {
     id: `calisiyor-${verification.at}`,
-    text: `${subject} çalışıyor — kullanıcı doğruladı (${verification.by}).`,
+    text: `${subject} works — the user confirmed it (${verification.by}).`,
     level: 'insan-onayi',
     kind: 'durum',
     evidence: [
       {
         kind: 'human',
-        summary: `${verification.by} ${verification.at} tarihinde '${verification.decision}' kararı verdi${
+        summary: `${verification.by} recorded the decision '${verification.decision}' on ${verification.at}${
           verification.note ? `: ${verification.note}` : '.'
         }`,
       },
